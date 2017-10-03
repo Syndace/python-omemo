@@ -1,0 +1,45 @@
+syntax = "proto2";
+
+message SignalMessage {
+    optional bytes  dh_ratchet_key = 1;
+    optional uint32 n              = 2;
+    optional uint32 pn             = 3;
+    optional bytes  ciphertext     = 4;
+}
+
+message PreKeySignalMessage {
+    optional uint32 registration_id = 5;
+    optional uint32 otpk_id         = 1;
+    optional uint32 spk_id          = 6;
+    optional bytes  ek              = 2;
+    optional bytes  ik              = 3;
+    optional bytes  signal_message  = 4;
+}
+
+/*
+message KeyExchangeMessage {
+  optional uint32 id               = 1;
+  optional bytes  baseKey          = 2;
+  optional bytes  ratchetKey       = 3;
+  optional bytes  identityKey      = 4;
+  optional bytes  baseKeySignature = 5;
+}
+
+message SenderKeyMessage {
+  optional uint32 id         = 1;
+  optional uint32 iteration  = 2;
+  optional bytes  ciphertext = 3;
+}
+
+message SenderKeyDistributionMessage {
+  optional uint32 id         = 1;
+  optional uint32 iteration  = 2;
+  optional bytes  chainKey   = 3;
+  optional bytes  signingKey = 4;
+}
+
+message DeviceConsistencyCodeMessage {
+  optional uint32 generation = 1;
+  optional bytes  signature  = 2;
+}
+*/

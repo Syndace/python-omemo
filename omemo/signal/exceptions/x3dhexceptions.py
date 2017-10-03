@@ -1,0 +1,2 @@
+class UnknownKeyException(Exception):
+    pass
