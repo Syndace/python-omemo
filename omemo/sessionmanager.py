@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import os
 
-from Cryptodome.Cipher import AES
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from .x3dhdoubleratchet import X3DHDoubleRatchet
 from . import wireformat
@@ -37,12 +37,15 @@ class SessionManager(X3DHDoubleRatchet):
             self.__my_jid: {}
         }
 
-        aes_gcm_key = os.urandom(16)
+        aes_gcm_key = AESGCM.generate_key(bit_length = 128)
         aes_gcm_iv  = os.urandom(16)
 
-        aes_gcm = AES.new(aes_gcm_key, AES.MODE_GCM, nonce = aes_gcm_iv)
+        aes_gcm = AESGCM(aes_gcm_key)
 
-        ciphertext, aes_gcm_tag = aes_gcm.encrypt_and_digest(plaintext)
+        ciphertext = aes_gcm.encrypt(aes_gcm_iv, plaintext, None)
+
+        aes_gcm_tag = ciphertext[-16:]
+        ciphertext  = ciphertext[:-16]
 
         other_devices = list(self.__bundles[other_jid].keys())
         my_devices    = list(self.__bundles[self.__my_jid].keys())
@@ -118,12 +121,11 @@ class SessionManager(X3DHDoubleRatchet):
         aes_gcm_key = aes_gcm_key_tag["plaintext"][:16]
         aes_gcm_tag = aes_gcm_key_tag["plaintext"][16:]
 
-        # Prepare the AES GCM cipher
-        aes_gcm = AES.new(aes_gcm_key, AES.MODE_GCM, nonce = iv)
+        aes_gcm = AESGCM(aes_gcm_key)
 
         if payload == None:
             # Return the prepared cipher
             return aes_gcm, None
         else:
             # Return the plaintext
-            return None, aes_gcm.decrypt_and_verify(payload, aes_gcm_tag)
+            return None, aes_gcm.decrypt(iv, payload + aes_gcm_tag, None)

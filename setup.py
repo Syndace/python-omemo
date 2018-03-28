@@ -9,6 +9,6 @@ setup(
     author = "Tim Henkes",
     url = "https://github.com/Syndace/python-omemo",
     packages = ["omemo", "omemo.signal", "omemo.signal.doubleratchet", "omemo.signal.exceptions", "omemo.signal.wireformat", "omemo.signal.x3dh"],
-    requires = ["x3dh", "doubleratchet", "scci"],
+    requires = ["x3dh", "doubleratchet", "scci", "cryptography", "protobuf"],
     provides = ["omemo"]
 )

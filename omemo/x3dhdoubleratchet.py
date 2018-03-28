@@ -1,10 +1,7 @@
 from __future__ import absolute_import
 
-from Cryptodome.Cipher import AES
-
 from . import doubleratchet
 from . import x3dh
-from . import wireformat
 
 class X3DHDoubleRatchet(x3dh.State):
     def __init__(self):
@@ -59,39 +56,3 @@ class X3DHDoubleRatchet(x3dh.State):
 
         del session_init_data["otpk_id"]
         del session_init_data["spk_id"]
-    
-
-    def makeKeyTransportMessage(self):
-        aes_gcm_key = os.urandom(16)
-        aes_gcm_iv  = os.urandom(16)
-
-        aes_gcm = AES.new(aes_gcm_key, AES.MODE_GCM, nonce = aes_gcm_iv)
-        aes_gcm_tag = aes_gcm.digest()
-
-        message_data = self.encryptMessage(aes_gcm_key + aes_gcm_tag)
-
-        message = wireformat.message_header.toWire(message_data["ciphertext"], message_data["header"], message_data["ad"], message_data["authentication_key"])
-
-        return {
-            "iv": aes_gcm_iv,
-            "message": message,
-            "cipher": aes_gcm
-        }
-
-    def makeMessage(self, plaintext):
-        aes_gcm_key = os.urandom(16)
-        aes_gcm_iv  = os.urandom(16)
-
-        aes_gcm = AES.new(aes_gcm_key, AES.MODE_GCM, nonce = aes_gcm_iv)
-
-        ciphertext, aes_gcm_tag = aes_gcm.encrypt_and_digest(plaintext)
-        
-        message_data = self.encryptMessage(aes_gcm_key + aes_gcm_tag)
-
-        message = wireformat.message_header.toWire(message_data["ciphertext"], message_data["header"], message_data["ad"], message_data["authentication_key"])
-
-        return {
-            "iv": aes_gcm_iv,
-            "message": message,
-            "payload": ciphertext
-        }
