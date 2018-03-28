@@ -7,19 +7,20 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from .x3dhdoubleratchet import X3DHDoubleRatchet
 from . import wireformat
 
-class SessionManager(X3DHDoubleRatchet):
-    def __init__(self, my_jid, my_device_id):
-        super(SessionManager, self).__init__()
-
-        self.__sessions = {}
-        self.__bundles = {}
-
+class SessionManager(object):
+    def __init__(self, my_jid, my_device_id, storage):
+        self.__storage = storage
         self.__my_jid = my_jid
         self.__my_device_id = my_device_id
 
-        self.__bundles[my_jid] = {
-            my_device_id: self.getPublicBundle()
-        }
+        self.__prepare()
+
+    def __prepare(self):
+        self.__state = self.__storage.loadState()
+
+        if not self.__state:
+            self.__state = X3DHDoubleRatchet()
+            self.__storage.storeState(self.__state)
 
     def setPublicBundle(self, jid, device_id, bundle):
         self.__bundles[jid] = self.__bundles.get(jid, {})
