@@ -1,0 +1,8 @@
+git+https://github.com/Syndace/python-omemo.git
+git+https://github.com/Syndace/python-x3dh.git
+git+https://github.com/Syndace/python-doubleratchet.git
+git+https://github.com/Syndace/python-xeddsa.git
+git+https://github.com/Syndace/python-scci.git
+pynacl
+cryptography
+hkdf
