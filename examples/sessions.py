@@ -1,25 +1,55 @@
 import omemo
 
+class InMemoryStorage(omemo.Storage):
+    def __init__(self):
+        self.__state = None
+        self.__bundles = {}
+        self.__sessions = {}
+
+    def loadState(self):
+        return self.__state
+
+    def storeState(self, state):
+        self.__state = state
+
+    def listDevices(self, jid):
+        return list(self.__sessions.get(jid, {}).keys())
+
+    def loadSession(self, jid, device_id):
+        return self.__sessions.get(jid, {}).get(device_id, None)
+
+    def storeSession(self, jid, device_id, session):
+        self.__sessions[jid] = self.__sessions.get(jid, {})
+        self.__sessions[jid][device_id] = session
+
 # These values can be retreived from the OMEMO stanzas
 ALICE_JID = "alice@alice.alice"
 ALICE_DEVICE_ID = 42
+ALICE_STORAGE = InMemoryStorage()
 
 BOB_JID = "bob@bob.bob"
 BOB_DEVICE_ID = 1337
+BOB_STORAGE = InMemoryStorage()
 
 # Each party has to create a SessionManager
-alice_session_manager = omemo.SessionManager(ALICE_JID, ALICE_DEVICE_ID)
-bob_session_manager   = omemo.SessionManager(BOB_JID, BOB_DEVICE_ID)
+alice_session_manager = omemo.SessionManager(ALICE_JID, ALICE_DEVICE_ID, ALICE_STORAGE)
+bob_session_manager   = omemo.SessionManager(BOB_JID, BOB_DEVICE_ID, BOB_STORAGE)
 
-# Store the public bundles of the respective parties
-alice_session_manager.setPublicBundle(BOB_JID, BOB_DEVICE_ID, bob_session_manager.getPublicBundle())
-bob_session_manager.setPublicBundle(ALICE_JID, ALICE_DEVICE_ID, alice_session_manager.getPublicBundle())
+bundles = {
+    ALICE_JID: {
+        ALICE_DEVICE_ID: alice_session_manager.state.getPublicBundle()
+    },
+    BOB_JID: {
+        BOB_DEVICE_ID: bob_session_manager.state.getPublicBundle()
+    }
+}
 
 # Send an initial message from Alice to Bob
 # The message is built for:
 # - All devices of the Bob
 # - All devices of Alice, except for the sending device
-initial_message = alice_session_manager.encryptMessage(BOB_JID, "Hey Bob!".encode("UTF-8"))
+# NOTE: You have to pass all public bundles that might be required to build the sessions
+initial_message = alice_session_manager.encryptMessage(BOB_JID, "Hey Bob!".encode("UTF-8"), bundles)
 
 # The values
 # - initial_message["iv"]
@@ -44,7 +74,8 @@ assert(plaintext.decode("UTF-8") == "Hey Bob!")
 
 # Now, any party can send follow-up messages
 # If the session was established before, you don't have to pass the bundle of the other party.
-message = bob_session_manager.encryptMessage(ALICE_JID, "Yo Alice!".encode("UTF-8"))
+# NOTE: You have to pass all public bundles that might be required to build the sessions
+message = bob_session_manager.encryptMessage(ALICE_JID, "Yo Alice!".encode("UTF-8"), bundles)
 
 # Get the message specified for Alice on her only device
 alice_message = message["messages"][ALICE_JID][ALICE_DEVICE_ID]
