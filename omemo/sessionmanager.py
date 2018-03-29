@@ -14,6 +14,9 @@ class SessionManager(object):
         self.__my_jid = my_jid
         self.__my_device_id = my_device_id
 
+        self.__devices_cache  = {}
+        self.__sessions_cache = {}
+
         self.__prepare()
 
     def __prepare(self):
@@ -22,6 +25,30 @@ class SessionManager(object):
         if not self.__state:
             self.__state = X3DHDoubleRatchet()
             self.__storage.storeState(self.__state)
+
+    def __listDevices(self, jid):
+        try:
+            return self.__devices_cache[jid]
+        except KeyError:
+            self.__devices_cache[jid] = set(self.__storage.listDevices(jid))
+            return self.__devices_cache[jid]
+
+    def __addDevices(self, jid, devices):
+        self.__devices_cache[jid] = self.__devices_cache.get(jid, set())
+        self.__devices_cache[jid] |= set(devices)
+
+    def __loadSession(self, jid, device):
+        try:
+            return self.__sessions_cache[jid][device]
+        except KeyError:
+            self.__sessions_cache[jid] = self.__sessions_cache.get(jid, {})
+            self.__sessions_cache[jid][device] = self.__storage.loadSession(jid, device)
+            return self.__sessions_cache[jid][device]
+
+    def __storeSession(self, jid, device, session):
+        self.__sessions_cache[jid] = self.__sessions_cache.get(jid, {})
+        self.__sessions_cache[jid][device] = session
+        self.__storage.storeSession(jid, device, session)
 
     def __encryptMessage(self, other_jid, plaintext, bundles):
         messages = {
@@ -39,11 +66,11 @@ class SessionManager(object):
         aes_gcm_tag = ciphertext[-16:]
         ciphertext  = ciphertext[:-16]
 
-        other_devices = self.__storage.listDevices(other_jid)
-        my_devices    = self.__storage.listDevices(self.__my_jid)
+        self.__addDevices(other_jid,     list(bundles.get(other_jid,     {}).keys()))
+        self.__addDevices(self.__my_jid, list(bundles.get(self.__my_jid, {}).keys()))
 
-        other_devices.extend(list(bundles.get(other_jid, {}).keys()))
-        my_devices.extend(list(bundles.get(self.__my_jid, {}).keys()))
+        other_devices = self.__listDevices(other_jid)
+        my_devices    = self.__listDevices(self.__my_jid)
 
         try:
             my_devices.remove(self.__my_device_id)
@@ -52,7 +79,7 @@ class SessionManager(object):
 
         def encryptAll(devices, jid):
             for device in devices:
-                dr = self.__storage.loadSession(jid, device)
+                dr = self.__loadSession(jid, device)
 
                 pre_key = dr == None
 
@@ -75,7 +102,7 @@ class SessionManager(object):
                 message = dr.encryptMessage(aes_gcm_key + aes_gcm_tag)
 
                 # Store the new/changed session
-                self.__storage.storeSession(jid, device, dr)
+                self.__storeSession(jid, device, dr)
 
                 message_data = wireformat.message_header.toWire(message["ciphertext"], message["header"], message["ad"], message["authentication_key"])
 
@@ -115,7 +142,7 @@ class SessionManager(object):
         self.__storage.storeState(self.__state)
 
         # Store the new session
-        self.__storage.storeSession(jid, device, dr)
+        self.__storeSession(jid, device, dr)
 
         # Now, decrypt the contained message
         return self.decryptMessage(jid, device, iv, message_and_init_data["message"], payload)
@@ -125,13 +152,13 @@ class SessionManager(object):
         message_data = wireformat.message_header.fromWire(message)
 
         # Load the session
-        dr = self.__storage.loadSession(jid, device)
+        dr = self.__loadSession(jid, device)
 
         # Get the concatenation of the AES GCM key and tag
         aes_gcm_key_tag = dr.decryptMessage(message_data["ciphertext"], message_data["header"])
 
         # Store the changed session
-        self.__storage.storeSession(jid, device, dr)
+        self.__storeSession(jid, device, dr)
 
         # Check the authentication
         wireformat.message_header.checkAuthentication(message, aes_gcm_key_tag["ad"], aes_gcm_key_tag["authentication_key"])
