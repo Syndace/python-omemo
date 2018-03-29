@@ -50,7 +50,7 @@ class SessionManager(object):
         self.__sessions_cache[jid][device] = session
         self.__storage.storeSession(jid, device, session)
 
-    def __encryptMessage(self, other_jid, plaintext, bundles):
+    def __encryptMessage(self, other_jid, plaintext, bundles, devices = None):
         messages = {
             other_jid: {},
             self.__my_jid: {}
@@ -66,11 +66,15 @@ class SessionManager(object):
         aes_gcm_tag = ciphertext[-16:]
         ciphertext  = ciphertext[:-16]
 
-        self.__addDevices(other_jid,     list(bundles.get(other_jid,     {}).keys()))
-        self.__addDevices(self.__my_jid, list(bundles.get(self.__my_jid, {}).keys()))
+        if devices:
+            other_devices = devices.get(other_jid, [])
+            my_devices    = devices.get(self.__my_jid, [])
+        else:
+            self.__addDevices(other_jid,     list(bundles.get(other_jid,     {}).keys()))
+            self.__addDevices(self.__my_jid, list(bundles.get(self.__my_jid, {}).keys()))
 
-        other_devices = self.__listDevices(other_jid)
-        my_devices    = self.__listDevices(self.__my_jid)
+            other_devices = self.__listDevices(other_jid)
+            my_devices    = self.__listDevices(self.__my_jid)
 
         try:
             my_devices.remove(self.__my_device_id)
@@ -121,15 +125,28 @@ class SessionManager(object):
             "cipher": aes_gcm
         }
 
-    def encryptMessage(self, other_jid, plaintext, bundles):
-        result = self.__encryptMessage(other_jid, plaintext, bundles)
+    def encryptMessage(self, *args, **kwargs):
+        result = self.__encryptMessage(*args, **kwargs)
         del result["cipher"]
         return result
 
-    def encryptKeyTransportMessage(self, other_jid, bundles):
-        result = self.__encryptMessage(other_jid, b"", bundles)
+    def encryptKeyTransportMessage(self, other_jid, *args, **kwargs):
+        result = self.__encryptMessage(other_jid, b"", *args, **kwargs)
         del result["payload"]
         return result
+
+    def buildSession(self, jid, device, bundle):
+        """
+        Special version of encryptKeyTransportMessage, which does not encrypt a
+        new KeyTransportMessage for all devices of the receiver and all devices
+        of the sender but encrypts it for just the one specific device of the
+        receiver.
+
+        This can be used to build a session with a specific device without
+        sending an initial text message.
+        """
+        
+        return self.encryptKeyTransportMessage(jid, { jid: { device: bundle } }, { jid: [ device ] })
 
     def decryptPreKeyMessage(self, jid, device, iv, message, payload = None):
         # Unpack the pre key message data
