@@ -205,6 +205,12 @@ class SessionManager(object):
         self.__storage.storeActiveDevices(jid, self.__devices_cache[jid]["active"])
         self.__storage.storeInactiveDevices(jid, self.__devices_cache[jid]["inactive"])
 
+    def getDevices(self, jid = None):
+        if not jid:
+            jid = self.__my_jid
+
+        return self.__listDevices(jid)
+
     @property
     def state(self):
         return self.__state
