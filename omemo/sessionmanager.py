@@ -191,8 +191,15 @@ class SessionManager(object):
             # Return the plaintext
             return None, aes_gcm.decrypt(iv, payload + aes_gcm_tag, None)
 
-    def newDeviceList(self, jid, devices):
+    def newDeviceList(self, devices, jid = None):
+        if not jid:
+            jid = self.__my_jid
+
         devices = set(devices)
+
+        if jid == self.__my_jid:
+            # The own device can never become inactive
+            devices |= set([ self.__my_device_id ])
 
         devices_old = self.__listDevices(jid)
         devices_old = devices_old["active"] | devices_old["inactive"]
