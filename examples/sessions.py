@@ -41,9 +41,14 @@ BOB_JID = "bob@bob.bob"
 BOB_DEVICE_ID = 1337
 BOB_STORAGE = InMemoryStorage()
 
+CHARLIE_JID = "charlie@charlie.charlie"
+CHARLIE_DEVICE_ID = 935
+CHARLIE_STORAGE = InMemoryStorage()
+
 # Each party has to create a SessionManager
-alice_session_manager = omemo.SessionManager(ALICE_JID, ALICE_DEVICE_ID, ALICE_STORAGE)
-bob_session_manager   = omemo.SessionManager(BOB_JID, BOB_DEVICE_ID, BOB_STORAGE)
+alice_session_manager   = omemo.SessionManager(ALICE_JID, ALICE_DEVICE_ID, ALICE_STORAGE)
+bob_session_manager     = omemo.SessionManager(BOB_JID, BOB_DEVICE_ID, BOB_STORAGE)
+charlie_session_manager = omemo.SessionManager(CHARLIE_JID, CHARLIE_DEVICE_ID, CHARLIE_STORAGE)
 
 bundles = {
     ALICE_JID: {
@@ -51,6 +56,9 @@ bundles = {
     },
     BOB_JID: {
         BOB_DEVICE_ID: bob_session_manager.state.getPublicBundle()
+    },
+    CHARLIE_JID: {
+        CHARLIE_DEVICE_ID: charlie_session_manager.state.getPublicBundle()
     }
 }
 
@@ -110,3 +118,26 @@ cipher, plaintext = alice_session_manager.decryptMessage(BOB_JID, BOB_DEVICE_ID,
 
 assert(cipher == None)
 assert(plaintext.decode("UTF-8") == "Yo Alice!")
+
+# You can encrypt a message for multiple recipients with just one call to encrypt*, just pass a list of jids instead of a single jid:
+muc_message = alice_session_manager.encryptMessage([ BOB_JID, CHARLIE_JID ], "Hey Bob and Charlie!".encode("UTF-8"), bundles)
+
+# Get the message specified for Bob on his only device
+bob_message = muc_message["messages"][BOB_JID][BOB_DEVICE_ID]
+
+assert(not bob_message["pre_key"])
+
+# Get the message specified for Charlie on his/her only device
+charlie_message = muc_message["messages"][CHARLIE_JID][CHARLIE_DEVICE_ID]
+
+assert(charlie_message["pre_key"])
+
+cipher, plaintext = bob_session_manager.decryptMessage(ALICE_JID, ALICE_DEVICE_ID, muc_message["iv"], bob_message["message"], muc_message["payload"])
+
+assert(cipher == None)
+assert(plaintext.decode("UTF-8") == "Hey Bob and Charlie!")
+
+cipher, plaintext = charlie_session_manager.decryptPreKeyMessage(ALICE_JID, ALICE_DEVICE_ID, muc_message["iv"], charlie_message["message"], muc_message["payload"])
+
+assert(cipher == None)
+assert(plaintext.decode("UTF-8") == "Hey Bob and Charlie!")

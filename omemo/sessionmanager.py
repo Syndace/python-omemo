@@ -50,11 +50,13 @@ class SessionManager(object):
         self.__sessions_cache[jid][device] = session
         self.__storage.storeSession(jid, device, session)
 
-    def __encryptMessage(self, other_jid, plaintext, bundles, devices = None):
-        messages = {
-            other_jid: {},
-            self.__my_jid: {}
-        }
+    def __encryptMessage(self, jids, plaintext, bundles, devices = None):
+        if not isinstance(jids, list):
+            jids = [ jids ]
+
+        jids = set(jids) | set([ self.__my_jid ])
+
+        messages = { jid: {} for jid in jids }
 
         aes_gcm_key = AESGCM.generate_key(bit_length = 128)
         aes_gcm_iv  = os.urandom(16)
@@ -67,17 +69,16 @@ class SessionManager(object):
         ciphertext  = ciphertext[:-16]
 
         if devices:
-            other_devices = devices.get(other_jid, [])
-            my_devices    = devices.get(self.__my_jid, [])
+            devices = { jid: devices.get(jid, []) for jid in jids }
         else:
-            self.__addDevices(other_jid,     list(bundles.get(other_jid,     {}).keys()))
-            self.__addDevices(self.__my_jid, list(bundles.get(self.__my_jid, {}).keys()))
+            devices = {}
 
-            other_devices = self.__listDevices(other_jid)
-            my_devices    = self.__listDevices(self.__my_jid)
+            for jid in jids:
+                self.__addDevices(jid, list(bundles.get(jid, {}).keys()))
+                devices[jid] = self.__listDevices(jid)
 
         try:
-            my_devices.remove(self.__my_device_id)
+            devices[self.__my_jid].remove(self.__my_device_id)
         except ValueError:
             pass
 
@@ -115,8 +116,8 @@ class SessionManager(object):
 
                 messages[jid][device] = { "message": message_data, "pre_key": pre_key }
 
-        encryptAll(other_devices, other_jid)
-        encryptAll(my_devices, self.__my_jid)
+        for jid, deviceList in devices.items():
+            encryptAll(deviceList, jid)
 
         return {
             "iv": aes_gcm_iv,
@@ -130,8 +131,8 @@ class SessionManager(object):
         del result["cipher"]
         return result
 
-    def encryptKeyTransportMessage(self, other_jid, *args, **kwargs):
-        result = self.__encryptMessage(other_jid, b"", *args, **kwargs)
+    def encryptKeyTransportMessage(self, jids, *args, **kwargs):
+        result = self.__encryptMessage(jids, b"", *args, **kwargs)
         del result["payload"]
         return result
 
