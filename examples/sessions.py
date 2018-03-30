@@ -68,17 +68,20 @@ alice_session_manager   = omemo.SessionManager(ALICE_JID, ALICE_DEVICE_ID, ALICE
 bob_session_manager     = omemo.SessionManager(BOB_JID, BOB_DEVICE_ID, BOB_STORAGE)
 charlie_session_manager = omemo.SessionManager(CHARLIE_JID, CHARLIE_DEVICE_ID, CHARLIE_STORAGE)
 
-alice_session_manager.newDeviceList(ALICE_JID, [ ALICE_DEVICE_ID ])
-bob_session_manager.newDeviceList(ALICE_JID, [ ALICE_DEVICE_ID ])
-charlie_session_manager.newDeviceList(ALICE_JID, [ ALICE_DEVICE_ID ])
+alice_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_JID)
+bob_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_JID)
+charlie_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_JID)
 
-alice_session_manager.newDeviceList(BOB_JID, [ BOB_DEVICE_ID ])
-bob_session_manager.newDeviceList(BOB_JID, [ BOB_DEVICE_ID ])
-charlie_session_manager.newDeviceList(BOB_JID, [ BOB_DEVICE_ID ])
+alice_session_manager.newDeviceList([ BOB_DEVICE_ID ], BOB_JID)
+bob_session_manager.newDeviceList([ BOB_DEVICE_ID ], BOB_JID)
+charlie_session_manager.newDeviceList([ BOB_DEVICE_ID ], BOB_JID)
 
-alice_session_manager.newDeviceList(CHARLIE_JID, [ CHARLIE_DEVICE_ID ])
-bob_session_manager.newDeviceList(CHARLIE_JID, [ CHARLIE_DEVICE_ID ])
-charlie_session_manager.newDeviceList(CHARLIE_JID, [ CHARLIE_DEVICE_ID ])
+alice_session_manager.newDeviceList([ CHARLIE_DEVICE_ID ], CHARLIE_JID)
+bob_session_manager.newDeviceList([ CHARLIE_DEVICE_ID ], CHARLIE_JID)
+charlie_session_manager.newDeviceList([ CHARLIE_DEVICE_ID ], CHARLIE_JID)
+
+assert(alice_session_manager.getDevices()["active"] == set([ ALICE_DEVICE_ID ]))
+assert(alice_session_manager.getDevices(ALICE_JID)["active"] == set([ ALICE_DEVICE_ID ]))
 
 bundles = {
     ALICE_JID: {
