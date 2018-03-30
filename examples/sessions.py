@@ -15,6 +15,7 @@ class InMemoryStorage(omemo.Storage):
         self.__state = None
         self.__bundles = {}
         self.__sessions = {}
+        self.__devices = {}
 
     def loadState(self):
         return self.__state
@@ -22,15 +23,32 @@ class InMemoryStorage(omemo.Storage):
     def storeState(self, state):
         self.__state = state
 
-    def listDevices(self, jid):
-        return list(self.__sessions.get(jid, {}).keys())
-
     def loadSession(self, jid, device_id):
         return self.__sessions.get(jid, {}).get(device_id, None)
 
     def storeSession(self, jid, device_id, session):
         self.__sessions[jid] = self.__sessions.get(jid, {})
         self.__sessions[jid][device_id] = session
+
+    def loadActiveDevices(self, jid):
+        try:
+            return self.__devices[jid]["active"]
+        except KeyError:
+            return []
+
+    def loadInactiveDevices(self, jid):
+        try:
+            return self.__devices[jid]["inactive"]
+        except KeyError:
+            return []
+
+    def storeActiveDevices(self, jid, devices):
+        self.__devices[jid] = self.__devices.get(jid, {})
+        self.__devices[jid]["active"] = devices
+
+    def storeInactiveDevices(self, jid, devices):
+        self.__devices[jid] = self.__devices.get(jid, {})
+        self.__devices[jid]["inactive"] = devices
 
 # These values can be retreived from the OMEMO stanzas
 ALICE_JID = "alice@alice.alice"
@@ -49,6 +67,18 @@ CHARLIE_STORAGE = InMemoryStorage()
 alice_session_manager   = omemo.SessionManager(ALICE_JID, ALICE_DEVICE_ID, ALICE_STORAGE)
 bob_session_manager     = omemo.SessionManager(BOB_JID, BOB_DEVICE_ID, BOB_STORAGE)
 charlie_session_manager = omemo.SessionManager(CHARLIE_JID, CHARLIE_DEVICE_ID, CHARLIE_STORAGE)
+
+alice_session_manager.newDeviceList(ALICE_JID, [ ALICE_DEVICE_ID ])
+bob_session_manager.newDeviceList(ALICE_JID, [ ALICE_DEVICE_ID ])
+charlie_session_manager.newDeviceList(ALICE_JID, [ ALICE_DEVICE_ID ])
+
+alice_session_manager.newDeviceList(BOB_JID, [ BOB_DEVICE_ID ])
+bob_session_manager.newDeviceList(BOB_JID, [ BOB_DEVICE_ID ])
+charlie_session_manager.newDeviceList(BOB_JID, [ BOB_DEVICE_ID ])
+
+alice_session_manager.newDeviceList(CHARLIE_JID, [ CHARLIE_DEVICE_ID ])
+bob_session_manager.newDeviceList(CHARLIE_JID, [ CHARLIE_DEVICE_ID ])
+charlie_session_manager.newDeviceList(CHARLIE_JID, [ CHARLIE_DEVICE_ID ])
 
 bundles = {
     ALICE_JID: {

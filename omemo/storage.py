@@ -14,14 +14,6 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def listDevices(self, jid):
-        """
-        Return a list of all known devices for given jid.
-        You probably want to do this by looking at the list of sessions stored for this jid and extracting the device ids.
-        """
-
-        raise NotImplementedError
-
     def loadSession(self, jid, device_id):
         """
         Load a session with given jid and device id or return None, if none exists.
@@ -33,6 +25,39 @@ class Storage(object):
         """
         Store a session for given jid and device id, overwriting the previous session, if it exists.
         The session is an instance of DoubleRatchet, you probably want to pickle the whole object.
+        """
+
+        raise NotImplementedError
+
+    def loadActiveDevices(self, jid):
+        """
+        Load the list of active devices for a given jid.
+
+        An "active device" is a device, which is listed in the most recent version of the device list pep node.
+        """
+
+        raise NotImplementedError
+
+    def loadInactiveDevices(self, jid):
+        """
+        Load the list of active devices for a given jid.
+
+        An "inactive device" is a device, which was listed in an older version of the device list pep node,
+        but is NOT listed in the most recent version.
+        """
+
+        raise NotImplementedError
+
+    def storeActiveDevices(self, jid, devices):
+        """
+        Store the active devices for given jid, overwriting the old stored list, if it exists.
+        """
+
+        raise NotImplementedError
+
+    def storeInactiveDevices(self, jid, devices):
+        """
+        Store the inactive devices for given jid, overwriting the old stored list, if it exists.
         """
 
         raise NotImplementedError

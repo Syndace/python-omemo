@@ -30,12 +30,11 @@ class SessionManager(object):
         try:
             return self.__devices_cache[jid]
         except KeyError:
-            self.__devices_cache[jid] = set(self.__storage.listDevices(jid))
+            self.__devices_cache[jid] = {
+                "active": set(self.__storage.loadActiveDevices(jid)),
+                "inactive": set(self.__storage.loadInactiveDevices(jid))
+            }
             return self.__devices_cache[jid]
-
-    def __addDevices(self, jid, devices):
-        self.__devices_cache[jid] = self.__devices_cache.get(jid, set())
-        self.__devices_cache[jid] |= set(devices)
 
     def __loadSession(self, jid, device):
         try:
@@ -74,12 +73,11 @@ class SessionManager(object):
             devices = {}
 
             for jid in jids:
-                self.__addDevices(jid, list(bundles.get(jid, {}).keys()))
-                devices[jid] = self.__listDevices(jid)
+                devices[jid] = self.__listDevices(jid)["active"]
 
         try:
             devices[self.__my_jid].remove(self.__my_device_id)
-        except ValueError:
+        except (KeyError, ValueError):
             pass
 
         def encryptAll(devices, jid):
@@ -192,6 +190,20 @@ class SessionManager(object):
         else:
             # Return the plaintext
             return None, aes_gcm.decrypt(iv, payload + aes_gcm_tag, None)
+
+    def newDeviceList(self, jid, devices):
+        devices = set(devices)
+
+        devices_old = self.__listDevices(jid)
+        devices_old = devices_old["active"] | devices_old["inactive"]
+        
+        self.__devices_cache[jid] = {
+            "active": devices,
+            "inactive": devices_old - devices
+        }
+
+        self.__storage.storeActiveDevices(jid, self.__devices_cache[jid]["active"])
+        self.__storage.storeInactiveDevices(jid, self.__devices_cache[jid]["inactive"])
 
     @property
     def state(self):
