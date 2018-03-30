@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+from . import util
 from .storage import Storage
 
 # Set the signal implementation as default for now
