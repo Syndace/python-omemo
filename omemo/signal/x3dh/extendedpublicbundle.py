@@ -1,4 +1,7 @@
+import binascii
+
 from ..exceptions import UnknownKeyException
+from .. import wireformat
 
 class ExtendedPublicBundle(object):
     """
@@ -47,6 +50,10 @@ class ExtendedPublicBundle(object):
     @property
     def otpks(self):
         return self.__otpks
+
+    @property
+    def fingerprint(self):
+        return binascii.hexlify(wireformat.encodePublicKey(self.__ik)).decode("ASCII")
 
     def findOTPKId(self, otpk):
         otpks = list(filter(lambda x: x["key"] == otpk, self.otpks))
