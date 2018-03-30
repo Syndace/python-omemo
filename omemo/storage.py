@@ -2,11 +2,19 @@ class Storage(object):
     def loadState(self):
         """
         Read the state (the collection of keys for this device) and return None, if no state was stored previously.
+
+        Return a dictionary containing:
+        {
+            "state": , # The X3DHDoubleRatchet state object
+            "device_id": , # The device id
+        }
+
+        or None.
         """
 
         raise NotImplementedError
 
-    def storeState(self, state):
+    def storeState(self, state, device_id):
         """
         Store the state, overwriting the old state, if it exists.
         The state is an instance of X3DHDoubleRatchet, you probably want to pickle the whole object.

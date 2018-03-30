@@ -20,8 +20,11 @@ class InMemoryStorage(omemo.Storage):
     def loadState(self):
         return self.__state
 
-    def storeState(self, state):
-        self.__state = state
+    def storeState(self, state, device_id):
+        self.__state = {
+            "state": state,
+            "device_id": device_id
+        }
 
     def loadSession(self, jid, device_id):
         return self.__sessions.get(jid, {}).get(device_id, None)
@@ -64,10 +67,18 @@ CHARLIE_DEVICE_ID = 935
 CHARLIE_STORAGE = InMemoryStorage()
 
 # Each party has to create a SessionManager
-alice_session_manager   = omemo.SessionManager(ALICE_JID, ALICE_DEVICE_ID, ALICE_STORAGE)
-bob_session_manager     = omemo.SessionManager(BOB_JID, BOB_DEVICE_ID, BOB_STORAGE)
-charlie_session_manager = omemo.SessionManager(CHARLIE_JID, CHARLIE_DEVICE_ID, CHARLIE_STORAGE)
+alice_session_manager   = omemo.SessionManager(ALICE_JID, ALICE_STORAGE, ALICE_DEVICE_ID)
+bob_session_manager     = omemo.SessionManager(BOB_JID, BOB_STORAGE, BOB_DEVICE_ID)
+charlie_session_manager = omemo.SessionManager(CHARLIE_JID, CHARLIE_STORAGE, CHARLIE_DEVICE_ID)
 
+try:
+    # You have to provide a device id for the first creation of the SessionManager
+    # From then on, the session manager retrieves the id from the storage
+    omemo.SessionManager("exception", InMemoryStorage())
+    assert(False)
+except omemo.exceptions.SessionManagerException:
+    pass
+    
 alice_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_JID)
 bob_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_JID)
 charlie_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_JID)

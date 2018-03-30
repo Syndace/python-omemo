@@ -4,12 +4,14 @@ import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from .exceptions import SessionManagerException
-from .x3dhdoubleratchet import X3DHDoubleRatchet
 from . import wireformat
+from .exceptions import SessionManagerException
+from .util import generateDeviceID
+from .x3dhdoubleratchet import X3DHDoubleRatchet
+
 
 class SessionManager(object):
-    def __init__(self, my_jid, my_device_id, storage):
+    def __init__(self, my_jid, storage, my_device_id = None):
         self.__storage = storage
         self.__my_jid = my_jid
         self.__my_device_id = my_device_id
@@ -20,11 +22,18 @@ class SessionManager(object):
         self.__prepare()
 
     def __prepare(self):
-        self.__state = self.__storage.loadState()
+        state = self.__storage.loadState()
 
-        if not self.__state:
+        if state:
+            self.__state = state["state"]   
+            self.__my_device_id = state["device_id"]
+        else:
             self.__state = X3DHDoubleRatchet()
-            self.__storage.storeState(self.__state)
+
+            if not self.__my_device_id:
+                raise SessionManagerException("Device id required for initial setup")
+
+            self.__storage.storeState(self.__state, self.__my_device_id)
 
     def __listDevices(self, jid):
         try:
@@ -95,7 +104,7 @@ class SessionManager(object):
                     session_init_data = self.__state.initSessionActive(bundle)
 
                     # Store the changed state
-                    self.__storage.storeState(self.__state)
+                    self.__storage.storeState(self.__state, self.__my_device_id)
 
                     dr                = session_init_data["dr"]
                     session_init_data = session_init_data["to_other"]
@@ -155,7 +164,7 @@ class SessionManager(object):
         dr = self.__state.initSessionPassive(message_and_init_data["session_init_data"])
 
         # Store the changed state
-        self.__storage.storeState(self.__state)
+        self.__storage.storeState(self.__state, self.__my_device_id)
 
         # Store the new session
         self.__storeSession(jid, device, dr)
