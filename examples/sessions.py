@@ -1,6 +1,5 @@
 import logging
 import omemo
-import sys
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -58,7 +57,7 @@ class InMemoryStorage(omemo.Storage):
         self.__devices[jid]["inactive"] = devices
 
     def isTrusted(self, jid, device):
-        return True
+        return False
 
 # These values can be retreived from the OMEMO stanzas
 ALICE_JID = "alice@alice.alice"

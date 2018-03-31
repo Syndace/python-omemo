@@ -59,7 +59,7 @@ class SessionManager(object):
         self.__sessions_cache[jid][device] = session
         self.__storage.storeSession(jid, device, session)
 
-    def __encryptMessage(self, jids, plaintext, bundles = None, devices = None, callback = None):
+    def __encryptMessage(self, jids, plaintext, bundles = None, devices = None, callback = None, always_trust = False):
         # Lift a single jid into a list
         if not isinstance(jids, list):
             jids = [ jids ]
@@ -113,7 +113,7 @@ class SessionManager(object):
             encrypted_count = 0
 
             for device in devices:
-                if not self.__storage.isTrusted(jid, device):
+                if not self.__storage.isTrusted(jid, device) and not always_trust:
                     callback(UntrustedException(), jid, device)
                     continue
 
@@ -187,8 +187,8 @@ class SessionManager(object):
         This can be used to build a session with a specific device without
         sending an initial text message.
         """
-        
-        return self.encryptKeyTransportMessage(jid, { jid: { device: bundle } }, { jid: [ device ] }, callback)
+
+        return self.encryptKeyTransportMessage(jid, { jid: { device: bundle } }, { jid: [ device ] }, callback, always_trust = True)
 
     def decryptPreKeyMessage(self, jid, device, iv, message, payload = None):
         # Unpack the pre key message data
