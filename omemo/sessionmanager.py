@@ -58,7 +58,10 @@ class SessionManager(object):
         self.__sessions_cache[jid][device] = session
         self.__storage.storeSession(jid, device, session)
 
-    def __encryptMessage(self, jids, plaintext, bundles, devices = None):
+    def __encryptMessage(self, jids, plaintext, bundles = None, devices = None):
+        if not bundles:
+            bundles = {}
+
         if not isinstance(jids, list):
             jids = [ jids ]
 
@@ -133,13 +136,13 @@ class SessionManager(object):
             "cipher": aes_gcm
         }
 
-    def encryptMessage(self, *args, **kwargs):
-        result = self.__encryptMessage(*args, **kwargs)
+    def encryptMessage(self, jids, plaintext, bundles = None, devices = None):
+        result = self.__encryptMessage(jids, plaintext, bundles, devices)
         del result["cipher"]
         return result
 
-    def encryptKeyTransportMessage(self, jids, *args, **kwargs):
-        result = self.__encryptMessage(jids, b"", *args, **kwargs)
+    def encryptKeyTransportMessage(self, jids, plaintext, bundles = None, devices = None):
+        result = self.__encryptMessage(jids, b"", plaintext, bundles, devices)
         del result["payload"]
         return result
 
