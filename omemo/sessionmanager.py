@@ -1,14 +1,15 @@
 from __future__ import absolute_import
 
+import copy
+import logging
 import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from . import wireformat
-from .exceptions import SessionManagerException
+from .exceptions.sessionmanagerexceptions import *
 from .util import generateDeviceID
 from .x3dhdoubleratchet import X3DHDoubleRatchet
-
 
 class SessionManager(object):
     def __init__(self, my_jid, storage, my_device_id = None):
@@ -37,13 +38,13 @@ class SessionManager(object):
 
     def __listDevices(self, jid):
         try:
-            return self.__devices_cache[jid]
+            return copy.deepcopy(self.__devices_cache[jid])
         except KeyError:
             self.__devices_cache[jid] = {
                 "active": set(self.__storage.loadActiveDevices(jid)),
                 "inactive": set(self.__storage.loadInactiveDevices(jid))
             }
-            return self.__devices_cache[jid]
+            return copy.deepcopy(self.__devices_cache[jid])
 
     def __loadSession(self, jid, device):
         try:
@@ -58,16 +59,45 @@ class SessionManager(object):
         self.__sessions_cache[jid][device] = session
         self.__storage.storeSession(jid, device, session)
 
-    def __encryptMessage(self, jids, plaintext, bundles = None, devices = None):
-        if not bundles:
-            bundles = {}
-
+    def __encryptMessage(self, jids, plaintext, bundles = None, devices = None, callback = None):
+        # Lift a single jid into a list
         if not isinstance(jids, list):
             jids = [ jids ]
 
+        # Add the own jid to the list
         jids = set(jids) | set([ self.__my_jid ])
 
-        messages = { jid: {} for jid in jids }
+        # If no callback was passed, log the exceptions
+        if not callback:
+            callback = lambda e, jid, device: logging.getLogger("SessionManager").debug("Exception during encryption for device " + str(device) + " of jid " + jid + ": " + str(e.__class__.__name__))
+
+        # If no bundles were passed, default to an empty dict
+        if not bundles:
+            bundles = {}
+
+        if devices:
+            devices = { jid: devices.get(jid, []) for jid in jids }
+        else:
+            devices = {}
+
+            for jid in jids:
+                # Load all active devices for this jid
+                devices[jid] = self.__listDevices(jid)["active"]
+
+                # If there are no active devices for this jid, generate an exception
+                if len(devices[jid]) == 0:
+                    del devices[jid]
+                    callback(NoDevicesException(), jid, None)
+
+        # Don't encrypt the message for the sending device
+        try:
+            devices[self.__my_jid].remove(self.__my_device_id)
+        except (KeyError, ValueError):
+            pass
+
+        # Store all encrypted messages into this array
+        # The elements will look like this: { "rid": receiver_id:int, "pre_key": pre_key:bool, "message": message_data:bytes, "jid": jid:string }
+        messages = []
 
         aes_gcm_key = AESGCM.generate_key(bit_length = 128)
         aes_gcm_iv  = os.urandom(16)
@@ -79,21 +109,14 @@ class SessionManager(object):
         aes_gcm_tag = ciphertext[-16:]
         ciphertext  = ciphertext[:-16]
 
-        if devices:
-            devices = { jid: devices.get(jid, []) for jid in jids }
-        else:
-            devices = {}
-
-            for jid in jids:
-                devices[jid] = self.__listDevices(jid)["active"]
-
-        try:
-            devices[self.__my_jid].remove(self.__my_device_id)
-        except (KeyError, ValueError):
-            pass
-
         def encryptAll(devices, jid):
+            encrypted_count = 0
+
             for device in devices:
+                if not self.__storage.isTrusted(jid, device):
+                    callback(UntrustedException(), jid, device)
+                    continue
+
                 dr = self.__loadSession(jid, device)
 
                 pre_key = dr == None
@@ -102,7 +125,8 @@ class SessionManager(object):
                     try:
                         bundle = bundles[jid][device]
                     except KeyError:
-                        raise SessionManagerException("Bundle for " + jid + " on device " + str(device) + " required to initiate a session!")
+                        callback(MissingBundleException(), jid, device)
+                        continue
 
                     session_init_data = self.__state.initSessionActive(bundle)
 
@@ -124,29 +148,36 @@ class SessionManager(object):
                 if pre_key:
                     message_data = wireformat.pre_key_message_header.toWire(session_init_data, message_data)
 
-                messages[jid][device] = { "message": message_data, "pre_key": pre_key }
+                messages.append({ "message": message_data, "pre_key": pre_key, "jid": jid, "rid": device })
+
+                encrypted_count += 1
+
+            if encrypted_count == 0:
+                if jid != self.__my_jid:
+                    callback(NoTrustedDevicesException(), jid, None)
 
         for jid, deviceList in devices.items():
             encryptAll(deviceList, jid)
 
         return {
             "iv": aes_gcm_iv,
+            "sid": self.__my_device_id,
             "messages": messages,
             "payload": ciphertext,
             "cipher": aes_gcm
         }
 
-    def encryptMessage(self, jids, plaintext, bundles = None, devices = None):
-        result = self.__encryptMessage(jids, plaintext, bundles, devices)
+    def encryptMessage(self, *args, **kwargs):
+        result = self.__encryptMessage(*args, **kwargs)
         del result["cipher"]
         return result
 
-    def encryptKeyTransportMessage(self, jids, plaintext, bundles = None, devices = None):
-        result = self.__encryptMessage(jids, b"", plaintext, bundles, devices)
+    def encryptKeyTransportMessage(self, jids, *args, **kwargs):
+        result = self.__encryptMessage(jids, b"", *args, **kwargs)
         del result["payload"]
         return result
 
-    def buildSession(self, jid, device, bundle):
+    def buildSession(self, jid, device, bundle, callback = None):
         """
         Special version of encryptKeyTransportMessage, which does not encrypt a
         new KeyTransportMessage for all devices of the receiver and all devices
@@ -157,7 +188,7 @@ class SessionManager(object):
         sending an initial text message.
         """
         
-        return self.encryptKeyTransportMessage(jid, { jid: { device: bundle } }, { jid: [ device ] })
+        return self.encryptKeyTransportMessage(jid, { jid: { device: bundle } }, { jid: [ device ] }, callback)
 
     def decryptPreKeyMessage(self, jid, device, iv, message, payload = None):
         # Unpack the pre key message data

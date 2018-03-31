@@ -69,3 +69,10 @@ class Storage(object):
         """
 
         raise NotImplementedError
+
+    def isTrusted(self, jid, device):
+        """
+        Return, whether the given device of given jid is trusted.
+        """
+
+        raise NotImplementedError

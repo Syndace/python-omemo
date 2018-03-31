@@ -1,4 +1,8 @@
+import logging
 import omemo
+import sys
+
+logging.basicConfig(level = logging.DEBUG)
 
 try:
     input = raw_input
@@ -52,6 +56,9 @@ class InMemoryStorage(omemo.Storage):
     def storeInactiveDevices(self, jid, devices):
         self.__devices[jid] = self.__devices.get(jid, {})
         self.__devices[jid]["inactive"] = devices
+
+    def isTrusted(self, jid, device):
+        return True
 
 # These values can be retreived from the OMEMO stanzas
 ALICE_JID = "alice@alice.alice"
@@ -125,7 +132,7 @@ else:
 # should contain everything you need to build a stanza and send it.
 
 # Get the message specified for Bob on his only device
-bob_message = initial_message["messages"][BOB_JID][BOB_DEVICE_ID]
+bob_message = [ x for x in initial_message["messages"] if x["rid"] == BOB_DEVICE_ID ][0]
 
 assert(bob_message["pre_key"])
 
@@ -154,7 +161,7 @@ else:
 message = bob_session_manager.encryptMessage(ALICE_JID, "Yo Alice!".encode("UTF-8"), bundles)
 
 # Get the message specified for Alice on her only device
-alice_message = message["messages"][ALICE_JID][ALICE_DEVICE_ID]
+alice_message = [ x for x in message["messages"] if x["rid"] == ALICE_DEVICE_ID ][0]
 
 assert(not alice_message["pre_key"])
 
@@ -167,12 +174,12 @@ assert(plaintext.decode("UTF-8") == "Yo Alice!")
 muc_message = alice_session_manager.encryptMessage([ BOB_JID, CHARLIE_JID ], "Hey Bob and Charlie!".encode("UTF-8"), bundles)
 
 # Get the message specified for Bob on his only device
-bob_message = muc_message["messages"][BOB_JID][BOB_DEVICE_ID]
+bob_message = [ x for x in muc_message["messages"] if x["rid"] == BOB_DEVICE_ID ][0]
 
 assert(not bob_message["pre_key"])
 
 # Get the message specified for Charlie on his/her only device
-charlie_message = muc_message["messages"][CHARLIE_JID][CHARLIE_DEVICE_ID]
+charlie_message = [ x for x in muc_message["messages"] if x["rid"] == CHARLIE_DEVICE_ID ][0]
 
 assert(charlie_message["pre_key"])
 
