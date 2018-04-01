@@ -57,7 +57,7 @@ class InMemoryStorage(omemo.Storage):
         self.__devices[jid]["inactive"] = devices
 
     def isTrusted(self, jid, device):
-        return False
+        return True
 
 # These values can be retreived from the OMEMO stanzas
 ALICE_JID = "alice@alice.alice"

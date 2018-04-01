@@ -35,6 +35,7 @@ class SessionManager(object):
                 raise SessionManagerException("Device id required for initial setup")
 
             self.__storage.storeState(self.__state, self.__my_device_id)
+            self.__storage.storeActiveDevices(self.__my_jid, [ self.__my_device_id ])
 
     def __listDevices(self, jid):
         try:
