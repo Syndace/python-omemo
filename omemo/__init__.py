@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from . import util
+from .otpkpolicy import OTPKPolicy
 from .storage import Storage
 
 # Set the signal implementation as default for now

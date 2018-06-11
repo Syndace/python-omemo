@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import copy
 import logging
 import os
+import time
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -12,8 +13,9 @@ from .util import generateDeviceID
 from .x3dhdoubleratchet import X3DHDoubleRatchet
 
 class SessionManager(object):
-    def __init__(self, my_jid, storage, my_device_id = None):
+    def __init__(self, my_jid, storage, otpk_policy, my_device_id = None):
         self.__storage = storage
+        self.__otpk_policy = otpk_policy
         self.__my_jid = my_jid
         self.__my_device_id = my_device_id
 
@@ -118,6 +120,10 @@ class SessionManager(object):
                     callback(UntrustedException(), jid, device)
                     continue
 
+                if self.__state.hasBoundOTPK(jid, device):
+                    self.__state.respondedTo(jid, device)
+                    self.__storage.storeState(self.__state, self.__my_device_id)
+
                 dr = self.__loadSession(jid, device)
 
                 pre_key = dr == None
@@ -191,12 +197,19 @@ class SessionManager(object):
 
         return self.encryptKeyTransportMessage(jid, { jid: { device: bundle } }, { jid: [ device ] }, callback, always_trust = True)
 
-    def decryptPreKeyMessage(self, jid, device, iv, message, payload = None):
+    def decryptPreKeyMessage(self, jid, device, iv, message, from_storage, payload = None):
+        """
+        Decrypt a PreKeyMessage, passively building a session with given jid and device.
+
+        message is the binary data that is contained in the <key> xml tag for our device.
+        Set from_storage to True, if the PreKeyMessage was received from any storage mechanism, e.g. MAM.
+        """
+
         # Unpack the pre key message data
         message_and_init_data = wireformat.pre_key_message_header.fromWire(message)
 
         # Prepare the DoubleRatchet
-        dr = self.__state.initSessionPassive(message_and_init_data["session_init_data"])
+        dr = self.__state.initSessionPassive(message_and_init_data["session_init_data"], jid, device, self.__otpk_policy, from_storage)
 
         # Store the changed state
         self.__storage.storeState(self.__state, self.__my_device_id)
@@ -205,9 +218,14 @@ class SessionManager(object):
         self.__storeSession(jid, device, dr)
 
         # Now, decrypt the contained message
-        return self.decryptMessage(jid, device, iv, message_and_init_data["message"], payload)
+        return self.decryptMessage(jid, device, iv, message_and_init_data["message"], payload, True)
 
-    def decryptMessage(self, jid, device, iv, message, payload = None):
+    def decryptMessage(self, jid, device, iv, message, payload = None, pre_key_message = False):
+        if not pre_key_message:
+            # If this is not part of a PreKeyMessage, we received a normal Message and can safely delete the OTPK
+            self.__state.deleteBoundOTPK(jid, device)
+            self.__storage.storeState(self.__state, self.__my_device_id)
+
         # Unpack the message data
         message_data = wireformat.message_header.fromWire(message)
 

@@ -4,7 +4,7 @@ from distutils.core import setup
 
 setup(
     name = "OMEMO",
-    version = "0.3.0",
+    version = "0.4.0",
     description = "An open python implementation of the OMEMO Multi-End Message and Object Encryption protocol.",
     author = "Tim Henkes",
     url = "https://github.com/Syndace/python-omemo",

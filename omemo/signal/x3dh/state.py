@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 
 import x3dh
-from x3dh.implementations import CurveTypeEncryptionKeyEncoder
 
 from .config import Config
+from .curvetypeencryptionkeyencoder import CurveTypeEncryptionKeyEncoder
 from ..exceptions import UnknownKeyException
 from .extendedpublicbundle import ExtendedPublicBundle
 
@@ -11,6 +11,7 @@ class State(x3dh.State):
     def __init__(self, configuration = None):
         if configuration == None:
             configuration = Config()
+
         super(State, self).__init__(configuration, CurveTypeEncryptionKeyEncoder)
 
         self.__spk_id = {
@@ -29,32 +30,38 @@ class State(x3dh.State):
 
         bundle = super(State, self).getPublicBundle()
 
+        self.__updateIDs()
+
+        return self.__extendBundle(bundle)
+
+    def __updateIDs(self):
         # Check, whether the spk has changed and assign it the next id in that case
-        if bundle.spk != self.__spk_id["enc"]:
-            self.__spk_id["enc"] = bundle.spk
+        if self.spk.enc != self.__spk_id["enc"]:
+            self.__spk_id["enc"] = self.spk.enc
             self.__spk_id["id"] += 1
+
+        otpks        = [ otpk.enc for otpk in self.otpks ]
+        hidden_otpks = [ otpk.enc for otpk in self.hidden_otpks ]
 
         # Synchronize the list of OTPKs
         # First, remove all entries in the current dict that were removed from the official list
         for key, value in list(self.__otpk_ids.items()):
             if key != "id_counter":
-                if not key in bundle.otpks:
+                if not (key in otpks or key in hidden_otpks):
                     del self.__otpk_ids[key]
 
         # Second, add new OTPKs to the dict and assign them ids
-        for otpk in bundle.otpks:
+        for otpk in otpks:
             if not otpk in self.__otpk_ids:
                 self.__otpk_ids["id_counter"] += 1
                 self.__otpk_ids[otpk] = self.__otpk_ids["id_counter"]
-
-        bundle = self.__extendBundle(bundle)
-
-        return bundle
 
     def __extendBundle(self, bundle):
         """
         Extend the bundle, adding the ids of the respective keys to all entries.
         """
+
+        self.__updateIDs()
 
         ik = bundle.ik
 
@@ -88,6 +95,8 @@ class State(x3dh.State):
         return x3dh.PublicBundle(ik, spk, spk_signature, otpks)
 
     def getSPKID(self, spk):
+        self.__updateIDs()
+
         # If the requested spk is the most recent one...
         if self.__spk_id["enc"] == spk:
             # ...return the id
@@ -96,6 +105,8 @@ class State(x3dh.State):
         raise UnknownKeyException("Tried to get the id of an unknown SPK.")
 
     def getSPK(self, spk_id):
+        self.__updateIDs()
+
         # If the requested spk id is the one contained in this bundle...
         if self.__spk_id["id"] == spk_id:
             # ...return the key
@@ -104,6 +115,8 @@ class State(x3dh.State):
         raise UnknownKeyException("Tried to get the SPK for an unknown id.")
 
     def getOTPKID(self, otpk):
+        self.__updateIDs()
+
         otpk_id = self.__otpk_ids.get(otpk)
 
         if otpk_id == None:
@@ -112,6 +125,8 @@ class State(x3dh.State):
         return otpk_id
 
     def getOTPK(self, otpk_id):
+        self.__updateIDs()
+
         otpks = list(filter(lambda x: x[1] == otpk_id, self.__otpk_ids.items()))
 
         if len(otpks) != 1:
