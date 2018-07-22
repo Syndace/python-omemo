@@ -3,7 +3,7 @@ from base64 import b64encode, b64decode
 from omemo import x3dh
 from omemo import wireformat
 
-from slixmpp.xmlstream import ET
+import xml.etree.ElementTree as ET
 
 def b64enc(data):
     return b64encode(bytes(bytearray(data))).decode("ASCII")

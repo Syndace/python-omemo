@@ -1,5 +1,19 @@
+"""
+The interface used by the SessionManager to persist data between runs.
+
+There are two possible ways to implement the Storage class: synchronous or asynchronous.
+
+The mode is determined by the result of the is_async method.
+
+If the implementation is asynchronous, the callback parameter is a function that takes two arguments:
+- success: True or False
+- result: The result of the operation if success is True or the error if success is False
+
+If the implementation is synchronous, the callback parameter is None.
+"""
+
 class Storage(object):
-    def loadState(self):
+    def loadState(self, callback):
         """
         Read the state (the collection of keys for this device) and return None, if no state was stored previously.
 
@@ -14,7 +28,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def storeState(self, state, device_id):
+    def storeState(self, callback, state, device_id):
         """
         Store the state, overwriting the old state, if it exists.
         The state is an instance of X3DHDoubleRatchet, you probably want to pickle the whole object.
@@ -22,14 +36,14 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadSession(self, jid, device_id):
+    def loadSession(self, callback, jid, device_id):
         """
         Load a session with given jid and device id or return None, if none exists.
         """
 
         raise NotImplementedError
 
-    def storeSession(self, jid, device_id, session):
+    def storeSession(self, callback, jid, device_id, session):
         """
         Store a session for given jid and device id, overwriting the previous session, if it exists.
         The session is an instance of DoubleRatchet, you probably want to pickle the whole object.
@@ -37,7 +51,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadActiveDevices(self, jid):
+    def loadActiveDevices(self, callback, jid):
         """
         Load the list of active devices for a given jid.
 
@@ -46,7 +60,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadInactiveDevices(self, jid):
+    def loadInactiveDevices(self, callback, jid):
         """
         Load the list of active devices for a given jid.
 
@@ -56,23 +70,31 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def storeActiveDevices(self, jid, devices):
+    def storeActiveDevices(self, callback, jid, devices):
         """
         Store the active devices for given jid, overwriting the old stored list, if it exists.
         """
 
         raise NotImplementedError
 
-    def storeInactiveDevices(self, jid, devices):
+    def storeInactiveDevices(self, callback, jid, devices):
         """
         Store the inactive devices for given jid, overwriting the old stored list, if it exists.
         """
 
         raise NotImplementedError
 
-    def isTrusted(self, jid, device):
+    def isTrusted(self, callback, jid, device):
         """
         Return, whether the given device of given jid is trusted.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def is_async(self):
+        """
+        Return, whether this implementation is asynchronous (uses the callback parameter).
         """
 
         raise NotImplementedError
