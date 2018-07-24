@@ -40,13 +40,23 @@ def main(who):
         session_init_data = state_bob.initSessionActive(alice_public_bundle)
         other_session_data = state_alice.initSessionPassive(session_init_data["to_other"])
 
-    if session_init_data["sk"] == other_session_data["sk"] and session_init_data["ad"] == other_session_data["ad"]:
+    if (session_init_data["sk"] == other_session_data["sk"] and
+        session_init_data["ad"] == other_session_data["ad"]):
         print("Alice and Bob derived the same secrets and ads! Success!")
     else:
         print("Alice and Bob derived different secrets or different ads. Failure.")
 
-    pickle.dump(state_alice, open("x3dh_get_shared_secret/state_alice.pickle", "wb"), pickle.HIGHEST_PROTOCOL)
-    pickle.dump(state_bob, open("x3dh_get_shared_secret/state_bob.pickle", "wb"), pickle.HIGHEST_PROTOCOL)
+    pickle.dump(
+        state_alice,
+        open("x3dh_get_shared_secret/state_alice.pickle", "wb"),
+        pickle.HIGHEST_PROTOCOL
+    )
+
+    pickle.dump(
+        state_bob,
+        open("x3dh_get_shared_secret/state_bob.pickle", "wb"),
+        pickle.HIGHEST_PROTOCOL
+    )
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

@@ -51,7 +51,12 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
         message = sender_dr.encryptMessage(msg.encode("UTF-8"))
 
         if use_wireformat:
-            message = wireformat.message_header.toWire(message["ciphertext"], message["header"], message["ad"], message["authentication_key"])
+            message = wireformat.message_header.toWire(
+                message["ciphertext"],
+                message["header"],
+                message["ad"],
+                message["authentication_key"]
+            )
             # Send to the receiver...
 
         while True:
@@ -68,10 +73,17 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
                 message_decoded = message
 
             # Now the receiver can decrypt the message
-            plaintext = receiver_dr.decryptMessage(message_decoded["ciphertext"], message_decoded["header"])
+            plaintext = receiver_dr.decryptMessage(
+                message_decoded["ciphertext"],
+                message_decoded["header"]
+            )
 
             if use_wireformat:
-                wireformat.message_header.checkAuthentication(message, plaintext["ad"], plaintext["authentication_key"])
+                wireformat.message_header.checkAuthentication(
+                    message,
+                    plaintext["ad"],
+                    plaintext["authentication_key"]
+                )
 
             print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
 
@@ -91,7 +103,10 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
         deferred_local = deferred[action[1:]]
 
         if len(deferred_local) == 0:
-            print("No messages deferred. Create a message first using a or b and select to defer it when asked.")
+            print(
+                "No messages deferred. " +
+                "Create a message first using a or b and select to defer it when asked."
+            )
         else:
             print("Select a message that was deferred earlier:")
 
@@ -115,10 +130,17 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
             print("Sending the message to " + receiver)
 
             # Now the receiver can decrypt the message
-            plaintext = receiver_dr.decryptMessage(message_decoded["ciphertext"], message_decoded["header"])
+            plaintext = receiver_dr.decryptMessage(
+                message_decoded["ciphertext"],
+                message_decoded["header"]
+            )
 
             if use_wireformat:
-                wireformat.message_header.checkAuthentication(message, plaintext["ad"], plaintext["authentication_key"])
+                wireformat.message_header.checkAuthentication(
+                    message,
+                    plaintext["ad"],
+                    plaintext["authentication_key"]
+                )
 
             print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
 
@@ -137,7 +159,8 @@ def mainLoop(alice_dr, bob_dr, use_wireformat = False):
         print("")
         print("")
 
-# The shared secret and associated data must be negotiated before starting the ratcheting session, using X3DH in case of OMEMO.
+# The shared secret and associated data must be negotiated before starting the
+# ratcheting session, using X3DH in case of OMEMO.
 def main(shared_secret, associated_data):
     global deferred
 
@@ -153,9 +176,14 @@ def main(shared_secret, associated_data):
         bob_dr = omemo.doubleratchet.DoubleRatchet(shared_secret, ad = associated_data)
 
         # Create Alice's DoubleRatchet, passing Bob's encryption key to the initializer.
-        alice_dr = omemo.doubleratchet.DoubleRatchet(shared_secret, other_enc = bob_dr.enc, ad = associated_data)
+        alice_dr = omemo.doubleratchet.DoubleRatchet(
+            shared_secret,
+            other_enc = bob_dr.enc,
+            ad = associated_data
+        )
 
-    # Now Alice is set up to send a first message to Bob, while Bob is not yet initialized and cannot send Alice any message.
+    # Now Alice is set up to send a first message to Bob,
+    # while Bob is not yet initialized and cannot send Alice any message.
     mainLoop(alice_dr, bob_dr)
 
     # Store the ratchets for later

@@ -131,7 +131,8 @@ class Promise(object):
 def returnValue(value):
     """
     In Python 2 we are not allowed to return from a generator function.
-    Instead, we have to raise the StopIteration exceptions ourselves to return from the coroutine.
+    Instead, we have to raise the StopIteration exceptions ourselves to return from the
+    coroutine.
     """
 
     exception = StopIteration()
@@ -147,8 +148,10 @@ def coroutine(f):
     def foo():
         result = yield somePromise
 
-    The function passed should be a generator yielding instances of the Promise class (or compatible).
-    The coroutine waits for the Promise to resolve and sends the result (or the error) back into the generator function.
+    The function passed should be a generator yielding instances of the Promise class
+    (or compatible).
+    The coroutine waits for the Promise to resolve and sends the result (or the error)
+    back into the generator function.
     This simulates sequential execution which in reality can be asynchonous.
     """
 
@@ -184,7 +187,10 @@ def coroutine(f):
                             reject(e)
                         else:
                             try:
-                                element.then(lambda value: _step(value, True), lambda reason: _step(reason, False))
+                                element.then(
+                                    lambda value  : _step(value, True),
+                                    lambda reason : _step(reason, False)
+                                )
                             except AttributeError:
                                 reject(InvalidCoroutineException(element))
 
@@ -252,17 +258,25 @@ def maybe_coroutine(decide):
         print("hello")
         return result
 
-    The function passed should be a generator yielding either only Promises or whatever you feel like.
-    The decide parameter must be a function which gets called with the same parameters as the function to decide whether this is a coroutine or not.
-    Using this it is possible to either make the function a coroutine or not based on a parameter to the function call.
+    The function passed should be a generator yielding either only Promises or whatever
+    you feel like.
+    The decide parameter must be a function which gets called with the same parameters as
+    the function to decide whether this is a coroutine or not.
+    Using this it is possible to either make the function a coroutine or not based on a
+    parameter to the function call.
     Let's explain the example above:
 
-    # If the maybeAPromise is an instance of Promise, we want the foo function to act as a coroutine
-    # If the maybeAPromise is not an instance of Promise, we want the foo function to act like any other normal synchronous function
+    # If the maybeAPromise is an instance of Promise,
+    # we want the foo function to act as a coroutine.
+    # If the maybeAPromise is not an instance of Promise,
+    # we want the foo function to act like any other normal synchronous function.
     @maybe_coroutine(lambda maybeAPromise: return isinstance(maybeAPromise, Promise))
     def foo(maybeAPromise):
-        # If isinstance(maybeAPromise, Promise), foo behaves like a coroutine, thus maybeAPromise will get resolved asynchronously and the result will be pushed back here
-        # Otherwise, foo behaves like no_coroutine, just pushing the exact value of maybeAPromise back into the generator
+        # If isinstance(maybeAPromise, Promise), foo behaves like a coroutine,
+        # thus maybeAPromise will get resolved asynchronously and the result will be
+        # pushed back here.
+        # Otherwise, foo behaves like no_coroutine,
+        # just pushing the exact value of maybeAPromise back into the generator.
         result = yield maybeAPromise
         print("hello")
         return result

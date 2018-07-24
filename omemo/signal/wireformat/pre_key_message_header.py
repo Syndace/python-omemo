@@ -11,7 +11,13 @@ def fromWire(data):
 
     data = wtp.PreKeySignalMessage.FromString(data)
 
-    if not (data.HasField("spk_id") and data.HasField("ek") and data.HasField("ik") and data.HasField("signal_message") and data.HasField("otpk_id")):
+    if not (
+        data.HasField("spk_id") and
+        data.HasField("ek") and
+        data.HasField("ik") and
+        data.HasField("signal_message") and
+        data.HasField("otpk_id")
+    ):
         raise IncompleteMessageException()
 
     result = {
@@ -29,7 +35,7 @@ def fromWire(data):
 
 def toWire(session_init_data, message, registration_id = 0):
     wire = wtp.PreKeySignalMessage()
-    wire.registration_id = registration_id # TODO: Does this parameter have any use in OMEMO?
+    wire.registration_id = registration_id # Does this parameter have any use in OMEMO?
     wire.otpk_id = session_init_data["otpk_id"]
     wire.spk_id = session_init_data["spk_id"]
     wire.ek = encodePublicKey(session_init_data["ek"])

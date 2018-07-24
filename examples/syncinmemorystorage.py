@@ -16,28 +16,28 @@ class SyncInMemoryStorage(omemo.Storage):
             "device_id": device_id
         }
 
-    def loadSession(self, callback, jid, device_id):
-        return self.__sessions.get(jid, {}).get(device_id, None)
+    def loadSession(self, callback, bare_jid, device_id):
+        return self.__sessions.get(bare_jid, {}).get(device_id, None)
 
-    def storeSession(self, callback, jid, device_id, session):
-        self.__sessions[jid] = self.__sessions.get(jid, {})
-        self.__sessions[jid][device_id] = session
+    def storeSession(self, callback, bare_jid, device_id, session):
+        self.__sessions[bare_jid] = self.__sessions.get(bare_jid, {})
+        self.__sessions[bare_jid][device_id] = session
 
-    def loadActiveDevices(self, callback, jid):
-        return self.__devices.get(jid, {}).get("active", [])
+    def loadActiveDevices(self, callback, bare_jid):
+        return self.__devices.get(bare_jid, {}).get("active", [])
 
-    def loadInactiveDevices(self, callback, jid):
-        return self.__devices.get(jid, {}).get("inactive", [])
+    def loadInactiveDevices(self, callback, bare_jid):
+        return self.__devices.get(bare_jid, {}).get("inactive", [])
 
-    def storeActiveDevices(self, callback, jid, devices):
-        self.__devices[jid] = self.__devices.get(jid, {})
-        self.__devices[jid]["active"] = devices
+    def storeActiveDevices(self, callback, bare_jid, devices):
+        self.__devices[bare_jid] = self.__devices.get(bare_jid, {})
+        self.__devices[bare_jid]["active"] = devices
 
-    def storeInactiveDevices(self, callback, jid, devices):
-        self.__devices[jid] = self.__devices.get(jid, {})
-        self.__devices[jid]["inactive"] = devices
+    def storeInactiveDevices(self, callback, bare_jid, devices):
+        self.__devices[bare_jid] = self.__devices.get(bare_jid, {})
+        self.__devices[bare_jid]["inactive"] = devices
 
-    def isTrusted(self, callback, jid, device):
+    def isTrusted(self, callback, bare_jid, device):
         return True
 
     @property

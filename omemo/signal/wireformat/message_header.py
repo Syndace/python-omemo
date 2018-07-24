@@ -25,12 +25,20 @@ def fromWire(data):
     # Unpack the protobuf structure
     data = wtp.SignalMessage.FromString(data)
 
-    if not (data.HasField("dh_ratchet_key") and data.HasField("n") and data.HasField("ciphertext")):
+    if not (
+        data.HasField("dh_ratchet_key") and
+        data.HasField("n") and
+        data.HasField("ciphertext")
+    ):
         raise IncompleteMessageException()
 
     return {
-        "ciphertext": data.ciphertext,
-        "header": doubleratchet.Header(decodePublicKey(data.dh_ratchet_key), data.n, data.pn)
+        "ciphertext" : data.ciphertext,
+        "header"     : doubleratchet.Header(
+                           decodePublicKey(data.dh_ratchet_key),
+                           data.n,
+                           data.pn
+                       )
     }
 
 def checkAuthentication(data, ad, authentication_key):

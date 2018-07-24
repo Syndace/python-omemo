@@ -42,11 +42,20 @@ def encodeOMEMOPublicBundle(self, bundle):
     payload = ET.Element("{" + OMEMO_NODE + "}bundle")
 
     # First, add the SPK key and id
-    spk_node = ET.SubElement(payload, "{" + OMEMO_NODE + "}signedPreKeyPublic", { "signedPreKeyId": str(bundle.spk["id"]) })
+    spk_node = ET.SubElement(
+        payload,
+        "{" + OMEMO_NODE + "}signedPreKeyPublic",
+        { "signedPreKeyId": str(bundle.spk["id"]) }
+    )
+
     spk_node.text = b64enc(wireformat.encodePublicKey(bundle.spk["key"]))
 
     # Second, add the SPK signature
-    spk_signature_node = ET.SubElement(payload, "{" + OMEMO_NODE + "}signedPreKeySignature")
+    spk_signature_node = ET.SubElement(
+        payload,
+        "{" + OMEMO_NODE + "}signedPreKeySignature"
+    )
+
     spk_signature_node.text = b64enc(bundle.spk_signature)
 
     # Third, add the IK
@@ -57,7 +66,12 @@ def encodeOMEMOPublicBundle(self, bundle):
     otpks_node = ET.SubElement(payload, "{" + OMEMO_NODE + "}prekeys")
 
     for otpk in bundle.otpks:
-        otpk_node = ET.SubElement(otpks_node, "{" + OMEMO_NODE + "}preKeyPublic", { "preKeyId": str(otpk["id"]) })
+        otpk_node = ET.SubElement(
+            otpks_node,
+            "{" + OMEMO_NODE + "}preKeyPublic",
+            { "preKeyId": str(otpk["id"]) }
+        )
+
         otpk_node.text = b64enc(wireformat.encodePublicKey(otpk["key"]))
 
     return payload

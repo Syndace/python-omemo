@@ -23,9 +23,11 @@ class State(x3dh.State):
 
     def getPublicBundle(self):
         """
-        The current signal OMEMO standard works with ids instead of sending full public keys whenever possible, probably to reduce traffic.
+        The current signal OMEMO standard works with ids instead of sending full
+        public keys whenever possible, probably to reduce traffic.
         This is not part of the core specification though, so it has to be added here.
-        It is added in the getPublicBundle method, because this method is the only way to get public data and is the perfect spot to update ids.
+        It is added in the getPublicBundle method, because this method is the only way to
+        get public data and is the perfect spot to update ids.
         """
 
         bundle = super(State, self).getPublicBundle()
@@ -43,8 +45,9 @@ class State(x3dh.State):
         otpks        = [ otpk.enc for otpk in self.otpks ]
         hidden_otpks = [ otpk.enc for otpk in self.hidden_otpks ]
 
-        # Synchronize the list of OTPKs
-        # First, remove all entries in the current dict that were removed from the official list
+        # Synchronize the list of OTPKs.
+        # First, remove all entries in the current dict,
+        # that were removed from the official list.
         for key, value in list(self.__otpk_ids.items()):
             if key != "id_counter":
                 if not (key in otpks or key in hidden_otpks):
