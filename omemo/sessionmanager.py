@@ -1,12 +1,11 @@
 from __future__ import absolute_import
 
 import copy
-import functools
 import logging
 import os
-import time
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from x3dh.exceptions.stateexceptions import SessionInitiationException
 
 from . import promise
 from . import storagewrapper
@@ -52,7 +51,7 @@ class SessionManager(object):
         state = yield self._storage.loadState()
 
         if state:
-            self.__state = state["state"]   
+            self.__state = state["state"]
             self.__my_device_id = state["device_id"]
         else:
             self.__state = X3DHDoubleRatchet()
@@ -197,7 +196,11 @@ class SessionManager(object):
                         callback(MissingBundleException(), bare_jid, device)
                         continue
 
-                    session_init_data = self.__state.initSessionActive(bundle)
+                    try:
+                        session_init_data = self.__state.initSessionActive(bundle)
+                    except SessionInitiationException as e:
+                        callback(e, bare_jid, device)
+                        continue
 
                     # Store the changed state
                     yield self._storage.storeState(self.__state, self.__my_device_id)
@@ -397,7 +400,7 @@ class SessionManager(object):
 
         active   = devices
         inactive = devices_old - active
-        
+
         self.__devices_cache[bare_jid] = { "active": active, "inactive": inactive }
 
         yield self._storage.storeActiveDevices(bare_jid, active)
