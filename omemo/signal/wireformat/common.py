@@ -1,10 +1,7 @@
-from __future__ import absolute_import
-
 from ..exceptions import InvalidFieldError, VersionException
 
 CURRENT_MAJOR_VERSION = 3
 CURRENT_MINOR_VERSION = 3
-MAC_SIZE = 8
 KEY_TYPE_25519 = 5
 
 def toBytes(data):

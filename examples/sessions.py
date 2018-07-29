@@ -196,12 +196,12 @@ def main():
         # The parameters should be straight forward except for the False:
         # This parameter is used to indicate, whether this pre key message was received
         # directly or from a storage mechanism e.g. MAM.
-        cipher, plaintext = yield bob_session_manager.decryptPreKeyMessage(
+        cipher, plaintext = yield bob_session_manager.decryptMessage(
             ALICE_BARE_JID,
             ALICE_DEVICE_ID,
             initial_message["iv"],
             bob_message["message"],
-            False,
+            bob_message["pre_key"],
             initial_message["payload"]
         )
 
@@ -211,12 +211,12 @@ def main():
     # For the alternative way using an empty KeyTransportMessage,
     # the initializaion looks like this:
     else:
-        cipher, plaintext = yield bob_session_manager.decryptPreKeyMessage(
+        cipher, plaintext = yield bob_session_manager.decryptMessage(
             ALICE_BARE_JID,
             ALICE_DEVICE_ID,
             initial_message["iv"],
             bob_message["message"],
-            False
+            bob_message["pre_key"]
         )
 
         assert(cipher)
@@ -239,6 +239,7 @@ def main():
         BOB_DEVICE_ID,
         message["iv"],
         alice_message["message"],
+        alice_message["pre_key"],
         message["payload"]
     )
 
@@ -278,18 +279,19 @@ def main():
         ALICE_DEVICE_ID,
         muc_message["iv"],
         bob_message["message"],
+        bob_message["pre_key"],
         muc_message["payload"]
     )
 
     assert(cipher == None)
     assert(plaintext.decode("UTF-8") == "Hey Bob and Charlie!")
 
-    cipher, plaintext = yield charlie_session_manager.decryptPreKeyMessage(
+    cipher, plaintext = yield charlie_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         muc_message["iv"],
         charlie_message["message"],
-        False,
+        charlie_message["pre_key"],
         muc_message["payload"]
     )
 
@@ -357,12 +359,12 @@ def main():
     assert(dave_message["pre_key"])
 
     # Let Dave initialize the session for the first time, this should work fine
-    cipher, plaintext = yield dave_session_manager.decryptPreKeyMessage(
+    cipher, plaintext = yield dave_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         initial_message["iv"],
         dave_message["message"],
-        False
+        dave_message["pre_key"]
     )
 
     assert(cipher)
@@ -377,12 +379,12 @@ def main():
 
     # Now, try the same thing a second time. This sould raise an exception
     try:
-        cipher, plaintext = yield dave_session_manager.decryptPreKeyMessage(
+        cipher, plaintext = yield dave_session_manager.decryptMessage(
             ALICE_BARE_JID,
             ALICE_DEVICE_ID,
             initial_message["iv"],
             dave_message["message"],
-            False
+            dave_message["pre_key"]
         )
 
         assert(False) # This line should not execute
@@ -423,12 +425,12 @@ def main():
     assert(dave_message["pre_key"])
 
     # Let Dave initialize the session for the first time, this should work fine
-    cipher, plaintext = yield dave_session_manager.decryptPreKeyMessage(
+    cipher, plaintext = yield dave_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         initial_message["iv"],
         dave_message["message"],
-        False
+        dave_message["pre_key"]
     )
 
     assert(cipher)
@@ -440,12 +442,12 @@ def main():
     assert(len(dave_session_manager.state.getPublicBundle().otpks) == 99)
 
     # Now, the second try should work aswell, because the policy decided to keep the OTPK
-    cipher, plaintext = yield dave_session_manager.decryptPreKeyMessage(
+    cipher, plaintext = yield dave_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         initial_message["iv"],
         dave_message["message"],
-        False
+        dave_message["pre_key"]
     )
 
     assert(cipher)

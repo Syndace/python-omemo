@@ -1,6 +1,3 @@
-class AuthenticationFailedException(Exception):
-    pass
-
 class IncompleteMessageException(Exception):
     pass
 

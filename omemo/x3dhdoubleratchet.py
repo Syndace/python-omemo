@@ -1,14 +1,12 @@
-from __future__ import absolute_import
-
 from x3dh.exceptions import SessionInitiationException
 
-from . import doubleratchet
-from . import signal
-from . import x3dh
+from . import default
+from .exceptions import UnknownKeyException
+from .state import State
 
 import time
 
-class X3DHDoubleRatchet(x3dh.State):
+class X3DHDoubleRatchet(State):
     def __init__(self):
         self.__bound_otpks = {}
         self.__pre_key_messages = {}
@@ -27,7 +25,7 @@ class X3DHDoubleRatchet(x3dh.State):
         # - The public SPK used for X3DH becomes the other's enc for the dh ratchet
         # - The associated data calculated by X3DH becomes the ad used by the
         #   double ratchet encryption/decryption
-        session_init_data["dr"] = doubleratchet.DoubleRatchet(
+        session_init_data["dr"] = default.doubleratchet.DoubleRatchet(
             session_init_data["sk"],
             other_enc = other_public_bundle.spk["key"],
             ad = session_init_data["ad"]
@@ -64,9 +62,9 @@ class X3DHDoubleRatchet(x3dh.State):
         # When passively initializing the session
         # - The shared secret becomes the root key
         # - The public SPK used by the active part for X3DH becomes the own dh ratchet key
-        # - The associated data calculated by X3DH becomes the ad used by the
-        #   double ratchet encryption/decryption
-        return doubleratchet.DoubleRatchet(
+        # - The associated data calculated by X3DH becomes the ad used by the double
+        #   ratchet encryption/decryption
+        return default.doubleratchet.DoubleRatchet(
             session_data["sk"],
             own_key = self.spk,
             ad = session_data["ad"]
@@ -168,7 +166,7 @@ class X3DHDoubleRatchet(x3dh.State):
     def __bindOTPK(self, bare_jid, device, otpk_id):
         try:
             otpk = self.getOTPK(otpk_id)
-        except signal.exceptions.UnknownKeyException:
+        except UnknownKeyException:
             raise SessionInitiationException(
                 "The OTPK used for this session initialization has been deleted, " +
                 "the session can not be initiated"

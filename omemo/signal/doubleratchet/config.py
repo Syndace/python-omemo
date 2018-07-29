@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import doubleratchet
-import scci
+import x3dh
 
 from .sendrecvchain import SendRecvChain
 
@@ -22,8 +22,7 @@ class DoubleRatchetConfig(doubleratchet.DoubleRatchetConfig):
         if aead == None:
             aead = doubleratchet.recommended.CBCHMACAEAD(
                 "SHA-256",
-                "WhisperMessageKeys",
-                8
+                "WhisperMessageKeys"
             )
 
         super(DoubleRatchetConfig, self).__init__(
@@ -37,13 +36,13 @@ class DHRatchetConfig(doubleratchet.DHRatchetConfig):
     def __init__(
         self,
         root_chain,
-        key_quad_class = scci.implementations.KeyQuad25519,
+        encryption_key_pair_class = x3dh.implementations.EncryptionKeyPairCurve25519,
         own_key = None,
         other_enc = None
     ):
         super(DHRatchetConfig, self).__init__(
             root_chain,
-            key_quad_class,
+            encryption_key_pair_class,
             own_key,
             other_enc
         )

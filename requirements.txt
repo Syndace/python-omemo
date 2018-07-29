@@ -1,8 +1,6 @@
-git+https://github.com/Syndace/python-omemo.git
-git+https://github.com/Syndace/python-x3dh.git
-git+https://github.com/Syndace/python-doubleratchet.git
-git+https://github.com/Syndace/python-xeddsa.git
-git+https://github.com/Syndace/python-scci.git
-pynacl
-cryptography
-hkdf
+X3DH>=0.3.1
+DoubleRatchet>=0.2.0
+hkdf==0.0.3
+pynacl>=1.0.1
+cryptography>=1.7.1
+protobuf>=2.6.1

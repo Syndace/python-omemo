@@ -1,15 +1,14 @@
-from __future__ import absolute_import
-
 import copy
 import logging
 import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from x3dh.exceptions.stateexceptions import SessionInitiationException
 
+from x3dh.exceptions import SessionInitiationException
+
+from . import default
 from . import promise
 from . import storagewrapper
-from . import wireformat
 from .exceptions.sessionmanagerexceptions import *
 from .x3dhdoubleratchet import X3DHDoubleRatchet
 
@@ -35,6 +34,7 @@ class SessionManager(object):
         self = cls()
 
         self._storage = storagewrapper.StorageWrapper(storage)
+
         self.__otpk_policy  = otpk_policy
         self.__my_bare_jid  = my_bare_jid
         self.__my_device_id = my_device_id
@@ -215,15 +215,13 @@ class SessionManager(object):
                 # Store the new/changed session
                 yield self.__storeSession(bare_jid, device, dr)
 
-                message_data = wireformat.message_header.toWire(
+                message_data = default.wireformat.message_header.toWire(
                     message["ciphertext"],
-                    message["header"],
-                    message["ad"],
-                    message["authentication_key"]
+                    message["header"]
                 )
 
                 if pre_key:
-                    message_data = wireformat.pre_key_message_header.toWire(
+                    message_data = default.wireformat.pre_key_message_header.toWire(
                         session_init_data,
                         message_data
                     )
@@ -285,76 +283,51 @@ class SessionManager(object):
         )))
 
     @promise.maybe_coroutine(checkSelf)
-    def decryptPreKeyMessage(
-        self,
-        bare_jid,
-        device,
-        iv,
-        message,
-        from_storage,
-        payload = None
-    ):
-        """
-        Decrypt a PreKeyMessage, passively building a session with given bare_jid and
-        device.
-
-        message is the binary data that is contained in the <key> xml tag for our device.
-        Set from_storage to True, if the PreKeyMessage was received from any
-        storage mechanism, e.g. MAM.
-        """
-
-        # Unpack the pre key message data
-        message_and_init_data = wireformat.pre_key_message_header.fromWire(message)
-
-        # Prepare the DoubleRatchet
-        dr = self.__state.initSessionPassive(
-            message_and_init_data["session_init_data"],
-            bare_jid,
-            device,
-            self.__otpk_policy,
-            from_storage
-        )
-
-        # Store the changed state
-        yield self._storage.storeState(self.__state, self.__my_device_id)
-
-        # Store the new session
-        yield self.__storeSession(bare_jid, device, dr)
-
-        # Now, decrypt the contained message
-        promise.returnValue((yield self.decryptMessage(
-            bare_jid,
-            device,
-            iv,
-            message_and_init_data["message"],
-            payload,
-            True
-        )))
-
-    @promise.maybe_coroutine(checkSelf)
     def decryptMessage(
         self,
         bare_jid,
         device,
         iv,
         message,
+        is_pre_key_message,
         payload = None,
-        pre_key_message = False
+        from_storage = False
     ):
-        if not pre_key_message:
+        if is_pre_key_message:
+            # Unpack the pre key message data
+            message_and_init_data = default.wireformat.pre_key_message_header.fromWire(message)
+
+            # Prepare the DoubleRatchet
+            dr = self.__state.initSessionPassive(
+                message_and_init_data["session_init_data"],
+                bare_jid,
+                device,
+                self.__otpk_policy,
+                from_storage
+            )
+
+            # Store the changed state
+            yield self._storage.storeState(self.__state, self.__my_device_id)
+
+            # Store the new session
+            yield self.__storeSession(bare_jid, device, dr)
+
+            # Unpack the "normal" message that was wrapped into the PreKeyMessage
+            message = message_and_init_data["message"]
+        else:
             # If this is not part of a PreKeyMessage,
             # we received a normal Message and can safely delete the OTPK
             self.__state.deleteBoundOTPK(bare_jid, device)
             yield self._storage.storeState(self.__state, self.__my_device_id)
 
         # Unpack the message data
-        message_data = wireformat.message_header.fromWire(message)
+        message_data = default.wireformat.message_header.fromWire(message)
 
         # Load the session
         dr = yield self.__loadSession(bare_jid, device)
 
         # Get the concatenation of the AES GCM key and tag
-        aes_gcm_key_tag = dr.decryptMessage(
+        plaintext = dr.decryptMessage(
             message_data["ciphertext"],
             message_data["header"]
         )
@@ -362,15 +335,8 @@ class SessionManager(object):
         # Store the changed session
         yield self.__storeSession(bare_jid, device, dr)
 
-        # Check the authentication
-        wireformat.message_header.checkAuthentication(
-            message,
-            aes_gcm_key_tag["ad"],
-            aes_gcm_key_tag["authentication_key"]
-        )
-
-        aes_gcm_key = aes_gcm_key_tag["plaintext"][:16]
-        aes_gcm_tag = aes_gcm_key_tag["plaintext"][16:]
+        aes_gcm_key = plaintext[:16]
+        aes_gcm_tag = plaintext[16:]
 
         aes_gcm = AESGCM(aes_gcm_key)
 

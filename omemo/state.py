@@ -1,25 +1,21 @@
-from __future__ import absolute_import
-
 import x3dh
 
-from .config import Config
-from .curvetypeencryptionkeyencoder import CurveTypeEncryptionKeyEncoder
-from ..exceptions import UnknownKeyException
+from . import default
+from .exceptions import UnknownKeyException
 from .extendedpublicbundle import ExtendedPublicBundle
 
 class State(x3dh.State):
     def __init__(self, configuration = None):
         if configuration == None:
-            configuration = Config()
+            configuration = default.x3dh.Config()
 
-        super(State, self).__init__(configuration, CurveTypeEncryptionKeyEncoder)
+        super(State, self).__init__(configuration, default.x3dh.EncryptionKeyEncoder)
 
-        self.__spk_id = {
-            "id": 0,
-            "enc": None
-        }
+        self.__spk_id  = 0
+        self.__spk_enc = None
 
-        self.__otpk_ids = { "id_counter": 0 }
+        self.__otpk_id_counter = 0
+        self.__otpk_ids = {}
 
     def getPublicBundle(self):
         """
@@ -38,9 +34,9 @@ class State(x3dh.State):
 
     def __updateIDs(self):
         # Check, whether the spk has changed and assign it the next id in that case
-        if self.spk.enc != self.__spk_id["enc"]:
-            self.__spk_id["enc"] = self.spk.enc
-            self.__spk_id["id"] += 1
+        if self.spk.enc != self.__spk_enc:
+            self.__spk_enc = self.spk.enc
+            self.__spk_id += 1
 
         otpks        = [ otpk.enc for otpk in self.otpks ]
         hidden_otpks = [ otpk.enc for otpk in self.hidden_otpks ]
@@ -48,23 +44,20 @@ class State(x3dh.State):
         # Synchronize the list of OTPKs.
         # First, remove all entries in the current dict,
         # that were removed from the official list.
-        for key, value in list(self.__otpk_ids.items()):
-            if key != "id_counter":
-                if not (key in otpks or key in hidden_otpks):
-                    del self.__otpk_ids[key]
+        for otpk in list(self.__otpk_ids):
+            if not (otpk in otpks or otpk in hidden_otpks):
+                del self.__otpk_ids[otpk]
 
         # Second, add new OTPKs to the dict and assign them ids
         for otpk in otpks:
             if not otpk in self.__otpk_ids:
-                self.__otpk_ids["id_counter"] += 1
-                self.__otpk_ids[otpk] = self.__otpk_ids["id_counter"]
+                self.__otpk_id_counter += 1
+                self.__otpk_ids[otpk] = self.__otpk_id_counter
 
     def __extendBundle(self, bundle):
         """
         Extend the bundle, adding the ids of the respective keys to all entries.
         """
-
-        self.__updateIDs()
 
         ik = bundle.ik
 
@@ -101,9 +94,9 @@ class State(x3dh.State):
         self.__updateIDs()
 
         # If the requested spk is the most recent one...
-        if self.__spk_id["enc"] == spk:
+        if self.__spk_enc == spk:
             # ...return the id
-            return self.__spk_id["id"]
+            return self.__spk_id
 
         raise UnknownKeyException("Tried to get the id of an unknown SPK.")
 
@@ -111,9 +104,9 @@ class State(x3dh.State):
         self.__updateIDs()
 
         # If the requested spk id is the one contained in this bundle...
-        if self.__spk_id["id"] == spk_id:
+        if self.__spk_id == spk_id:
             # ...return the key
-            return self.__spk_id["enc"]
+            return self.__spk_enc
 
         raise UnknownKeyException("Tried to get the SPK for an unknown id.")
 
@@ -130,12 +123,12 @@ class State(x3dh.State):
     def getOTPK(self, otpk_id):
         self.__updateIDs()
 
-        otpks = list(filter(lambda x: x[1] == otpk_id, self.__otpk_ids.items()))
+        otpks = [ x[0] for x in self.__otpk_ids.items() if x[1] == otpk_id ]
 
         if len(otpks) != 1:
             raise UnknownKeyException("Tried to get the OTPK for an unknown id.")
 
-        return otpks[0][0]
+        return otpks[0]
 
     def initSessionActive(self, other_public_bundle, *args, **kwargs):
         other_public_bundle = self.__reduceBundle(other_public_bundle)

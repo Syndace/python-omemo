@@ -1,4 +1,10 @@
-*.pyc
-*.tmp
 build/
+dist/
+OMEMO.egg-info/
+*.pyc
+
+.pytest_cache/
+
+*.tmp
+
 examples/*/*

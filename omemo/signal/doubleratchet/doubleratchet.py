@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import doubleratchet
-import scci
 
 from .config import DHRatchetConfig, DoubleRatchetConfig
 from .rootchain import RootChain

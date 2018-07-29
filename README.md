@@ -1,5 +1,8 @@
+[![PyPI](https://img.shields.io/pypi/v/OMEMO.svg)](https://pypi.org/project/OMEMO/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/OMEMO.svg)](https://pypi.org/project/OMEMO/)
+
 # python-omemo
-#### An open python implementation of the OMEMO Multi-End Message and Object Encryption protocol.
+#### A Python implementation of the OMEMO Multi-End Message and Object Encryption protocol.
 
 This python library offers an open implementation of the OMEMO Multi-End Message and Object Encryption protocol as specified [here](https://xmpp.org/extensions/xep-0384.html).
 

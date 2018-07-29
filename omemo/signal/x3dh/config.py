@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import x3dh
 
 class Config(x3dh.Config):
