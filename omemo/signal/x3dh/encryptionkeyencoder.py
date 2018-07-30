@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import x3dh
 
 class EncryptionKeyEncoder(x3dh.EncryptionKeyEncoder):

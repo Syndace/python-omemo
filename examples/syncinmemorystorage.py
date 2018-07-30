@@ -1,20 +1,32 @@
 import omemo
 
+import json
+
 class SyncInMemoryStorage(omemo.Storage):
     def __init__(self):
         self.__state = None
-        self.__bundles = {}
+        self.__own_data_set  = False
+        self.__own_bare_jid  = None
+        self.__own_device_id = None
         self.__sessions = {}
         self.__devices = {}
 
-    def loadState(self, callback):
-        return self.__state
+    def loadOwnData(self, callback):
+        return ({
+            "own_bare_jid"  : self.__own_bare_jid,
+            "own_device_id" : self.__own_device_id
+        } if self.__own_data_set else None)
 
-    def storeState(self, callback, state, device_id):
-        self.__state = {
-            "state": state,
-            "device_id": device_id
-        }
+    def storeOwnData(self, callback, own_bare_jid, own_device_id):
+        self.__own_data_set  = True
+        self.__own_bare_jid  = own_bare_jid
+        self.__own_device_id = own_device_id
+
+    def loadState(self, callback):
+        return None if self.__state == None else json.loads(self.__state)
+
+    def storeState(self, callback, state):
+        self.__state = json.dumps(state) # Woohoo! The object is json serializable!
 
     def loadSession(self, callback, bare_jid, device_id):
         return self.__sessions.get(bare_jid, {}).get(device_id, None)

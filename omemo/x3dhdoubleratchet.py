@@ -1,17 +1,77 @@
+from __future__ import absolute_import
+
 from x3dh.exceptions import SessionInitiationException
 
 from . import default
 from .exceptions import UnknownKeyException
 from .state import State
 
+import base64
+import copy
 import time
 
 class X3DHDoubleRatchet(State):
     def __init__(self):
+        super(X3DHDoubleRatchet, self).__init__()
+
         self.__bound_otpks = {}
         self.__pre_key_messages = {}
 
-        super(X3DHDoubleRatchet, self).__init__()
+    def serialize(self):
+        bound_otpks = {}
+
+        for bare_jid in self.__bound_otpks:
+            bound_otpks[bare_jid] = {}
+
+            for device in self.__bound_otpks[bare_jid]:
+                otpk = self.__bound_otpks[bare_jid][device]
+
+                bound_otpks[bare_jid][device] = {
+                    "otpk" : base64.b64encode(otpk["otpk"]).decode("US-ASCII"),
+                    "id"   : otpk["id"]
+                }
+
+        pk_messages = {}
+
+        for otpk, value in self.__pre_key_messages.items():
+            pk_messages[base64.b64encode(otpk).decode("US-ASCII")] = copy.deepcopy(value)
+
+        return {
+            "super"       : super(X3DHDoubleRatchet, self).serialize(),
+            "bound_otpks" : bound_otpks,
+            "pk_messages" : pk_messages
+        }
+
+    @classmethod
+    def fromSerialized(cls, serialized, *args, **kwargs):
+        self = super(X3DHDoubleRatchet, cls).fromSerialized(
+            serialized["super"],
+            *args,
+            **kwargs
+        )
+
+        bound_otpks = {}
+
+        for bare_jid in serialized["bound_otpks"]:
+            bound_otpks[bare_jid] = {}
+
+            for device in serialized["bound_otpks"][bare_jid]:
+                otpk = serialized["bound_otpks"][bare_jid][device]
+
+                bound_otpks[bare_jid][device] = {
+                    "otpk" : base64.b64decode(otpk["otpk"].encode("US-ASCII")),
+                    "id"   : otpk["id"]
+                }
+
+        pk_messages = {}
+
+        for otpk, value in serialized["pk_messages"].items():
+            pk_messages[base64.b64decode(otpk.encode("US-ASCII"))] = copy.deepcopy(value)
+
+        self.__bound_otpks = bound_otpks
+        self.__pre_key_messages = pk_messages
+
+        return self
 
     def initSessionActive(self, other_public_bundle, *args, **kwargs):
         session_init_data = super(X3DHDoubleRatchet, self).initSessionActive(
@@ -26,9 +86,9 @@ class X3DHDoubleRatchet(State):
         # - The associated data calculated by X3DH becomes the ad used by the
         #   double ratchet encryption/decryption
         session_init_data["dr"] = default.doubleratchet.DoubleRatchet(
+            session_init_data["ad"],
             session_init_data["sk"],
-            other_enc = other_public_bundle.spk["key"],
-            ad = session_init_data["ad"]
+            other_enc = other_public_bundle.spk["key"]
         )
 
         # The shared secret and ad values are now irrelevant
@@ -65,9 +125,9 @@ class X3DHDoubleRatchet(State):
         # - The associated data calculated by X3DH becomes the ad used by the double
         #   ratchet encryption/decryption
         return default.doubleratchet.DoubleRatchet(
+            session_data["ad"],
             session_data["sk"],
-            own_key = self.spk,
-            ad = session_data["ad"]
+            own_key = self.spk
         )
 
     def __compressSessionInitData(self, session_init_data, bundle):
@@ -169,7 +229,7 @@ class X3DHDoubleRatchet(State):
         except UnknownKeyException:
             raise SessionInitiationException(
                 "The OTPK used for this session initialization has been deleted, " +
-                "the session can not be initiated"
+                "the session can not be initiated."
             )
 
         self.__bound_otpks[bare_jid] = self.__bound_otpks.get(bare_jid, {})

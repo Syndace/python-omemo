@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 from .promise import Promise
 from .storage import Storage
 
@@ -24,6 +26,18 @@ def makeCBPromise(function, *args, **kwargs):
 class StorageWrapper(Storage):
     def __init__(self, wrapped):
         self.__wrapped = wrapped
+
+    def loadOwnData(self, *args, **kwargs):
+        if self.__wrapped.is_async:
+            return makeCBPromise(self.__wrapped.loadOwnData, *args, **kwargs)
+        else:
+            return self.__wrapped.loadOwnData(None, *args, **kwargs)
+
+    def storeOwnData(self, *args, **kwargs):
+        if self.__wrapped.is_async:
+            return makeCBPromise(self.__wrapped.storeOwnData, *args, **kwargs)
+        else:
+            return self.__wrapped.storeOwnData(None, *args, **kwargs)
 
     def loadState(self, *args, **kwargs):
         if self.__wrapped.is_async:

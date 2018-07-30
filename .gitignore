@@ -8,3 +8,5 @@ OMEMO.egg-info/
 *.tmp
 
 examples/*/*
+
+tests/

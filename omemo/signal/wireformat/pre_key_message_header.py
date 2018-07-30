@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 from . import whispertextprotocol_pb2 as wtp
 from .common import *
 from ..exceptions import IncompleteMessageException

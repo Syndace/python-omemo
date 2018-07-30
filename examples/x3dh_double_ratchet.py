@@ -1,5 +1,4 @@
 import omemo
-from omemo import wireformat
 
 import sys
 
@@ -14,10 +13,10 @@ except NameError:
 
 def main(who, use_wireformat = False):
     alice_state = omemo.X3DHDoubleRatchet()
-    bob_state = omemo.X3DHDoubleRatchet()
+    bob_state   = omemo.X3DHDoubleRatchet()
 
     alice_public_bundle = alice_state.getPublicBundle()
-    bob_public_bundle = bob_state.getPublicBundle()
+    bob_public_bundle   = bob_state.getPublicBundle()
 
     if use_wireformat:
         # Ask for the initial message to send
@@ -36,15 +35,13 @@ def main(who, use_wireformat = False):
             )
 
             # Prepare the message
-            initial_message_serialized = wireformat.message_header.toWire(
+            initial_message_serialized = omemo.wireformat.message_header.toWire(
                 initial_message_encrypted["ciphertext"],
-                initial_message_encrypted["header"],
-                initial_message_encrypted["ad"],
-                initial_message_encrypted["authentication_key"]
+                initial_message_encrypted["header"]
             )
 
             # Bundle the session init data and the initial message into a pre_key packet
-            initial_pre_key_message_serialized = wireformat.pre_key_message_header.toWire(
+            initial_pre_key_message_serialized = omemo.wireformat.pre_key_message_header.toWire(
                 session_init_data,
                 initial_message_serialized
             )
@@ -52,14 +49,14 @@ def main(who, use_wireformat = False):
             # Send to the receiver...
 
             # Unpack the session init data into the initial message
-            initial_pre_key_message = wireformat.pre_key_message_header.fromWire(
+            initial_pre_key_message = omemo.wireformat.pre_key_message_header.fromWire(
                 initial_pre_key_message_serialized
             )
 
             initial_message_serialized = initial_pre_key_message["message"]
 
             # Unpack the contained message
-            initial_message_encrypted = wireformat.message_header.fromWire(
+            initial_message_encrypted = omemo.wireformat.message_header.fromWire(
                 initial_message_serialized
             )
 
@@ -73,19 +70,10 @@ def main(who, use_wireformat = False):
             )
             
             # Decrypt the initial message
-            initial_message = bob_dr.decryptMessage(
+            initial_message_plaintext = bob_dr.decryptMessage(
                 initial_message_encrypted["ciphertext"],
                 initial_message_encrypted["header"]
-            )
-
-            # Authenticate the data
-            wireformat.message_header.checkAuthentication(
-                initial_message_serialized,
-                initial_message["ad"],
-                initial_message["authentication_key"]
-            )
-
-            initial_message_plaintext = initial_message["plaintext"].decode("UTF-8")
+            ).decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
             bob_dr = bob_state.initSessionPassive(
@@ -108,15 +96,13 @@ def main(who, use_wireformat = False):
             )
 
             # Prepare the message
-            initial_message_serialized = wireformat.message_header.toWire(
+            initial_message_serialized = omemo.wireformat.message_header.toWire(
                 initial_message_encrypted["ciphertext"],
-                initial_message_encrypted["header"],
-                initial_message_encrypted["ad"],
-                initial_message_encrypted["authentication_key"]
+                initial_message_encrypted["header"]
             )
 
             # Bundle the session init data and the initial message into a pre_key packet
-            initial_pre_key_message_serialized = wireformat.pre_key_message_header.toWire(
+            initial_pre_key_message_serialized = omemo.wireformat.pre_key_message_header.toWire(
                 session_init_data,
                 initial_message_serialized
             )
@@ -124,14 +110,14 @@ def main(who, use_wireformat = False):
             # Send to the receiver...
 
             # Unpack the session init data into the initial message
-            initial_pre_key_message = wireformat.pre_key_message_header.fromWire(
+            initial_pre_key_message = omemo.wireformat.pre_key_message_header.fromWire(
                 initial_pre_key_message_serialized
             )
 
             initial_message_serialized = initial_pre_key_message["message"]
 
             # Unpack the contained message
-            initial_message_encrypted = wireformat.message_header.fromWire(
+            initial_message_encrypted = omemo.wireformat.message_header.fromWire(
                 initial_message_serialized
             )
 
@@ -145,19 +131,10 @@ def main(who, use_wireformat = False):
             )
             
             # Decrypt the initial message
-            initial_message = alice_dr.decryptMessage(
+            initial_message_plaintext = alice_dr.decryptMessage(
                 initial_message_encrypted["ciphertext"],
                 initial_message_encrypted["header"]
-            )
-
-            # Authenticate the data
-            wireformat.message_header.checkAuthentication(
-                initial_message_serialized,
-                initial_message["ad"],
-                initial_message["authentication_key"]
-            )
-
-            initial_message_plaintext = initial_message["plaintext"].decode("UTF-8")
+            ).decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
             alice_dr = alice_state.initSessionPassive(

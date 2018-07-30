@@ -1,22 +1,21 @@
-from base64 import b64encode, b64decode
+import base64
 
-from omemo import x3dh
-from omemo import wireformat
+import omemo
 
 import xml.etree.ElementTree as ET
 
 def b64enc(data):
-    return b64encode(bytes(bytearray(data))).decode("ASCII")
+    return base64.b64encode(data).decode("ASCII")
 
 def b64dec(data):
-    return b64decode(data.encode("ASCII"))
+    return base64.b64decode(data.encode("ASCII"))
 
 OMEMO_NODE = "eu.siacs.conversations.axolotl"
 
 def decodeOMEMOPublicBundle(bundle_stanza):
     spk_node = bundle_stanza.find("{" + OMEMO_NODE + "}signedPreKeyPublic")
     spk = {
-        "key": wireformat.decodePublicKey(b64dec(spk_node.text)),
+        "key": omemo.wireformat.decodePublicKey(b64dec(spk_node.text)),
         "id": int(spk_node.get("signedPreKeyId"))
     }
 
@@ -24,18 +23,18 @@ def decodeOMEMOPublicBundle(bundle_stanza):
     spk_signature = b64dec(spk_signature_node.text)
 
     ik_node = bundle_stanza.find("{" + OMEMO_NODE + "}identityKey")
-    ik = wireformat.decodePublicKey(b64dec(ik_node.text))
+    ik = omemo.wireformat.decodePublicKey(b64dec(ik_node.text))
 
     otpks_node = bundle_stanza.find("{" + OMEMO_NODE + "}prekeys")
 
     otpks = []
     for otpk_node in list(otpks_node):
         otpks.append({
-            "key": wireformat.decodePublicKey(b64dec(otpk_node.text)),
+            "key": omemo.wireformat.decodePublicKey(b64dec(otpk_node.text)),
             "id": int(otpk_node.get("preKeyId"))
         })
 
-    return x3dh.ExtendedPublicBundle(ik, spk, spk_signature, otpks)
+    return omemo.ExtendedPublicBundle(ik, spk, spk_signature, otpks)
 
 def encodeOMEMOPublicBundle(self, bundle):
     # Prepare the bundle element
@@ -48,7 +47,7 @@ def encodeOMEMOPublicBundle(self, bundle):
         { "signedPreKeyId": str(bundle.spk["id"]) }
     )
 
-    spk_node.text = b64enc(wireformat.encodePublicKey(bundle.spk["key"]))
+    spk_node.text = b64enc(omemo.wireformat.encodePublicKey(bundle.spk["key"]))
 
     # Second, add the SPK signature
     spk_signature_node = ET.SubElement(
@@ -60,7 +59,7 @@ def encodeOMEMOPublicBundle(self, bundle):
 
     # Third, add the IK
     ik_node = ET.SubElement(payload, "{" + OMEMO_NODE + "}identityKey")
-    ik_node.text = b64enc(wireformat.encodePublicKey(bundle.ik))
+    ik_node.text = b64enc(omemo.wireformat.encodePublicKey(bundle.ik))
 
     # Fourth and last, add the otpks
     otpks_node = ET.SubElement(payload, "{" + OMEMO_NODE + "}prekeys")
@@ -72,6 +71,6 @@ def encodeOMEMOPublicBundle(self, bundle):
             { "preKeyId": str(otpk["id"]) }
         )
 
-        otpk_node.text = b64enc(wireformat.encodePublicKey(otpk["key"]))
+        otpk_node.text = b64enc(omemo.wireformat.encodePublicKey(otpk["key"]))
 
     return payload

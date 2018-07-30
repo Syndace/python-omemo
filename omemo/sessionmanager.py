@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import copy
 import logging
 import os
@@ -29,13 +31,16 @@ def checkConst(const):
 
 class SessionManager(object):
     @classmethod
-    @promise.maybe_coroutine(checkPositionalArgument(2))
-    def create(cls, my_bare_jid, storage, otpk_policy, my_device_id = None):
+    @promise.maybe_coroutine(checkPositionalArgument(1))
+    def create(cls, storage, otpk_policy, my_bare_jid = None, my_device_id = None):
         self = cls()
 
         self._storage = storagewrapper.StorageWrapper(storage)
 
-        self.__otpk_policy  = otpk_policy
+        self.__otpk_policy = otpk_policy
+
+        self.__state = None
+
         self.__my_bare_jid  = my_bare_jid
         self.__my_device_id = my_device_id
 
@@ -49,26 +54,32 @@ class SessionManager(object):
     @promise.maybe_coroutine(checkSelf)
     def __prepare(self):
         state = yield self._storage.loadState()
-
-        if state:
-            self.__state = state["state"]
-            self.__my_device_id = state["device_id"]
-        else:
+        if state == None:
             self.__state = X3DHDoubleRatchet()
 
-            if not self.__my_device_id:
-                raise SessionManagerException("Device id required for initial setup")
-
-            yield self._storage.storeState(self.__state, self.__my_device_id)
+            yield self._storage.storeState(self.__state.serialize())
             yield self._storage.storeActiveDevices(self.__my_bare_jid, [
                 self.__my_device_id
             ])
+        else:
+            self.__state = X3DHDoubleRatchet.fromSerialized(state["state"])
+
+        own_data = yield self._storage.loadOwnData()
+        if own_data == None:
+            if self.__my_bare_jid == None:
+                raise SessionManagerException("Bare jid is required for initial setup")
+
+            if self.__my_device_id == None:
+                raise SessionManagerException("Device id required for initial setup")
+
+            yield self._storage.storeOwnData(self.__my_bare_jid, self.__my_device_id)
+        else:
+            self.__my_bare_jid  = state["bare_jid"]
+            self.__my_device_id = state["device_id"]
 
     @promise.maybe_coroutine(checkSelf)
     def __listDevices(self, bare_jid):
-        try:
-            promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]))
-        except KeyError:
+        if not (bare_jid in self.__devices_cache):
             active   = yield self._storage.loadActiveDevices(bare_jid)
             inactive = yield self._storage.loadInactiveDevices(bare_jid)
 
@@ -77,24 +88,28 @@ class SessionManager(object):
                 "inactive" : set(inactive)
             }
 
-            promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]))
+        promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]))
 
     @promise.maybe_coroutine(checkSelf)
     def __loadSession(self, bare_jid, device):
-        try:
-            promise.returnValue(self.__sessions_cache[bare_jid][device])
-        except KeyError:
+        self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
+
+        if not (device in self.__sessions_cache[bare_jid]):
             session = yield self._storage.loadSession(bare_jid, device)
 
-            self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
+            if session != None:
+                session = default.doubleratchet.DoubleRatchet.fromSerialized(session)
+
             self.__sessions_cache[bare_jid][device] = session
-            promise.returnValue(self.__sessions_cache[bare_jid][device])
+
+        promise.returnValue(self.__sessions_cache[bare_jid][device])
 
     @promise.maybe_coroutine(checkSelf)
     def __storeSession(self, bare_jid, device, session):
         self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
         self.__sessions_cache[bare_jid][device] = session
-        yield self._storage.storeSession(bare_jid, device, session)
+
+        yield self._storage.storeSession(bare_jid, device, session.serialize())
 
     def __loggingEncryptMessageCallback(self, e, bare_jid, device):
         logging.getLogger("SessionManager").debug(
@@ -183,7 +198,7 @@ class SessionManager(object):
 
                 if self.__state.hasBoundOTPK(bare_jid, device):
                     self.__state.respondedTo(bare_jid, device)
-                    yield self._storage.storeState(self.__state, self.__my_device_id)
+                    yield self._storage.storeState(self.__state.serialize())
 
                 dr = yield self.__loadSession(bare_jid, device)
 
@@ -203,7 +218,7 @@ class SessionManager(object):
                         continue
 
                     # Store the changed state
-                    yield self._storage.storeState(self.__state, self.__my_device_id)
+                    yield self._storage.storeState(self.__state.serialize())
 
                     dr                = session_init_data["dr"]
                     session_init_data = session_init_data["to_other"]
@@ -283,19 +298,19 @@ class SessionManager(object):
         )))
 
     @promise.maybe_coroutine(checkSelf)
-    def decryptMessage(
+    def _decryptMessage(
         self,
         bare_jid,
         device,
-        iv,
         message,
         is_pre_key_message,
-        payload = None,
         from_storage = False
     ):
         if is_pre_key_message:
             # Unpack the pre key message data
-            message_and_init_data = default.wireformat.pre_key_message_header.fromWire(message)
+            message_and_init_data = default.wireformat.pre_key_message_header.fromWire(
+                message
+            )
 
             # Prepare the DoubleRatchet
             dr = self.__state.initSessionPassive(
@@ -307,7 +322,7 @@ class SessionManager(object):
             )
 
             # Store the changed state
-            yield self._storage.storeState(self.__state, self.__my_device_id)
+            yield self._storage.storeState(self.__state.serialize())
 
             # Store the new session
             yield self.__storeSession(bare_jid, device, dr)
@@ -318,7 +333,7 @@ class SessionManager(object):
             # If this is not part of a PreKeyMessage,
             # we received a normal Message and can safely delete the OTPK
             self.__state.deleteBoundOTPK(bare_jid, device)
-            yield self._storage.storeState(self.__state, self.__my_device_id)
+            yield self._storage.storeState(self.__state.serialize())
 
         # Unpack the message data
         message_data = default.wireformat.message_header.fromWire(message)
@@ -334,6 +349,27 @@ class SessionManager(object):
 
         # Store the changed session
         yield self.__storeSession(bare_jid, device, dr)
+
+        promise.returnValue(plaintext)
+
+    @promise.maybe_coroutine(checkSelf)
+    def decryptMessage(
+        self,
+        bare_jid,
+        device,
+        iv,
+        message,
+        is_pre_key_message,
+        payload = None,
+        from_storage = False
+    ):
+        plaintext = yield self._decryptMessage(
+            bare_jid,
+            device,
+            message,
+            is_pre_key_message,
+            from_storage
+        )
 
         aes_gcm_key = plaintext[:16]
         aes_gcm_tag = plaintext[16:]

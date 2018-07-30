@@ -5,7 +5,7 @@ with open("README.md") as f:
 
 setup(
     name = "OMEMO",
-    version = "0.5.0",
+    version = "0.6.0",
     description = "A Python implementation of the OMEMO Multi-End Message and Object Encryption protocol.",
     long_description = long_description,
     long_description_content_type = "text/markdown",
@@ -15,8 +15,8 @@ setup(
     license = "GPLv3",
     packages = find_packages(),
     install_requires = [
-        "X3DH>=0.3.1",
-        "DoubleRatchet>=0.2.0",
+        "X3DH>=0.4.0",
+        "DoubleRatchet>=0.3.0",
         "hkdf==0.0.3",
         "pynacl>=1.0.1",
         "cryptography>=1.7.1",

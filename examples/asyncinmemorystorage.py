@@ -1,20 +1,34 @@
 import omemo
 
+import json
+
 class AsyncInMemoryStorage(omemo.Storage):
     def __init__(self):
         self.__state = None
-        self.__bundles = {}
+        self.__own_data_set  = False
+        self.__own_bare_jid  = None
+        self.__own_device_id = None
         self.__sessions = {}
         self.__devices = {}
 
-    def loadState(self, callback):
-        callback(True, self.__state)
+    def loadOwnData(self, callback):
+        callback(True, {
+            "own_bare_jid"  : self.__own_bare_jid,
+            "own_device_id" : self.__own_device_id
+        } if self.__own_data_set else None)
 
-    def storeState(self, callback, state, device_id):
-        self.__state = {
-            "state": state,
-            "device_id": device_id
-        }
+    def storeOwnData(self, callback, own_bare_jid, own_device_id):
+        self.__own_data_set  = True
+        self.__own_bare_jid  = own_bare_jid
+        self.__own_device_id = own_device_id
+
+        callback(True, None)
+
+    def loadState(self, callback):
+        callback(True, None if self.__state == None else json.loads(self.__state))
+
+    def storeState(self, callback, state):
+        self.__state = json.dumps(state) # Woohoo! The object is json serializable!
 
         callback(True, None)
 

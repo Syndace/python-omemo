@@ -5,8 +5,10 @@ import omemo
 import x3dh
 
 from deletingotpkpolicy import DeletingOTPKPolicy
+from keepingotpkpolicy  import KeepingOTPKPolicy
+
 from asyncinmemorystorage import AsyncInMemoryStorage
-from syncinmemorystorage import SyncInMemoryStorage
+from syncinmemorystorage  import SyncInMemoryStorage
 
 # The example data file contains bare jids and device ids for four people:
 # Alice, Bob, Charlie and Dave.
@@ -64,10 +66,10 @@ someAsyncStorage = SomeAsyncStorage()
 
 # If you use a synchronous storage implementation, you can just use the return values as
 # usual.
-syncManager = omemo.SessionManager.create(someBareJID, someSyncStorage, ...)
+syncManager = omemo.SessionManager.create(someSyncStorage, ...)
 
 # If you use an asynchronous storage implementation, the return value is a promise
-asyncManagerPromise = omemo.SessionManager.create(someOtherBareJID, someAsyncStorage, ...)
+asyncManagerPromise = omemo.SessionManager.create(someAsyncStorage, ...)
 
 # You can use the then method of the Promise object to wait for the Promise to resolve and
 # to get the result from it:
@@ -83,30 +85,32 @@ def main():
     # In this example, imagine Alice, Bob and Charlie are all on different devices and
     # only have access to their own SessionManagers.
     alice_session_manager = yield omemo.SessionManager.create(
-        ALICE_BARE_JID,
         InMemoryStorage(),
         DeletingOTPKPolicy,
+        ALICE_BARE_JID,
         ALICE_DEVICE_ID
     )
 
     bob_session_manager = yield omemo.SessionManager.create(
-        BOB_BARE_JID,
         InMemoryStorage(),
         DeletingOTPKPolicy,
+        BOB_BARE_JID,
         BOB_DEVICE_ID
     )
 
     charlie_session_manager = yield omemo.SessionManager.create(
-        CHARLIE_BARE_JID,
         InMemoryStorage(),
         DeletingOTPKPolicy,
+        CHARLIE_BARE_JID,
         CHARLIE_DEVICE_ID
     )
 
     try:
-        # You have to provide a device id for the first creation of the SessionManager.
+        # You have to provide a bare jid and a device id for the first creation of the
+        # SessionManager.
+        #
         # From then on, the session manager retrieves the id from the storage.
-        yield omemo.SessionManager.create("exc", InMemoryStorage(), DeletingOTPKPolicy)
+        yield omemo.SessionManager.create(InMemoryStorage(), DeletingOTPKPolicy)
         assert(False)
     except omemo.exceptions.SessionManagerException:
         pass
@@ -334,9 +338,9 @@ def main():
 
     # Create a session manager for Dave that uses the DeletingOTPKPolicy class
     dave_session_manager = yield omemo.SessionManager.create(
-        DAVE_BARE_JID,
         InMemoryStorage(),
         DeletingOTPKPolicy,
+        DAVE_BARE_JID,
         DAVE_DEVICE_ID
     )
 
@@ -392,17 +396,13 @@ def main():
         pass
 
     # Finally, let's do the same thing but using a policy that never deletes keys
-    # instead of always:
-    class KeepingOTPKPolicy(omemo.OTPKPolicy):
-        @staticmethod
-        def decideOTPK(data):
-            return True
+    # instead of always.
 
     # Create a session manager for Dave that uses the KeepingOTPKPolicy class
     dave_session_manager = yield omemo.SessionManager.create(
-        DAVE_BARE_JID,
         InMemoryStorage(),
         KeepingOTPKPolicy,
+        DAVE_BARE_JID,
         DAVE_DEVICE_ID
     )
 

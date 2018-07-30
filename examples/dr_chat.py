@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import omemo
-from omemo import wireformat
 
 import json
 import pickle
@@ -51,11 +50,9 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
         message = sender_dr.encryptMessage(msg.encode("UTF-8"))
 
         if use_wireformat:
-            message = wireformat.message_header.toWire(
+            message = omemo.wireformat.message_header.toWire(
                 message["ciphertext"],
-                message["header"],
-                message["ad"],
-                message["authentication_key"]
+                message["header"]
             )
             # Send to the receiver...
 
@@ -68,7 +65,7 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
             print("Sending the message to " + receiver)
 
             if use_wireformat:
-                message_decoded = wireformat.message_header.fromWire(message)
+                message_decoded = omemo.wireformat.message_header.fromWire(message)
             else:
                 message_decoded = message
 
@@ -78,14 +75,7 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
                 message_decoded["header"]
             )
 
-            if use_wireformat:
-                wireformat.message_header.checkAuthentication(
-                    message,
-                    plaintext["ad"],
-                    plaintext["authentication_key"]
-                )
-
-            print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
+            print(receiver + " received:", plaintext.decode("UTF-8"))
 
         if send_or_defer == "d":
             print("Saving the message for later")
@@ -123,7 +113,7 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
             message = deferred_local.pop(msg_index)["ciphertext_header"]
 
             if use_wireformat:
-                message_decoded = wireformat.message_header.fromWire(message)
+                message_decoded = omemo.wireformat.message_header.fromWire(message)
             else:
                 message_decoded = message
 
@@ -135,14 +125,7 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
                 message_decoded["header"]
             )
 
-            if use_wireformat:
-                wireformat.message_header.checkAuthentication(
-                    message,
-                    plaintext["ad"],
-                    plaintext["authentication_key"]
-                )
-
-            print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
+            print(receiver + " received:", plaintext.decode("UTF-8"))
 
     return action != "q"
 
@@ -168,18 +151,25 @@ def main(shared_secret, associated_data):
 
     try:
         # Look for stored ratchets and deferred messages
-        bob_dr = pickle.load(open("dr_chat/bob_dr.pickle", "rb"))
-        alice_dr = pickle.load(open("dr_chat/alice_dr.pickle", "rb"))
-        deferred = pickle.load(open("dr_chat/deferred.pickle", "rb"))
+        with open("dr_chat/bob_dr.json") as f:
+            bob_dr = omemo.doubleratchet.DoubleRatchet.fromSerialized(json.load(f))
+
+        with open("dr_chat/alice_dr.json") as f:
+            alice_dr = omemo.doubleratchet.DoubleRatchet.fromSerialized(json.load(f))
+
+        with open("dr_chat/deferred.pickle", "rb") as f:
+            deferred = pickle.load(f)
     except IOError:
+        print("Loading failed, creating fresh data...")
+
         # Create Bob's DoubleRatchet with just the shared secret.
-        bob_dr = omemo.doubleratchet.DoubleRatchet(shared_secret, ad = associated_data)
+        bob_dr = omemo.doubleratchet.DoubleRatchet(associated_data, shared_secret)
 
         # Create Alice's DoubleRatchet, passing Bob's encryption key to the initializer.
         alice_dr = omemo.doubleratchet.DoubleRatchet(
+            associated_data,
             shared_secret,
-            other_enc = bob_dr.enc,
-            ad = associated_data
+            other_enc = bob_dr.enc
         )
 
     # Now Alice is set up to send a first message to Bob,
@@ -187,9 +177,14 @@ def main(shared_secret, associated_data):
     mainLoop(alice_dr, bob_dr)
 
     # Store the ratchets for later
-    pickle.dump(bob_dr, open("dr_chat/bob_dr.pickle", "wb"), pickle.HIGHEST_PROTOCOL)
-    pickle.dump(alice_dr, open("dr_chat/alice_dr.pickle", "wb"), pickle.HIGHEST_PROTOCOL)
-    pickle.dump(deferred, open("dr_chat/deferred.pickle", "wb"), pickle.HIGHEST_PROTOCOL)
+    with open("dr_chat/bob_dr.json", "w") as f:
+        json.dump(bob_dr.serialize(), f)
+
+    with open("dr_chat/alice_dr.json", "w") as f:
+        json.dump(alice_dr.serialize(), f)
+
+    with open("dr_chat/deferred.pickle", "wb") as f:
+        pickle.dump(deferred, f)
     
 if __name__ == "__main__":
-    main(bytes(bytearray([ 0xFF ] * 32)), bytes(bytearray([ 0x00 ] * 32)))
+    main(b"\x42" * 42, b"\x13\37" * 42)

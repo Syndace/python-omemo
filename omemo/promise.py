@@ -1,5 +1,15 @@
+from __future__ import absolute_import
+
 import functools
 import types
+
+class ReturnValueException(Exception):
+    def __init__(self, value):
+        self.__value = value
+
+    @property
+    def value(self):
+        return self.__value
 
 class RejectedException(Exception):
     def __init__(self, reason):
@@ -131,13 +141,24 @@ class Promise(object):
 def returnValue(value):
     """
     In Python 2 we are not allowed to return from a generator function.
+
     Instead, we have to raise the StopIteration exceptions ourselves to return from the
     coroutine.
+
+    Python 3.7 for some fucking reason changed it so you can't raise a StopIteration
+    exception yourself. Really fucking great idea. Let's make it harder every fucking
+    version to write software for Python 2 AND 3.
+
+    For this awesome reason, we don't raise a StopIteration exception but a self-made
+    exception called ReturnValueException.
+
+    I don't know, the whole asyncio thing to me seems like some cancer that slowly makes
+    Python less and less usable.
+
+    It was fine, when we just had generators and yield.
     """
 
-    exception = StopIteration()
-    exception.value = value
-    raise exception
+    raise ReturnValueException(value)
 
 def coroutine(f):
     """
@@ -183,6 +204,8 @@ def coroutine(f):
                                 element = generator.throw(previous)
                         except StopIteration as e:
                             resolve(getattr(e, "value", None))
+                        except ReturnValueException as e:
+                            resolve(e.value)
                         except BaseException as e:
                             reject(e)
                         else:
@@ -240,6 +263,8 @@ def no_coroutine(f):
                     element = generator.send(previous)
             except StopIteration as e:
                 return getattr(e, "value", None)
+            except ReturnValueException as e:
+                return e.value
             else:
                 return _step(element, False)
 

@@ -1,21 +1,62 @@
+from __future__ import absolute_import
+
+import base64
+
 import x3dh
 
 from . import default
 from .exceptions import UnknownKeyException
 from .extendedpublicbundle import ExtendedPublicBundle
 
-class State(x3dh.State):
-    def __init__(self, configuration = None):
-        if configuration == None:
-            configuration = default.x3dh.Config()
-
-        super(State, self).__init__(configuration, default.x3dh.EncryptionKeyEncoder)
+class State(default.x3dh.State):
+    def __init__(self):
+        super(State, self).__init__()
 
         self.__spk_id  = 0
         self.__spk_enc = None
 
         self.__otpk_id_counter = 0
         self.__otpk_ids = {}
+
+    def serialize(self):
+        spk = self.__spk_enc
+        spk = None if spk == None else base64.b64encode(spk).decode("US-ASCII")
+
+        otpk_ids = {}
+
+        for key, value in self.__otpk_ids.items():
+            otpk_ids[base64.b64encode(key).decode("US-ASCII")] = value
+
+        return {
+            "super": super(State, self).serialize(),
+            "spk_id": self.__spk_id,
+            "spk_enc": spk,
+            "otpk_id_counter": self.__otpk_id_counter,
+            "otpk_ids": otpk_ids
+        }
+
+    @classmethod
+    def fromSerialized(cls, serialized, *args, **kwargs):
+        self = super(State, cls).fromSerialized(
+            serialized["super"],
+            *args,
+            **kwargs
+        )
+
+        spk = serialized["spk_enc"]
+        spk = None if spk == None else base64.b64decode(spk.encode("US-ASCII"))
+
+        otpk_ids = {}
+
+        for key, value in serialized["otpk_ids"].items():
+            otpk_ids[base64.b64decode(key.encode("US-ASCII"))] = value
+
+        self.__spk_id = serialized["spk_id"]
+        self.__spk_enc = spk
+        self.__otpk_id_counter = serialized["otpk_id_counter"]
+        self.__otpk_ids = otpk_ids
+
+        return self
 
     def getPublicBundle(self):
         """
