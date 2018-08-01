@@ -40,3 +40,34 @@ class State(x3dh.State):
             *args,
             **kwargs
         )
+
+    def initSessionActive(self, *args, **kwargs):
+        # X3DH is specified to build the associated data as follows: IK_A || IK_B.
+        # As per usual, WhisperSystems weren't satisfied with their own solution and
+        # instead of using the ad as built by X3DH they ALWAYS do:
+        #     IK_sender || IK_receiver.
+        # That means, when decyprint a message, another ad is used as when encrypting a
+        # message.
+        #
+        # To allow for this to happen, we split the ad returned by X3DH into IK_own and
+        # IK_other.
+
+        result = super(State, self).initSessionActive(*args, **kwargs)
+
+        result["ad"] = {
+            "IK_own"   : result["ad"][:33],
+            "IK_other" : result["ad"][33:]
+        }
+
+        return result
+
+    def initSessionPassive(self, *args, **kwargs):
+        result = super(State, self).initSessionPassive(*args, **kwargs)
+
+        # See initSessionActive for an explanation
+        result["ad"] = {
+            "IK_own"   : result["ad"][33:],
+            "IK_other" : result["ad"][:33]
+        }
+
+        return result

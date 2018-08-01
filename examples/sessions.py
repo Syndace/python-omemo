@@ -20,7 +20,7 @@ from syncinmemorystorage  import SyncInMemoryStorage
 # have to use the user's bare jids (name@host).
 from example_data import *
 
-logging.basicConfig(level = logging.DEBUG)
+logging.basicConfig(level = logging.INFO)
 
 try:
     input = raw_input

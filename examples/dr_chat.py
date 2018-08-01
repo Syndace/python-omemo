@@ -51,10 +51,14 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
 
         if use_wireformat:
             message = omemo.wireformat.message_header.toWire(
-                message["ciphertext"],
-                message["header"]
+                message["ciphertext"]["ciphertext"],
+                message["header"],
+                message["ciphertext"]["ad"],
+                message["ciphertext"]["authentication_key"]
             )
             # Send to the receiver...
+        else:
+            message["ciphertext"] = message["ciphertext"]["ciphertext"]
 
         while True:
             send_or_defer = input("Send the message or defer it for later? (s or d): ")
@@ -75,7 +79,16 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
                 message_decoded["header"]
             )
 
-            print(receiver + " received:", plaintext.decode("UTF-8"))
+            if use_wireformat:
+                # Check the authentication
+                omemo.wireformat.message_header.checkAuthentication(
+                    message_decoded["mac"],
+                    message_decoded["auth_data"],
+                    plaintext["ad"],
+                    plaintext["authentication_key"]
+                )
+
+            print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
 
         if send_or_defer == "d":
             print("Saving the message for later")
@@ -125,7 +138,16 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
                 message_decoded["header"]
             )
 
-            print(receiver + " received:", plaintext.decode("UTF-8"))
+            if use_wireformat:
+                # Check the authentication
+                omemo.wireformat.message_header.checkAuthentication(
+                    message_decoded["mac"],
+                    message_decoded["auth_data"],
+                    plaintext["ad"],
+                    plaintext["authentication_key"]
+                )
+
+            print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
 
     return action != "q"
 
@@ -187,4 +209,7 @@ def main(shared_secret, associated_data):
         pickle.dump(deferred, f)
     
 if __name__ == "__main__":
-    main(b"\x42" * 42, b"\x13\37" * 42)
+    main(b"\x42" * 42, {
+        "IK_own"   : b"\x13\x37" * 16,
+        "IK_other" : b"\x09\x35" * 16
+    })

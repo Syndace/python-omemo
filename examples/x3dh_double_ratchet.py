@@ -36,8 +36,10 @@ def main(who, use_wireformat = False):
 
             # Prepare the message
             initial_message_serialized = omemo.wireformat.message_header.toWire(
-                initial_message_encrypted["ciphertext"],
-                initial_message_encrypted["header"]
+                initial_message_encrypted["ciphertext"]["ciphertext"],
+                initial_message_encrypted["header"],
+                initial_message_encrypted["ciphertext"]["ad"],
+                initial_message_encrypted["ciphertext"]["authentication_key"]
             )
 
             # Bundle the session init data and the initial message into a pre_key packet
@@ -73,7 +75,17 @@ def main(who, use_wireformat = False):
             initial_message_plaintext = bob_dr.decryptMessage(
                 initial_message_encrypted["ciphertext"],
                 initial_message_encrypted["header"]
-            ).decode("UTF-8")
+            )
+
+            # Check the authentication
+            omemo.wireformat.message_header.checkAuthentication(
+                initial_message_encrypted["mac"],
+                initial_message_encrypted["auth_data"],
+                initial_message_plaintext["ad"],
+                initial_message_plaintext["authentication_key"]
+            )
+
+            initial_message_plaintext = initial_message_plaintext["plaintext"].decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
             bob_dr = bob_state.initSessionPassive(
@@ -97,8 +109,10 @@ def main(who, use_wireformat = False):
 
             # Prepare the message
             initial_message_serialized = omemo.wireformat.message_header.toWire(
-                initial_message_encrypted["ciphertext"],
-                initial_message_encrypted["header"]
+                initial_message_encrypted["ciphertext"]["ciphertext"],
+                initial_message_encrypted["header"],
+                initial_message_encrypted["ciphertext"]["ad"],
+                initial_message_encrypted["ciphertext"]["authentication_key"]
             )
 
             # Bundle the session init data and the initial message into a pre_key packet
@@ -134,7 +148,17 @@ def main(who, use_wireformat = False):
             initial_message_plaintext = alice_dr.decryptMessage(
                 initial_message_encrypted["ciphertext"],
                 initial_message_encrypted["header"]
-            ).decode("UTF-8")
+            )
+
+            # Check the authentication
+            omemo.wireformat.message_header.checkAuthentication(
+                initial_message_encrypted["mac"],
+                initial_message_encrypted["auth_data"],
+                initial_message_plaintext["ad"],
+                initial_message_plaintext["authentication_key"]
+            )
+
+            initial_message_plaintext = initial_message_plaintext["plaintext"].decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
             alice_dr = alice_state.initSessionPassive(

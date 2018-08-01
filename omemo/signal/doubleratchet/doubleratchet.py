@@ -5,6 +5,7 @@ import base64
 import doubleratchet
 import x3dh
 
+from .cbcaead import CBCAEAD
 from ..exceptions import InvalidConfigurationException
 from .rootchain import RootChain
 from .symmetrickeyratchet import SymmetricKeyRatchet
@@ -38,10 +39,7 @@ class DoubleRatchet(doubleratchet.ratchets.DoubleRatchet):
 
         super(DoubleRatchet, self).__init__(
             self.__skr, # symmetric_key_ratchet
-            doubleratchet.recommended.CBCHMACAEAD(
-                "SHA-256",
-                "WhisperMessageKeys"
-            ), # aead
+            CBCAEAD(), # aead
             self.__ad, # ad
             5000, # message_key_store_max
             self.__root_chain, # root_chain
@@ -51,19 +49,31 @@ class DoubleRatchet(doubleratchet.ratchets.DoubleRatchet):
         )
 
     def serialize(self):
+        ad = {
+            "IK_own"   : base64.b64encode(self.__ad["IK_own"]).decode("US-ASCII"),
+            "IK_other" : base64.b64encode(self.__ad["IK_other"]).decode("US-ASCII")
+        }
+
         return {
             "super"      : super(DoubleRatchet, self).serialize(),
-            "ad"         : base64.b64encode(self.__ad).decode("US-ASCII"),
+            "ad"         : ad,
             "skr"        : self.__skr.serialize(),
             "root_chain" : self.__root_chain.serialize()
         }
 
     @classmethod
     def fromSerialized(cls, serialized):
+        ad = serialized["ad"]
+
+        ad = {
+            "IK_own"   : base64.b64decode(ad["IK_own"].encode("US-ASCII")),
+            "IK_other" : base64.b64decode(ad["IK_other"].encode("US-ASCII"))
+        }
+
         return super(DoubleRatchet, cls).fromSerialized(
             serialized["super"],
-            base64.b64decode(serialized["ad"].encode("US-ASCII")),
-            skr        = SymmetricKeyRatchet.fromSerialized(serialized["skr"]),
+            ad,
+            skr = SymmetricKeyRatchet.fromSerialized(serialized["skr"]),
             root_chain = RootChain.fromSerialized(serialized["root_chain"])
         )
 

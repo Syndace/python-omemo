@@ -6,3 +6,6 @@ class InvalidFieldError(Exception):
 
 class VersionException(Exception):
     pass
+
+class AuthenticationFailedException(Exception):
+    pass

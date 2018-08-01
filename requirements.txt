@@ -1,5 +1,5 @@
-X3DH>=0.4.0
-DoubleRatchet>=0.3.0
+X3DH>=0.4.3
+DoubleRatchet>=0.3.1
 hkdf==0.0.3
 pynacl>=1.0.1
 cryptography>=1.7.1

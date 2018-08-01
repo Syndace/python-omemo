@@ -73,12 +73,28 @@ class X3DHDoubleRatchet(State):
 
         return self
 
-    def initSessionActive(self, other_public_bundle, *args, **kwargs):
+    def initSessionActive(
+        self,
+        other_public_bundle,
+        _DEBUG_sendingRatchetKey = None,
+        *args,
+        **kwargs
+    ):
         session_init_data = super(X3DHDoubleRatchet, self).initSessionActive(
             other_public_bundle,
             *args,
             **kwargs
         )
+
+        own_key = None
+        if _DEBUG_sendingRatchetKey != None:
+            import logging
+
+            logging.getLogger("omemo.X3DHDoubleRatchet").error(
+                "WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION"
+            )
+
+            own_key = _DEBUG_sendingRatchetKey
 
         # When actively initializing a session
         # - The shared secret becomes the root key
@@ -88,6 +104,7 @@ class X3DHDoubleRatchet(State):
         session_init_data["dr"] = default.doubleratchet.DoubleRatchet(
             session_init_data["ad"],
             session_init_data["sk"],
+            own_key = own_key,
             other_enc = other_public_bundle.spk["key"]
         )
 

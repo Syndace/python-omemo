@@ -14,6 +14,15 @@ from . import storagewrapper
 from .exceptions.sessionmanagerexceptions import *
 from .x3dhdoubleratchet import X3DHDoubleRatchet
 
+def d(*args, **kwargs):
+    logging.getLogger("omemo.SessionManager").debug(*args, **kwargs)
+
+def w(*args, **kwargs):
+    logging.getLogger("omemo.SessionManager").warning(*args, **kwargs)
+
+def e(*args, **kwargs):
+    logging.getLogger("omemo.SessionManager").error(*args, **kwargs)
+
 def checkSelf(self, *args, **kwargs):
     return self._storage.is_async
 
@@ -62,7 +71,7 @@ class SessionManager(object):
                 self.__my_device_id
             ])
         else:
-            self.__state = X3DHDoubleRatchet.fromSerialized(state["state"])
+            self.__state = X3DHDoubleRatchet.fromSerialized(state)
 
         own_data = yield self._storage.loadOwnData()
         if own_data == None:
@@ -74,8 +83,8 @@ class SessionManager(object):
 
             yield self._storage.storeOwnData(self.__my_bare_jid, self.__my_device_id)
         else:
-            self.__my_bare_jid  = state["bare_jid"]
-            self.__my_device_id = state["device_id"]
+            self.__my_bare_jid  = own_data["own_bare_jid"]
+            self.__my_device_id = own_data["own_device_id"]
 
     @promise.maybe_coroutine(checkSelf)
     def __listDevices(self, bare_jid):
@@ -112,13 +121,14 @@ class SessionManager(object):
         yield self._storage.storeSession(bare_jid, device, session.serialize())
 
     def __loggingEncryptMessageCallback(self, e, bare_jid, device):
-        logging.getLogger("SessionManager").debug(
+        w(
             "Exception during encryption for device " +
             str(device) +
             " of bare jid " +
             bare_jid +
             ": " +
-            str(e.__class__.__name__)
+            str(e.__class__.__name__),
+            exc_info = e
         )
 
     @promise.maybe_coroutine(checkSelf)
@@ -129,7 +139,9 @@ class SessionManager(object):
         bundles = None,
         devices = None,
         callback = None,
-        always_trust = False
+        always_trust = False,
+        _DEBUG_ek = None,
+        _DEBUG_sendingRatchetKey = None
     ):
         # Lift a single bare_jid into a list
         if not isinstance(bare_jids, list):
@@ -143,10 +155,10 @@ class SessionManager(object):
             callback = self.__loggingEncryptMessageCallback
 
         # If no bundles were passed, default to an empty dict
-        if not bundles:
+        if bundles == None:
             bundles = {}
 
-        if devices:
+        if devices != None:
             devices = { bare_jid: devices.get(bare_jid, []) for bare_jid in bare_jids }
         else:
             devices = {}
@@ -212,7 +224,11 @@ class SessionManager(object):
                         continue
 
                     try:
-                        session_init_data = self.__state.initSessionActive(bundle)
+                        session_init_data = self.__state.initSessionActive(
+                            bundle,
+                            _DEBUG_ek = _DEBUG_ek,
+                            _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
+                        )
                     except SessionInitiationException as e:
                         callback(e, bare_jid, device)
                         continue
@@ -231,8 +247,10 @@ class SessionManager(object):
                 yield self.__storeSession(bare_jid, device, dr)
 
                 message_data = default.wireformat.message_header.toWire(
-                    message["ciphertext"],
-                    message["header"]
+                    message["ciphertext"]["ciphertext"],
+                    message["header"],
+                    message["ciphertext"]["ad"],
+                    message["ciphertext"]["authentication_key"]
                 )
 
                 if pre_key:
@@ -278,7 +296,15 @@ class SessionManager(object):
         promise.returnValue(result)
 
     @promise.maybe_coroutine(checkSelf)
-    def buildSession(self, bare_jid, device, bundle, callback = None):
+    def buildSession(
+        self,
+        bare_jid,
+        device,
+        bundle,
+        callback = None,
+        _DEBUG_ek = None,
+        _DEBUG_sendingRatchetKey = None
+    ):
         """
         Special version of encryptKeyTransportMessage, which does not encrypt a
         new KeyTransportMessage for all devices of the receiver and all devices
@@ -294,7 +320,9 @@ class SessionManager(object):
             { bare_jid: { device: bundle } },
             { bare_jid: [ device ] },
             callback,
-            always_trust = True
+            always_trust = True,
+            _DEBUG_ek = _DEBUG_ek,
+            _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
         )))
 
     @promise.maybe_coroutine(checkSelf)
@@ -304,7 +332,8 @@ class SessionManager(object):
         device,
         message,
         is_pre_key_message,
-        from_storage = False
+        from_storage = False,
+        _DEBUG_newRatchetKey = None
     ):
         if is_pre_key_message:
             # Unpack the pre key message data
@@ -344,13 +373,22 @@ class SessionManager(object):
         # Get the concatenation of the AES GCM key and tag
         plaintext = dr.decryptMessage(
             message_data["ciphertext"],
-            message_data["header"]
+            message_data["header"],
+            _DEBUG_newRatchetKey = _DEBUG_newRatchetKey
+        )
+
+        # Check the authentication
+        default.wireformat.message_header.checkAuthentication(
+            message_data["mac"],
+            message_data["auth_data"],
+            plaintext["ad"],
+            plaintext["authentication_key"]
         )
 
         # Store the changed session
         yield self.__storeSession(bare_jid, device, dr)
 
-        promise.returnValue(plaintext)
+        promise.returnValue(plaintext["plaintext"])
 
     @promise.maybe_coroutine(checkSelf)
     def decryptMessage(
@@ -387,10 +425,7 @@ class SessionManager(object):
             ))
 
     @promise.maybe_coroutine(checkSelf)
-    def newDeviceList(self, devices, bare_jid = None):
-        if not bare_jid:
-            bare_jid = self.__my_bare_jid
-
+    def newDeviceList(self, devices, bare_jid):
         devices = set(devices)
 
         if bare_jid == self.__my_bare_jid:
@@ -419,3 +454,94 @@ class SessionManager(object):
     @property
     def state(self):
         return self.__state
+
+    ###############################
+    # DEBUG ADDITIONS, DO NOT USE #
+    ###############################
+
+    def _DEBUG_simulatePreKeyMessage(self, other_session_manager, otpk_id, ek, sending_ratchet_key):
+        from .extendedpublicbundle import ExtendedPublicBundle
+
+        e("WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION")
+        d("Simulating pre key message.")
+
+        other_bundle = other_session_manager.state.getPublicBundle()
+
+        ik  = other_bundle.ik
+        spk = other_bundle.spk
+        spk_signature = other_bundle.spk_signature
+        otpks = [ otpk for otpk in other_bundle.otpks if otpk["id"] == otpk_id ]
+
+        other_bundle = ExtendedPublicBundle(ik, spk, spk_signature, otpks)
+
+        my_own_data    = self._storage.loadOwnData()
+        other_own_data = other_session_manager._storage.loadOwnData()
+
+        self.newDeviceList(
+            [ my_own_data["own_device_id"] ],
+            my_own_data["own_bare_jid"]
+        )
+
+        self.newDeviceList(
+            [ other_own_data["own_device_id"] ],
+            other_own_data["own_bare_jid"]
+        )
+
+        self.buildSession(
+            other_own_data["own_bare_jid"],
+            other_own_data["own_device_id"],
+            other_bundle,
+            _DEBUG_ek = ek,
+            _DEBUG_sendingRatchetKey = sending_ratchet_key
+        )
+
+    def _DEBUG_simulateMessage(self, other_session_manager):
+        e("WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION")
+        d("Simulating message.")
+
+        my_own_data    = self._storage.loadOwnData()
+        other_own_data = other_session_manager._storage.loadOwnData()
+
+        self.newDeviceList(
+            [ my_own_data["own_device_id"] ],
+            my_own_data["own_bare_jid"]
+        )
+
+        self.newDeviceList(
+            [ other_own_data["own_device_id"] ],
+            other_own_data["own_bare_jid"]
+        )
+
+        self.encryptKeyTransportMessage(other_own_data["own_bare_jid"])
+
+    def _DEBUG_compareState(self, other_session_manager, state):
+        e("WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION")
+        d("Comparing states.")
+
+        import base64
+
+        other_own_data = other_session_manager._storage.loadOwnData()
+
+        dr = self.__loadSession(other_own_data["own_bare_jid"], other_own_data["own_device_id"])
+
+        assert dr != None
+
+        dr = dr.serialize()
+
+        root_key = base64.b64decode(dr["root_chain"]["super"]["key"].encode("US-ASCII"))
+        assert root_key == state["rootKey"]
+
+        try:
+            schain_key = base64.b64decode(dr["skr"]["super"]["schain"]["super"]["super"]["key"].encode("US-ASCII"))
+        except TypeError:
+            pass
+        else:
+            assert schain_key == state["senderChainKey"]
+
+        if state["receiverChainKey"] != None:
+            try:
+                rchain_key = base64.b64decode(dr["skr"]["super"]["rchain"]["super"]["super"]["key"].encode("US-ASCII"))
+            except TypeError:
+                pass
+            else:
+                assert rchain_key == state["receiverChainKey"]

@@ -5,7 +5,8 @@ from .doubleratchetexceptions import InvalidConfigurationException
 from .wireformatexceptions import (
     IncompleteMessageException,
     InvalidFieldError,
-    VersionException
+    VersionException,
+    AuthenticationFailedException
 )
 
 from .x3dhexceptions import UnknownKeyException
