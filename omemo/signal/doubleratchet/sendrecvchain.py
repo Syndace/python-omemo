@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import doubleratchet
 
-class SendRecvChain(doubleratchet.chains.ConstKDFChain):
+class SendRecvChain(doubleratchet.kdfchains.ConstKDFChain):
     def __init__(self, key = None):
         # NOTE: The second parameter (= None) usually supplies the constant data that is
         # applied to the KDF chain on each step.
@@ -10,7 +10,7 @@ class SendRecvChain(doubleratchet.chains.ConstKDFChain):
         # gets as input.
         # That means, the second parameter gets ignored and can be set to anything.
         super(SendRecvChain, self).__init__(
-            doubleratchet.recommended.ChainKeyKDF("SHA-256", b"\x02", b"\x01"),
+            doubleratchet.recommended.ChainKeyKDF("SHA-256"),
             None,
             key
         )

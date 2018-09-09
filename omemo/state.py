@@ -75,12 +75,12 @@ class State(default.x3dh.State):
 
     def __updateIDs(self):
         # Check, whether the spk has changed and assign it the next id in that case
-        if self.spk.enc != self.__spk_enc:
-            self.__spk_enc = self.spk.enc
+        if self.spk.pub != self.__spk_enc:
+            self.__spk_enc = self.spk.pub
             self.__spk_id += 1
 
-        otpks        = [ otpk.enc for otpk in self.otpks ]
-        hidden_otpks = [ otpk.enc for otpk in self.hidden_otpks ]
+        otpks        = [ otpk.pub for otpk in self.otpks ]
+        hidden_otpks = [ otpk.pub for otpk in self.hidden_otpks ]
 
         # Synchronize the list of OTPKs.
         # First, remove all entries in the current dict,
@@ -171,7 +171,7 @@ class State(default.x3dh.State):
 
         return otpks[0]
 
-    def initSessionActive(self, other_public_bundle, *args, **kwargs):
+    def getSharedSecretActive(self, other_public_bundle, *args, **kwargs):
         other_public_bundle = self.__reduceBundle(other_public_bundle)
 
-        return super(State, self).initSessionActive(other_public_bundle, *args, **kwargs)
+        return super(State, self).getSharedSecretActive(other_public_bundle, *args, **kwargs)

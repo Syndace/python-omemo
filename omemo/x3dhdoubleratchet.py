@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from x3dh.exceptions import SessionInitiationException
+from x3dh.exceptions import KeyExchangeException
 
 from . import default
 from .exceptions import UnknownKeyException
@@ -73,14 +73,14 @@ class X3DHDoubleRatchet(State):
 
         return self
 
-    def initSessionActive(
+    def getSharedSecretActive(
         self,
         other_public_bundle,
         _DEBUG_sendingRatchetKey = None,
         *args,
         **kwargs
     ):
-        session_init_data = super(X3DHDoubleRatchet, self).initSessionActive(
+        session_init_data = super(X3DHDoubleRatchet, self).getSharedSecretActive(
             other_public_bundle,
             *args,
             **kwargs
@@ -116,7 +116,7 @@ class X3DHDoubleRatchet(State):
 
         return session_init_data
 
-    def initSessionPassive(
+    def getSharedSecretPassive(
         self,
         session_init_data,
         bare_jid,
@@ -128,7 +128,7 @@ class X3DHDoubleRatchet(State):
 
         self.__preKeyMessageReceived(session_init_data["otpk"], from_storage)
 
-        session_data = super(X3DHDoubleRatchet, self).initSessionPassive(
+        session_data = super(X3DHDoubleRatchet, self).getSharedSecretPassive(
             session_init_data,
             keep_otpk = True
         )
@@ -244,7 +244,7 @@ class X3DHDoubleRatchet(State):
         try:
             otpk = self.getOTPK(otpk_id)
         except UnknownKeyException:
-            raise SessionInitiationException(
+            raise KeyExchangeException(
                 "The OTPK used for this session initialization has been deleted, " +
                 "the session can not be initiated."
             )

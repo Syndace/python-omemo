@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from .encryptionkeyencoder import EncryptionKeyEncoder
+from .publickeyencoder import PublicKeyEncoder
 
 import x3dh
 
@@ -19,13 +19,13 @@ class State(x3dh.State):
         """
 
         return super(State, self).__init__(
-            "WhisperText",       # info_string
-            "25519",             # curve
-            "SHA-256",           # hash_function
-            7 * 24 * 60 * 60,    # spk_timeout
-            20,                  # min_num_otpks
-            100,                 # max_num_otpks
-            EncryptionKeyEncoder # encryption_key_encoder_class
+            "WhisperText".encode("US-ASCII"), # info_string
+            "25519",                          # curve
+            "SHA-256",                        # hash_function
+            7 * 24 * 60 * 60,                 # spk_timeout
+            20,                               # min_num_otpks
+            100,                              # max_num_otpks
+            PublicKeyEncoder                  # public_key_encoder_class
         )
 
     def serialize(self):
@@ -41,7 +41,7 @@ class State(x3dh.State):
             **kwargs
         )
 
-    def initSessionActive(self, *args, **kwargs):
+    def getSharedSecretActive(self, *args, **kwargs):
         # X3DH is specified to build the associated data as follows: IK_A || IK_B.
         # As per usual, WhisperSystems weren't satisfied with their own solution and
         # instead of using the ad as built by X3DH they ALWAYS do:
@@ -52,7 +52,7 @@ class State(x3dh.State):
         # To allow for this to happen, we split the ad returned by X3DH into IK_own and
         # IK_other.
 
-        result = super(State, self).initSessionActive(*args, **kwargs)
+        result = super(State, self).getSharedSecretActive(*args, **kwargs)
 
         result["ad"] = {
             "IK_own"   : result["ad"][:33],
@@ -61,10 +61,10 @@ class State(x3dh.State):
 
         return result
 
-    def initSessionPassive(self, *args, **kwargs):
-        result = super(State, self).initSessionPassive(*args, **kwargs)
+    def getSharedSecretPassive(self, *args, **kwargs):
+        result = super(State, self).getSharedSecretPassive(*args, **kwargs)
 
-        # See initSessionActive for an explanation
+        # See getSharedSecretActive for an explanation
         result["ad"] = {
             "IK_own"   : result["ad"][33:],
             "IK_other" : result["ad"][:33]

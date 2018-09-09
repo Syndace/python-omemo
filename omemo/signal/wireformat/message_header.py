@@ -69,7 +69,7 @@ def toWire(ciphertext, header, ad, authentication_key):
     else:
         wire.pn = 0
 
-    wire.dh_ratchet_key = encodePublicKey(header.dh_enc)
+    wire.dh_ratchet_key = encodePublicKey(header.dh_pub)
     data = wire.SerializeToString()
 
     # Prepend the message version

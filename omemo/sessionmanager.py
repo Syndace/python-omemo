@@ -6,7 +6,7 @@ import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from x3dh.exceptions import SessionInitiationException
+from x3dh.exceptions import KeyExchangeException
 
 from . import default
 from . import promise
@@ -224,12 +224,12 @@ class SessionManager(object):
                         continue
 
                     try:
-                        session_init_data = self.__state.initSessionActive(
+                        session_init_data = self.__state.getSharedSecretActive(
                             bundle,
                             _DEBUG_ek = _DEBUG_ek,
                             _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
                         )
-                    except SessionInitiationException as e:
+                    except KeyExchangeException as e:
                         callback(e, bare_jid, device)
                         continue
 
@@ -342,7 +342,7 @@ class SessionManager(object):
             )
 
             # Prepare the DoubleRatchet
-            dr = self.__state.initSessionPassive(
+            dr = self.__state.getSharedSecretPassive(
                 message_and_init_data["session_init_data"],
                 bare_jid,
                 device,

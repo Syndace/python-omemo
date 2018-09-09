@@ -392,7 +392,7 @@ def main():
         )
 
         assert(False) # This line should not execute
-    except x3dh.exceptions.SessionInitiationException:
+    except x3dh.exceptions.KeyExchangeException:
         pass
 
     # Finally, let's do the same thing but using a policy that never deletes keys

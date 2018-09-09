@@ -39,11 +39,11 @@ class DoubleRatchet(doubleratchet.ratchets.DoubleRatchet):
 
         super(DoubleRatchet, self).__init__(
             self.__skr, # symmetric_key_ratchet
-            CBCAEAD(), # aead
-            self.__ad, # ad
-            5000, # message_key_store_max
+            CBCAEAD(),  # aead
+            self.__ad,  # ad
+            5000,       # message_key_store_max
             self.__root_chain, # root_chain
-            x3dh.implementations.EncryptionKeyPairCurve25519, # encryption_key_pair_class
+            x3dh.implementations.KeyPairCurve25519, # encryption_key_pair_class
             own_key,
             other_enc
         )
