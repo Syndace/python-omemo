@@ -24,7 +24,7 @@ def main(who, use_wireformat = False):
 
     if who == "a":
         # Prepare the session init data and the DoubleRatchet from the active part
-        session_init_data = alice_state.initSessionActive(bob_public_bundle)
+        session_init_data = alice_state.getSharedSecretActive(bob_public_bundle)
         alice_dr = session_init_data["dr"]
         session_init_data = session_init_data["to_other"]
 
@@ -63,7 +63,7 @@ def main(who, use_wireformat = False):
             )
 
             # Create the session for the passive part
-            bob_dr = bob_state.initSessionPassive(
+            bob_dr = bob_state.getSharedSecretPassive(
                 initial_pre_key_message["session_init_data"],
                 example_data.ALICE_BARE_JID,
                 example_data.ALICE_DEVICE_ID,
@@ -88,7 +88,7 @@ def main(who, use_wireformat = False):
             initial_message_plaintext = initial_message_plaintext["plaintext"].decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
-            bob_dr = bob_state.initSessionPassive(
+            bob_dr = bob_state.getSharedSecretPassive(
                 session_init_data,
                 example_data.ALICE_BARE_JID,
                 example_data.ALICE_DEVICE_ID,
@@ -97,7 +97,7 @@ def main(who, use_wireformat = False):
             )
 
     if who == "b":
-        session_init_data = bob_state.initSessionActive(alice_public_bundle)
+        session_init_data = bob_state.getSharedSecretActive(alice_public_bundle)
         bob_dr = session_init_data["dr"]
         session_init_data = session_init_data["to_other"]
 
@@ -136,7 +136,7 @@ def main(who, use_wireformat = False):
             )
 
             # Create the session for the passive part
-            alice_dr = alice_state.initSessionPassive(
+            alice_dr = alice_state.getSharedSecretPassive(
                 initial_pre_key_message["session_init_data"],
                 example_data.BOB_BARE_JID,
                 example_data.BOB_DEVICE_ID,
@@ -161,7 +161,7 @@ def main(who, use_wireformat = False):
             initial_message_plaintext = initial_message_plaintext["plaintext"].decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
-            alice_dr = alice_state.initSessionPassive(
+            alice_dr = alice_state.getSharedSecretPassive(
                 session_init_data,
                 example_data.BOB_BARE_JID,
                 example_data.BOB_DEVICE_ID,

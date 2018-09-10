@@ -6,7 +6,6 @@ import doubleratchet
 import x3dh
 
 from .cbcaead import CBCAEAD
-from ..exceptions import InvalidConfigurationException
 from .rootchain import RootChain
 from .symmetrickeyratchet import SymmetricKeyRatchet
 
@@ -16,12 +15,12 @@ class DoubleRatchet(doubleratchet.ratchets.DoubleRatchet):
         ad,
         root_key   = None,
         own_key    = None,
-        other_enc  = None,
+        other_pub  = None,
         skr        = None, # ONLY USED FOR DESERIALIZATION
         root_chain = None  # ONLY USED FOR DESERIALIZATION
     ):
         if (root_key == None) == (root_chain == None):
-            raise InvalidConfigurationException(
+            raise ValueError(
                 "Exactly one of root_key, root_chain must be set! Not both, not neither."
             )
 
@@ -45,7 +44,7 @@ class DoubleRatchet(doubleratchet.ratchets.DoubleRatchet):
             self.__root_chain, # root_chain
             x3dh.implementations.KeyPairCurve25519, # encryption_key_pair_class
             own_key,
-            other_enc
+            other_pub
         )
 
     def serialize(self):

@@ -1,0 +1,2 @@
+class NoTrustedDevicesException(Exception):
+    pass

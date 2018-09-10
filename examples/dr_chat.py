@@ -191,7 +191,7 @@ def main(shared_secret, associated_data):
         alice_dr = omemo.doubleratchet.DoubleRatchet(
             associated_data,
             shared_secret,
-            other_enc = bob_dr.enc
+            other_pub = bob_dr.pub
         )
 
     # Now Alice is set up to send a first message to Bob,

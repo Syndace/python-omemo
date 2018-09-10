@@ -11,7 +11,7 @@ from x3dh.exceptions import KeyExchangeException
 from . import default
 from . import promise
 from . import storagewrapper
-from .exceptions.sessionmanagerexceptions import *
+from .exceptions import *
 from .x3dhdoubleratchet import X3DHDoubleRatchet
 
 def d(*args, **kwargs):
@@ -76,10 +76,10 @@ class SessionManager(object):
         own_data = yield self._storage.loadOwnData()
         if own_data == None:
             if self.__my_bare_jid == None:
-                raise SessionManagerException("Bare jid is required for initial setup")
+                raise NotInitializedException("Bare jid is required for initial setup")
 
             if self.__my_device_id == None:
-                raise SessionManagerException("Device id required for initial setup")
+                raise NotInitializedException("Device id required for initial setup")
 
             yield self._storage.storeOwnData(self.__my_bare_jid, self.__my_device_id)
         else:
@@ -459,7 +459,13 @@ class SessionManager(object):
     # DEBUG ADDITIONS, DO NOT USE #
     ###############################
 
-    def _DEBUG_simulatePreKeyMessage(self, other_session_manager, otpk_id, ek, sending_ratchet_key):
+    def _DEBUG_simulatePreKeyMessage(
+        self,
+        other_session_manager,
+        otpk_id,
+        ek,
+        sending_ratchet_key
+    ):
         from .extendedpublicbundle import ExtendedPublicBundle
 
         e("WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION")
@@ -522,7 +528,10 @@ class SessionManager(object):
 
         other_own_data = other_session_manager._storage.loadOwnData()
 
-        dr = self.__loadSession(other_own_data["own_bare_jid"], other_own_data["own_device_id"])
+        dr = self.__loadSession(
+            other_own_data["own_bare_jid"],
+            other_own_data["own_device_id"]
+        )
 
         assert dr != None
 
@@ -532,7 +541,8 @@ class SessionManager(object):
         assert root_key == state["rootKey"]
 
         try:
-            schain_key = base64.b64decode(dr["skr"]["super"]["schain"]["super"]["super"]["key"].encode("US-ASCII"))
+            schain_key = dr["skr"]["super"]["schain"]["super"]["super"]["key"]
+            schain_key = base64.b64decode(schain_key.encode("US-ASCII"))
         except TypeError:
             pass
         else:
@@ -540,7 +550,8 @@ class SessionManager(object):
 
         if state["receiverChainKey"] != None:
             try:
-                rchain_key = base64.b64decode(dr["skr"]["super"]["rchain"]["super"]["super"]["key"].encode("US-ASCII"))
+                rchain_key = dr["skr"]["super"]["rchain"]["super"]["super"]["key"]
+                rchain_key = base64.b64decode(rchain_key.encode("US-ASCII"))
             except TypeError:
                 pass
             else:

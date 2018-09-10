@@ -2,22 +2,31 @@ from __future__ import absolute_import
 
 from . import whispertextprotocol_pb2 as wtp
 from .common import *
-from ..exceptions import AuthenticationFailedException
-from ..exceptions import IncompleteMessageException
+from ..exceptions import DeserializationException
 
 import doubleratchet
 
-import hashlib
-import hmac
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, hmac
 
 MAC_SIZE = 8
 
+CRYPTOGRAPHY_BACKEND = default_backend()
+
 def calculateMAC(data, IK_sender, IK_receiver, authentication_key):
-    return hmac.new(
+    global CRYPTOGRAPHY_BACKEND
+
+    # Build the authentication
+    auth = hmac.HMAC(
         authentication_key,
-        IK_sender + IK_receiver + data,
-        hashlib.sha256
-    ).digest()[:MAC_SIZE]
+        hashes.SHA256(),
+        backend = CRYPTOGRAPHY_BACKEND
+    )
+
+    auth.update(IK_sender + IK_receiver + data)
+
+    # Append the authentication to the ciphertext
+    return auth.finalize()[:MAC_SIZE]
 
 def fromWire(data):
     # Due to the nature the mac is calculated by signal, the authentication verification
@@ -41,7 +50,7 @@ def fromWire(data):
         data.HasField("n") and
         data.HasField("ciphertext")
     ):
-        raise IncompleteMessageException()
+        raise DeserializationException("Message incomplete.")
 
     return {
         "ciphertext": data.ciphertext,
@@ -56,7 +65,7 @@ def fromWire(data):
 
 def checkAuthentication(mac, data, ad, authentication_key):
     if not mac == calculateMAC(data, ad["IK_other"], ad["IK_own"], authentication_key):
-        raise AuthenticationFailedException("Message MAC verification failed.")
+        raise doubleratchet.exceptions.AuthenticationFailedException()
 
 def toWire(ciphertext, header, ad, authentication_key):
     # Build the protobuf structure

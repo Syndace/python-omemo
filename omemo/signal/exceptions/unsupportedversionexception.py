@@ -1,0 +1,2 @@
+class UnsupportedVersionException(Exception):
+    pass

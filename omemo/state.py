@@ -13,13 +13,13 @@ class State(default.x3dh.State):
         super(State, self).__init__()
 
         self.__spk_id  = 0
-        self.__spk_enc = None
+        self.__spk_pub = None
 
         self.__otpk_id_counter = 0
         self.__otpk_ids = {}
 
     def serialize(self):
-        spk = self.__spk_enc
+        spk = self.__spk_pub
         spk = None if spk == None else base64.b64encode(spk).decode("US-ASCII")
 
         otpk_ids = {}
@@ -30,7 +30,7 @@ class State(default.x3dh.State):
         return {
             "super": super(State, self).serialize(),
             "spk_id": self.__spk_id,
-            "spk_enc": spk,
+            "spk_pub": spk,
             "otpk_id_counter": self.__otpk_id_counter,
             "otpk_ids": otpk_ids
         }
@@ -43,7 +43,7 @@ class State(default.x3dh.State):
             **kwargs
         )
 
-        spk = serialized["spk_enc"]
+        spk = serialized["spk_pub"]
         spk = None if spk == None else base64.b64decode(spk.encode("US-ASCII"))
 
         otpk_ids = {}
@@ -52,7 +52,7 @@ class State(default.x3dh.State):
             otpk_ids[base64.b64decode(key.encode("US-ASCII"))] = value
 
         self.__spk_id = serialized["spk_id"]
-        self.__spk_enc = spk
+        self.__spk_pub = spk
         self.__otpk_id_counter = serialized["otpk_id_counter"]
         self.__otpk_ids = otpk_ids
 
@@ -60,8 +60,8 @@ class State(default.x3dh.State):
 
     def getPublicBundle(self):
         """
-        The current signal OMEMO standard works with ids instead of sending full
-        public keys whenever possible, probably to reduce traffic.
+        The current signal OMEMO standard works with ids instead of sending full public
+        keys whenever possible, probably to reduce traffic.
         This is not part of the core specification though, so it has to be added here.
         It is added in the getPublicBundle method, because this method is the only way to
         get public data and is the perfect spot to update ids.
@@ -75,8 +75,8 @@ class State(default.x3dh.State):
 
     def __updateIDs(self):
         # Check, whether the spk has changed and assign it the next id in that case
-        if self.spk.pub != self.__spk_enc:
-            self.__spk_enc = self.spk.pub
+        if self.spk.pub != self.__spk_pub:
+            self.__spk_pub = self.spk.pub
             self.__spk_id += 1
 
         otpks        = [ otpk.pub for otpk in self.otpks ]
@@ -135,7 +135,7 @@ class State(default.x3dh.State):
         self.__updateIDs()
 
         # If the requested spk is the most recent one...
-        if self.__spk_enc == spk:
+        if self.__spk_pub == spk:
             # ...return the id
             return self.__spk_id
 
@@ -147,7 +147,7 @@ class State(default.x3dh.State):
         # If the requested spk id is the one contained in this bundle...
         if self.__spk_id == spk_id:
             # ...return the key
-            return self.__spk_enc
+            return self.__spk_pub
 
         raise UnknownKeyException("Tried to get the SPK for an unknown id.")
 
@@ -174,4 +174,8 @@ class State(default.x3dh.State):
     def getSharedSecretActive(self, other_public_bundle, *args, **kwargs):
         other_public_bundle = self.__reduceBundle(other_public_bundle)
 
-        return super(State, self).getSharedSecretActive(other_public_bundle, *args, **kwargs)
+        return super(State, self).getSharedSecretActive(
+            other_public_bundle,
+            *args,
+            **kwargs
+        )

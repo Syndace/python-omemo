@@ -1,0 +1,2 @@
+class MissingBundleException(Exception):
+    pass

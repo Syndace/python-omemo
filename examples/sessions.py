@@ -112,7 +112,7 @@ def main():
         # From then on, the session manager retrieves the id from the storage.
         yield omemo.SessionManager.create(InMemoryStorage(), DeletingOTPKPolicy)
         assert(False)
-    except omemo.exceptions.SessionManagerException:
+    except omemo.exceptions.NotInitializedException:
         pass
 
     # In OMEMO the device lists are handled using a pep node.

@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from ..exceptions import InvalidFieldError, VersionException
+from ..exceptions import DeserializationException, UnsupportedVersionException
 
 CURRENT_MAJOR_VERSION = 3
 CURRENT_MINOR_VERSION = 3
@@ -31,10 +31,10 @@ def checkVersion(data):
     minor_version = (version >> 0) & 0x0F
 
     if major_version < CURRENT_MAJOR_VERSION or minor_version < CURRENT_MINOR_VERSION:
-        raise VersionException("Legacy version detected")
+        raise UnsupportedVersionException("Legacy version detected")
 
     if major_version > CURRENT_MAJOR_VERSION or minor_version > CURRENT_MINOR_VERSION:
-        raise VersionException("Newer/unknown version detected")
+        raise UnsupportedVersionException("Newer/unknown version detected")
 
     return data[1:]
 
@@ -43,7 +43,7 @@ def prependVersion(data):
 
 def decodePublicKey(key):
     if len(key) != 33:
-        raise InvalidFieldError("The key field must contain 33 bytes of data")
+        raise DeserializationException("The key field must contain 33 bytes of data")
 
     try:
         key_type = ord(key[0])
@@ -51,7 +51,7 @@ def decodePublicKey(key):
         key_type = key[0]
 
     if key_type != KEY_TYPE_25519:
-        raise InvalidFieldError("Unknown key type")
+        raise DeserializationException("Unknown key type")
 
     return key[1:]
 

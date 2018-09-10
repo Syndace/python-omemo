@@ -105,7 +105,7 @@ class X3DHDoubleRatchet(State):
             session_init_data["ad"],
             session_init_data["sk"],
             own_key = own_key,
-            other_enc = other_public_bundle.spk["key"]
+            other_pub = other_public_bundle.spk["key"]
         )
 
         # The shared secret and ad values are now irrelevant

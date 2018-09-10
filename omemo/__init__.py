@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+from .version import __version__
+
 # Set the signal implementation as default for now
 from .signal import *
 from . import signal as default

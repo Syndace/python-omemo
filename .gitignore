@@ -5,8 +5,6 @@ OMEMO.egg-info/
 
 .pytest_cache/
 
-*.tmp
+docs/_build/
 
 examples/*/*
-
-tests/

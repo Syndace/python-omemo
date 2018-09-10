@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 from . import whispertextprotocol_pb2 as wtp
 from .common import *
-from ..exceptions import IncompleteMessageException
+from ..exceptions import DeserializationException
 
 def fromWire(data):
     data = checkVersion(data)
@@ -16,7 +16,7 @@ def fromWire(data):
         data.HasField("signal_message") and
         data.HasField("otpk_id")
     ):
-        raise IncompleteMessageException()
+        raise DeserializationException("Pre key message incomplete.")
 
     result = {
         "session_init_data": {

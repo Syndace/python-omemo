@@ -2,14 +2,14 @@ from __future__ import absolute_import
 
 import doubleratchet
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import padding
-from hkdf import hkdf_expand, hkdf_extract
-
-import hashlib
+from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 class CBCAEAD(doubleratchet.AEAD):
+    CRYPTOGRAPHY_BACKEND = default_backend()
+
     def __init__(self):
         super(CBCAEAD, self).__init__()
 
@@ -19,18 +19,23 @@ class CBCAEAD(doubleratchet.AEAD):
         salt = b"\x00" * 32
 
         # Get 80 bytes from the HKDF calculation
-        hkdf_out = hkdf_expand(
-            hkdf_extract(salt, message_key, hashlib.sha256),
-            "WhisperMessageKeys".encode("ASCII"),
-            80,
-            hashlib.sha256
-        )
+        hkdf_out = HKDF(
+            algorithm = hashes.SHA256(),
+            length    = 80,
+            salt      = salt,
+            info      = "WhisperMessageKeys".encode("US-ASCII"),
+            backend   = self.__class__.CRYPTOGRAPHY_BACKEND
+        ).derive(message_key)
 
         # Split these 80 bytes in three parts
         return hkdf_out[:32], hkdf_out[32:64], hkdf_out[64:]
 
     def __getAES(self, key, iv):
-        return Cipher(algorithms.AES(key), modes.CBC(iv), backend = default_backend())
+        return Cipher(
+            algorithms.AES(key),
+            modes.CBC(iv),
+            backend = self.__class__.CRYPTOGRAPHY_BACKEND
+        )
 
     def encrypt(self, plaintext, message_key, ad):
         encryption_key, authentication_key, iv = self.__getHKDFOutput(message_key)
