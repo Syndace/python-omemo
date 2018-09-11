@@ -23,22 +23,22 @@ class SyncInMemoryStorage(omemo.Storage):
     def fromKeys(cls, ik_in, spk_in, otpks_in):
         ik = {
             "super": None,
-            "enc": b64enc_pub(ik_in["enc"]),
-            "dec": b64enc(ik_in["dec"])
+            "pub":  b64enc_pub(ik_in["pub"]),
+            "priv": b64enc(ik_in["priv"])
         }
 
         spk = {
             "timestamp": time.time(),
             "key": {
                 "super": None,
-                "enc": b64enc_pub(spk_in["enc"]),
-                "dec": b64enc(spk_in["dec"])
+                "pub":  b64enc_pub(spk_in["pub"]),
+                "priv": b64enc(spk_in["priv"])
             },
             "signature": b64enc(spk_in["sig"])
         }
 
         spk_id  = spk_in["id"]
-        spk_enc = spk["key"]["enc"]
+        spk_pub = spk["key"]["pub"]
 
         otpks = []
 
@@ -46,16 +46,16 @@ class SyncInMemoryStorage(omemo.Storage):
         otpk_ids = {}
 
         for otpk_id, otpk in otpks_in.items():
-            otpk_enc = b64enc_pub(otpk["enc"])
-            otpk_dec = b64enc(otpk["dec"])
+            otpk_pub  = b64enc_pub(otpk["pub"])
+            otpk_priv = b64enc(otpk["priv"])
 
             otpks.append({
                 "super": None,
-                "enc": otpk_enc,
-                "dec": otpk_dec
+                "pub":  otpk_pub,
+                "priv": otpk_priv
             })
 
-            otpk_ids[otpk_enc] = otpk_id
+            otpk_ids[otpk_pub] = otpk_id
 
             if otpk_id > otpk_id_counter:
                 otpk_id_counter = otpk_id
@@ -73,7 +73,7 @@ class SyncInMemoryStorage(omemo.Storage):
                     }
                 },
                 "spk_id": spk_id,
-                "spk_enc": spk_enc,
+                "spk_pub": spk_pub,
                 "otpk_id_counter": otpk_id_counter,
                 "otpk_ids": otpk_ids
             },

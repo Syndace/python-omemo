@@ -4,6 +4,10 @@ import logging
 import omemo
 import x3dh
 
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tests")))
+
 from deletingotpkpolicy import DeletingOTPKPolicy
 from keepingotpkpolicy  import KeepingOTPKPolicy
 
@@ -163,7 +167,7 @@ def main():
             "Hey Bob!".encode("UTF-8"),
             {
                 BOB_BARE_JID: {
-                    BOB_DEVICE_ID: bob_session_manager.state.getPublicBundle()
+                    BOB_DEVICE_ID: bob_session_manager.public_bundle
                 }
             }
         )
@@ -175,7 +179,7 @@ def main():
         initial_message = yield alice_session_manager.buildSession(
             BOB_BARE_JID,
             BOB_DEVICE_ID,
-            bob_session_manager.state.getPublicBundle()
+            bob_session_manager.public_bundle
         )
 
     # The values
@@ -259,7 +263,7 @@ def main():
         "Hey Bob and Charlie!".encode("UTF-8"),
         {
             CHARLIE_BARE_JID: {
-                CHARLIE_DEVICE_ID: charlie_session_manager.state.getPublicBundle()
+                CHARLIE_DEVICE_ID: charlie_session_manager.public_bundle
             }
         }
     )
@@ -350,7 +354,7 @@ def main():
     initial_message = yield alice_session_manager.buildSession(
         DAVE_BARE_JID,
         DAVE_DEVICE_ID,
-        dave_session_manager.state.getPublicBundle()
+        dave_session_manager.public_bundle
     )
 
     # Get the message specified for Dave on his only device
@@ -374,12 +378,12 @@ def main():
     assert(cipher)
     assert(plaintext == None)
 
-    # Whenever the public bundle somehow changes, for example because one of the
-    # one-time pre keys was used, the changed flag is set on the state object:
-    assert(dave_session_manager.state.changed)
-    assert(len(dave_session_manager.state.getPublicBundle().otpks) == 99)
-    # You should check the changed flag after every OMEMO usage and re-publish your bundle
-    # if the flag is set.
+    # Whenever the public bundle somehow changes, for example because one of the one-time
+    # pre keys was used, the republish_bundle flag is set:
+    assert(dave_session_manager.republish_bundle)
+    assert(len(dave_session_manager.public_bundle.otpks) == 99)
+    # You should check the republish_bundle flag after every OMEMO usage and re-publish
+    # your bundle if the flag is set. The flag clears itself after reading it.
 
     # Now, try the same thing a second time. This sould raise an exception
     try:
@@ -412,7 +416,7 @@ def main():
     initial_message = yield bob_session_manager.buildSession(
         DAVE_BARE_JID,
         DAVE_DEVICE_ID,
-        dave_session_manager.state.getPublicBundle()
+        dave_session_manager.public_bundle
     )
 
     # Get the message specified for Dave on his only device
@@ -436,10 +440,10 @@ def main():
     assert(cipher)
     assert(plaintext == None)
 
-    # Daves public bundle should have the "changed" flag set and it should not contain
-    # the used pre key any more
-    assert(dave_session_manager.state.changed)
-    assert(len(dave_session_manager.state.getPublicBundle().otpks) == 99)
+    # Daves public bundle should have the "republish_bundle" flag set and it should not
+    # contain the used pre key any more.
+    assert(dave_session_manager.republish_bundle)
+    assert(len(dave_session_manager.public_bundle.otpks) == 99)
 
     # Now, the second try should work aswell, because the policy decided to keep the OTPK
     cipher, plaintext = yield dave_session_manager.decryptMessage(

@@ -122,11 +122,11 @@ class X3DHDoubleRatchet(State):
         bare_jid,
         device,
         otpk_policy,
-        from_storage
+        additional_information = None
     ):
         self.__decompressSessionInitData(session_init_data, bare_jid, device)
 
-        self.__preKeyMessageReceived(session_init_data["otpk"], from_storage)
+        self.__preKeyMessageReceived(session_init_data["otpk"], additional_information)
 
         session_data = super(X3DHDoubleRatchet, self).getSharedSecretPassive(
             session_init_data,
@@ -197,13 +197,13 @@ class X3DHDoubleRatchet(State):
 
         del session_init_data["otpk_id"]
 
-    def __preKeyMessageReceived(self, otpk, from_storage):
+    def __preKeyMessageReceived(self, otpk, additional_information = None):
         # Add an entry to the received PreKeyMessage data
         self.__pre_key_messages[otpk] = self.__pre_key_messages.get(otpk, [])
         self.__pre_key_messages[otpk].append({
-            "timestamp":    time.time(),
-            "from_storage": from_storage,
-            "answers":      []
+            "timestamp": time.time(),
+            "answers":   [],
+            "additional_information": additional_information,
         })
 
     def getBoundOTPK(self, bare_jid, device):

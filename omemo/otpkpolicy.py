@@ -10,12 +10,21 @@ class OTPKPolicy(object):
             # The UNIX timestamp that PreKeyMessage was received on
             "timestamp": int,
 
-            # A boolean indicating whether this message was retrieved from
-            # some sort of storage, e.g. MAM
-            "from_storage": bool,
-
             # A list of UNIX timestamps, for each Message that answered this PreKeyMessage
-            "anwers": list<int>
+            "answers": list<int>,
+
+            # This key can be used by implementations to store any sort of additional
+            # information about the message, which can be used for more complex logic to
+            # decide whether to keep the one-time pre key. One example that would make a
+            # lot of sense is a flag, which indicates whether the message was retrieved
+            # from some storage mechanism like mam. Messages retrieved from mam should
+            # probably not trigger one-time pre key deletion, because there might be more
+            # pre key messages waiting in the mam catch-up that use the same one-time pre
+            # key.
+            # The value of this key must consist of Python primitives like ints, floats,
+            # strings, booleans, lists, dictionaries or None (basically everything
+            # json-serializable).
+            "additional_information": any
         }
         """
 
