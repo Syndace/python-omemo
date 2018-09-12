@@ -4,7 +4,7 @@ exceptions
 .. toctree::
     Module: missingbundleexception <missingbundleexception>
     Module: nodevicesexception <nodevicesexception>
+    Module: noeligibledevicesexception <noeligibledevicesexception>
     Module: notinitializedexception <notinitializedexception>
-    Module: notrusteddevicesexception <notrusteddevicesexception>
     Module: unknownkeyexception <unknownkeyexception>
     Module: untrustedexception <untrustedexception>

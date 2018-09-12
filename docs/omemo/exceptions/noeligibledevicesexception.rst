@@ -1,7 +1,7 @@
-notrusteddevicesexception
-=========================
+noeligibledevicesexception
+==========================
 
-.. autoclass:: omemo.exceptions.NoTrustedDevicesException
+.. autoclass:: omemo.exceptions.NoEligibleDevicesException
     :members:
     :special-members:
     :member-order: bysource

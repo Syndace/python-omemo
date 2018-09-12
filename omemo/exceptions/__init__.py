@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 from .missingbundleexception import MissingBundleException
 from .nodevicesexception import NoDevicesException
+from .noeligibledevicesexception import NoEligibleDevicesException
 from .notinitializedexception import NotInitializedException
-from .notrusteddevicesexception import NoTrustedDevicesException
 from .unknownkeyexception import UnknownKeyException
 from .untrustedexception import UntrustedException

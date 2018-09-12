@@ -270,7 +270,7 @@ class SessionManager(object):
 
             if encrypted_count == 0:
                 if bare_jid != self.__my_bare_jid:
-                    callback(NoTrustedDevicesException(), bare_jid, None)
+                    callback(NoEligibleDevicesException(), bare_jid, None)
 
         for bare_jid, deviceList in devices.items():
             yield __encryptAll(deviceList, bare_jid)
