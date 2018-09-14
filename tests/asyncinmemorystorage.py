@@ -10,6 +10,10 @@ class AsyncInMemoryStorage(omemo.Storage):
         self.__own_device_id = None
         self.__sessions = {}
         self.__devices = {}
+        self.__trusted = True
+
+    def trust(self, trusted):
+        self.__trusted = trusted
 
     def loadOwnData(self, callback):
         callback(True, {
@@ -60,7 +64,14 @@ class AsyncInMemoryStorage(omemo.Storage):
         callback(True, None)
 
     def isTrusted(self, callback, bare_jid, device):
-        callback(True, True)
+        result = False
+
+        if self.__trusted == True:
+            result = True
+        else:
+            result = bare_jid in self.__trusted and device in self.__trusted[bare_jid]
+
+        callback(True, result)
 
     @property
     def is_async(self):

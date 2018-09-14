@@ -8,3 +8,5 @@ OMEMO.egg-info/
 docs/_build/
 
 examples/*/*
+
+install.sh

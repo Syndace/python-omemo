@@ -296,42 +296,6 @@ class SessionManager(object):
         promise.returnValue(result)
 
     @promise.maybe_coroutine(checkSelf)
-    def listMissingBundles(self, bare_jids_devices):
-        """
-        Input:
-        {
-            jid: list<device_id> or None # None means all known devices
-        }
-
-        The jids and devices you want to encrypt a message for.
-
-        Output:
-        {
-            jid: list<device_id>
-        }
-
-        The jids and devices which you need to retrieve the public bundle for first.
-        """
-
-        required_bundles = {}
-
-        for bare_jid in bare_jids_devices:
-            required_bundles[bare_jid] = []
-
-            devices = bare_jids_devices[bare_jid]
-
-            if devices == None:
-                devices = (yield self.__listDevices(bare_jid))["active"]
-
-            for device in devices:
-                session = yield self.__loadSession(bare_jid, device)
-
-                if session == None:
-                    required_bundles[bare_jid].append(device)
-
-        promise.returnValue(required_bundles)
-
-    @promise.maybe_coroutine(checkSelf)
     def buildSession(
         self,
         bare_jid,
@@ -405,6 +369,12 @@ class SessionManager(object):
 
         # Load the session
         dr = yield self.__loadSession(bare_jid, device)
+
+        if dr == None:
+            raise NoSessionException(
+                "Don't have a session with \"" + bare_jid + "\" on device " +
+                str(device) + "."
+            )
 
         # Get the concatenation of the AES GCM key and tag
         plaintext = dr.decryptMessage(

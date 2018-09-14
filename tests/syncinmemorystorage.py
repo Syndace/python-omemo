@@ -18,6 +18,10 @@ class SyncInMemoryStorage(omemo.Storage):
         self.__own_device_id = None
         self.__sessions = {}
         self.__devices = {}
+        self.__trusted = True
+
+    def trust(self, trusted):
+        self.__trusted = trusted
 
     @classmethod
     def fromKeys(cls, ik_in, spk_in, otpks_in):
@@ -123,7 +127,14 @@ class SyncInMemoryStorage(omemo.Storage):
         self.__devices[bare_jid]["inactive"] = devices
 
     def isTrusted(self, callback, bare_jid, device):
-        return True
+        result = False
+
+        if self.__trusted == True:
+            result = True
+        else:
+            result = bare_jid in self.__trusted and device in self.__trusted[bare_jid]
+
+        return result
 
     @property
     def is_async(self):
