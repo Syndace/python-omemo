@@ -1,5 +1,6 @@
 import omemo
 
+import copy
 import json
 
 class AsyncInMemoryStorage(omemo.Storage):
@@ -11,6 +12,13 @@ class AsyncInMemoryStorage(omemo.Storage):
         self.__sessions = {}
         self.__devices = {}
         self.__trusted = True
+
+    def dump(self):
+        return copy.deepcopy({
+            "state"    : self.__state,
+            "sessions" : self.__sessions,
+            "devices"  : self.__devices
+        })
 
     def trust(self, trusted):
         self.__trusted = trusted

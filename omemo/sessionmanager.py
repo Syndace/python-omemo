@@ -140,6 +140,7 @@ class SessionManager(object):
         devices = None,
         callback = None,
         always_trust = False,
+        dry_run = False,
         _DEBUG_ek = None,
         _DEBUG_sendingRatchetKey = None
     ):
@@ -209,8 +210,9 @@ class SessionManager(object):
                     continue
 
                 if self.__state.hasBoundOTPK(bare_jid, device):
-                    self.__state.respondedTo(bare_jid, device)
-                    yield self._storage.storeState(self.__state.serialize())
+                    if not dry_run:
+                        self.__state.respondedTo(bare_jid, device)
+                        yield self._storage.storeState(self.__state.serialize())
 
                 dr = yield self.__loadSession(bare_jid, device)
 
@@ -223,48 +225,50 @@ class SessionManager(object):
                         callback(MissingBundleException(), bare_jid, device)
                         continue
 
-                    try:
-                        session_init_data = self.__state.getSharedSecretActive(
-                            bundle,
-                            _DEBUG_ek = _DEBUG_ek,
-                            _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
-                        )
-                    except KeyExchangeException as e:
-                        callback(e, bare_jid, device)
-                        continue
+                    if not dry_run:
+                        try:
+                            session_init_data = self.__state.getSharedSecretActive(
+                                bundle,
+                                _DEBUG_ek = _DEBUG_ek,
+                                _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
+                            )
+                        except KeyExchangeException as e:
+                            callback(e, bare_jid, device)
+                            continue
 
-                    # Store the changed state
-                    yield self._storage.storeState(self.__state.serialize())
+                        # Store the changed state
+                        yield self._storage.storeState(self.__state.serialize())
 
-                    dr                = session_init_data["dr"]
-                    session_init_data = session_init_data["to_other"]
+                        dr                = session_init_data["dr"]
+                        session_init_data = session_init_data["to_other"]
 
-                    pre_key = True
+                        pre_key = True
 
-                message = dr.encryptMessage(aes_gcm_key + aes_gcm_tag)
+                if not dry_run:
+                    message = dr.encryptMessage(aes_gcm_key + aes_gcm_tag)
 
-                # Store the new/changed session
-                yield self.__storeSession(bare_jid, device, dr)
+                    # Store the new/changed session
+                    yield self.__storeSession(bare_jid, device, dr)
 
-                message_data = default.wireformat.message_header.toWire(
-                    message["ciphertext"]["ciphertext"],
-                    message["header"],
-                    message["ciphertext"]["ad"],
-                    message["ciphertext"]["authentication_key"]
-                )
-
-                if pre_key:
-                    message_data = default.wireformat.pre_key_message_header.toWire(
-                        session_init_data,
-                        message_data
+                    message_data = default.wireformat.message_header.toWire(
+                        message["ciphertext"]["ciphertext"],
+                        message["header"],
+                        message["ciphertext"]["ad"],
+                        message["ciphertext"]["authentication_key"]
                     )
 
-                messages.append({
-                    "message"  : message_data,
-                    "pre_key"  : pre_key,
-                    "bare_jid" : bare_jid,
-                    "rid"      : device
-                })
+                    if pre_key:
+                        message_data = default.wireformat.pre_key_message_header.toWire(
+                            session_init_data,
+                            message_data
+                        )
+
+                    messages.append({
+                        "message"  : message_data,
+                        "pre_key"  : pre_key,
+                        "bare_jid" : bare_jid,
+                        "rid"      : device
+                    })
 
                 encrypted_count += 1
 
@@ -302,6 +306,7 @@ class SessionManager(object):
         device,
         bundle,
         callback = None,
+        dry_run = False,
         _DEBUG_ek = None,
         _DEBUG_sendingRatchetKey = None
     ):
@@ -321,6 +326,7 @@ class SessionManager(object):
             { bare_jid: [ device ] },
             callback,
             always_trust = True,
+            dry_run = dry_run,
             _DEBUG_ek = _DEBUG_ek,
             _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
         )))
