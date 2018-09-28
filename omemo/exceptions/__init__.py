@@ -7,3 +7,4 @@ from .nosessionexception import NoSessionException
 from .notinitializedexception import NotInitializedException
 from .unknownkeyexception import UnknownKeyException
 from .untrustedexception import UntrustedException
+from .wireformatexception import WireFormatException

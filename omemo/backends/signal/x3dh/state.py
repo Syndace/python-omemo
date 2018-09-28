@@ -54,7 +54,7 @@ class State(x3dh.State):
 
         result = super(State, self).getSharedSecretActive(*args, **kwargs)
 
-        result["ad"] = {
+        result["additional"] = {
             "IK_own"   : result["ad"][:33],
             "IK_other" : result["ad"][33:]
         }
@@ -65,7 +65,7 @@ class State(x3dh.State):
         result = super(State, self).getSharedSecretPassive(*args, **kwargs)
 
         # See getSharedSecretActive for an explanation
-        result["ad"] = {
+        result["additional"] = {
             "IK_own"   : result["ad"][33:],
             "IK_other" : result["ad"][:33]
         }
