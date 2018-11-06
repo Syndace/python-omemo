@@ -50,9 +50,11 @@ class CBCAEAD(doubleratchet.AEAD):
         ciphertext = aes_cbc.update(plaintext) + aes_cbc.finalize()
 
         return {
-            "ciphertext": ciphertext,
-            "authentication_key": authentication_key,
-            "ad": ad
+            "ciphertext" : ciphertext,
+            "additional" : {
+                "key" : authentication_key,
+                "ad"  : ad
+            }
         }
 
     def decrypt(self, ciphertext, message_key, ad):
@@ -68,7 +70,9 @@ class CBCAEAD(doubleratchet.AEAD):
         plaintext = unpadder.update(plaintext) + unpadder.finalize()
 
         return {
-            "plaintext": plaintext,
-            "authentication_key": authentication_key,
-            "ad": ad
+            "plaintext"  : plaintext,
+            "additional" : {
+                "key" : authentication_key,
+                "ad"  : ad
+            }
         }

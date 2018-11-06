@@ -3,4 +3,4 @@ from __future__ import absolute_import
 from .backend import Backend
 from .wireformat import WireFormat
 
-from .signal import Backend as SignalBackend
+from .signal import BACKEND as SignalBackend

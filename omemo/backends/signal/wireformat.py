@@ -21,8 +21,8 @@ CRYPTOGRAPHY_BACKEND = default_backend()
 def calculateMAC(data, additional):
     global CRYPTOGRAPHY_BACKEND
 
-    authentication_key = additional["DoubleRatchet"]
-    ad = additional["X3DH"]
+    authentication_key = additional["DoubleRatchet"]["key"]
+    ad = additional["DoubleRatchet"]["ad"]
 
     # Build the authentication
     auth = hmac.HMAC(
@@ -164,11 +164,13 @@ class WireFormat(wireformat.WireFormat):
                 "ek": decodePublicKey(obj.ek),
                 "ik": decodePublicKey(obj.ik)
             },
-            "message": obj.signal_message
+            "message": obj.signal_message,
+            "additional": None
         }
 
     @staticmethod
     def finalizePreKeyMessageFromWire(obj, additional):
+        # TODO: Verify the mac of the contained message
         pass
 
     @staticmethod

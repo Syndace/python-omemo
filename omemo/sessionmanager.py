@@ -8,11 +8,10 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from x3dh.exceptions import KeyExchangeException
 
-from . import default
 from . import promise
 from . import storagewrapper
 from .exceptions import *
-from .x3dhdoubleratchet import X3DHDoubleRatchet
+from .x3dhdoubleratchet import make as make_x3dhdoubleratchet
 
 def d(*args, **kwargs):
     logging.getLogger("omemo.SessionManager").debug(*args, **kwargs)
@@ -41,7 +40,7 @@ def checkConst(const):
 class SessionManager(object):
     @classmethod
     @promise.maybe_coroutine(checkPositionalArgument(1))
-    def create(cls, storage, otpk_policy, my_bare_jid = None, my_device_id = None):
+    def create(cls, storage, otpk_policy, backend, my_bare_jid, my_device_id):
         self = cls()
 
         self._storage = storagewrapper.StorageWrapper(storage)
@@ -56,6 +55,9 @@ class SessionManager(object):
         self.__devices_cache  = {}
         self.__sessions_cache = {}
 
+        self.__backend = backend
+        self.__X3DHDoubleRatchet = make_x3dhdoubleratchet(self.__backend)
+
         yield self.__prepare()
 
         promise.returnValue(self)
@@ -64,27 +66,26 @@ class SessionManager(object):
     def __prepare(self):
         state = yield self._storage.loadState()
         if state == None:
-            self.__state = X3DHDoubleRatchet()
+            self.__state = self.__X3DHDoubleRatchet()
 
             yield self._storage.storeState(self.__state.serialize())
             yield self._storage.storeActiveDevices(self.__my_bare_jid, [
                 self.__my_device_id
             ])
         else:
-            self.__state = X3DHDoubleRatchet.fromSerialized(state)
+            self.__state = self.__X3DHDoubleRatchet.fromSerialized(state)
 
         own_data = yield self._storage.loadOwnData()
         if own_data == None:
-            if self.__my_bare_jid == None:
-                raise NotInitializedException("Bare jid is required for initial setup")
-
-            if self.__my_device_id == None:
-                raise NotInitializedException("Device id required for initial setup")
 
             yield self._storage.storeOwnData(self.__my_bare_jid, self.__my_device_id)
         else:
-            self.__my_bare_jid  = own_data["own_bare_jid"]
-            self.__my_device_id = own_data["own_device_id"]
+            if (not self.__my_bare_jid  == own_data["own_bare_jid"] or
+                not self.__my_device_id == own_data["own_device_id"]):
+                raise IncompatibleStorageException(
+                    "Given storage is only usable for jid \"" + own_data["own_bare_jid"] +
+                    "\" on device " + str(own_data["own_device_id"]) + "."
+                )
 
     @promise.maybe_coroutine(checkSelf)
     def __listDevices(self, bare_jid):
@@ -107,7 +108,7 @@ class SessionManager(object):
             session = yield self._storage.loadSession(bare_jid, device)
 
             if session != None:
-                session = default.doubleratchet.DoubleRatchet.fromSerialized(session)
+                session = self.__backend.DoubleRatchet.fromSerialized(session)
 
             self.__sessions_cache[bare_jid][device] = session
 
@@ -250,17 +251,17 @@ class SessionManager(object):
                     # Store the new/changed session
                     yield self.__storeSession(bare_jid, device, dr)
 
-                    message_data = default.wireformat.message_header.toWire(
-                        message["ciphertext"]["ciphertext"],
+                    message_data = self.__backend.WireFormat.messageToWire(
+                        message["ciphertext"],
                         message["header"],
-                        message["ciphertext"]["ad"],
-                        message["ciphertext"]["authentication_key"]
+                        { "DoubleRatchet": message["additional"] }
                     )
 
                     if pre_key:
-                        message_data = default.wireformat.pre_key_message_header.toWire(
+                        message_data = self.__backend.WireFormat.preKeyMessageToWire(
                             session_init_data,
-                            message_data
+                            message_data,
+                            { "DoubleRatchet": message["additional"] }
                         )
 
                     messages.append({
@@ -343,7 +344,7 @@ class SessionManager(object):
     ):
         if is_pre_key_message:
             # Unpack the pre key message data
-            message_and_init_data = default.wireformat.pre_key_message_header.fromWire(
+            message_and_init_data = self.__backend.WireFormat.preKeyMessageFromWire(
                 message
             )
 
@@ -371,7 +372,7 @@ class SessionManager(object):
             yield self._storage.storeState(self.__state.serialize())
 
         # Unpack the message data
-        message_data = default.wireformat.message_header.fromWire(message)
+        message_data = self.__backend.WireFormat.messageFromWire(message)
 
         # Load the session
         dr = yield self.__loadSession(bare_jid, device)
@@ -390,11 +391,12 @@ class SessionManager(object):
         )
 
         # Check the authentication
-        default.wireformat.message_header.checkAuthentication(
-            message_data["mac"],
-            message_data["auth_data"],
-            plaintext["ad"],
-            plaintext["authentication_key"]
+        self.__backend.WireFormat.finalizeMessageFromWire(
+            message,
+            {
+                "WireFormat": message_data["additional"],
+                "DoubleRatchet": plaintext["additional"]
+            }
         )
 
         # Store the changed session

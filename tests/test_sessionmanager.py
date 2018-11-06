@@ -64,8 +64,8 @@ def createSessionManagers():
     st_sync  = SyncInMemoryStorage()
     st_async = AsyncInMemoryStorage()
 
-    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, A_JID, A_DID)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, A_JID, A_DID)
+    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
 
     assert isinstance(sm_sync, SessionManager)
     assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
@@ -83,8 +83,8 @@ def createOtherSessionManagers(jid, dids, other_dids, otpkpolicy = None):
         st_sync  = SyncInMemoryStorage()
         st_async = AsyncInMemoryStorage()
 
-        sm_sync  = SessionManager.create(st_sync,  otpkpolicy, jid, did)
-        sm_async = SessionManager.create(st_async, otpkpolicy, jid, did)
+        sm_sync  = SessionManager.create(st_sync,  otpkpolicy, omemo.backends.signal.BACKEND, jid, did)
+        sm_async = SessionManager.create(st_async, otpkpolicy, omemo.backends.signal.BACKEND, jid, did)
 
         assert isinstance(sm_sync, SessionManager)
         assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
@@ -391,16 +391,16 @@ def test_create_missingInfo():
     st_async = AsyncInMemoryStorage()
 
     with pytest.raises(NotInitializedException):
-        sm_sync = SessionManager.create(st_sync,  DeletingOTPKPolicy)
+        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
 
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
     assert isinstance(assertPromiseRejected(sm_async), NotInitializedException)
 
 def test_create_storedInfo():
     st_sync, _, st_async, _ = createSessionManagers()
 
-    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy)
+    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
 
     assert isinstance(sm_sync, SessionManager)
     assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
