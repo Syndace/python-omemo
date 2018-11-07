@@ -18,20 +18,17 @@ MAC_SIZE = 8
 
 CRYPTOGRAPHY_BACKEND = default_backend()
 
-def calculateMAC(data, additional):
+def calculateMAC(data, key, IK_sender, IK_receiver):
     global CRYPTOGRAPHY_BACKEND
-
-    authentication_key = additional["DoubleRatchet"]["key"]
-    ad = additional["DoubleRatchet"]["ad"]
 
     # Build the authentication
     auth = hmac.HMAC(
-        authentication_key,
+        key,
         hashes.SHA256(),
         backend = CRYPTOGRAPHY_BACKEND
     )
 
-    auth.update(ad["IK_sender"] + ad["IK_receiver"] + data)
+    auth.update(IK_sender + IK_receiver + data)
 
     # Append the authentication to the ciphertext
     return auth.finalize()[:MAC_SIZE]
@@ -108,7 +105,13 @@ class WireFormat(wireformat.WireFormat):
 
     @staticmethod
     def finalizeMessageFromWire(obj, additional):
-        if not additional["WireFormat"] == calculateMAC(obj[:-MAC_SIZE], additional):
+        dr_additional = additional["DoubleRatchet"]
+
+        ad  = dr_additional["ad"]
+        key = dr_additional["key"]
+        mac = calculateMAC(obj[:-MAC_SIZE], key, ad["IK_other"], ad["IK_own"])
+
+        if not additional["WireFormat"] == mac:
             raise WireFormatException("Message authentication failed.")
 
     @staticmethod
@@ -137,7 +140,12 @@ class WireFormat(wireformat.WireFormat):
         #
         # This way the whole message is authenticated and not only the ciphertext.
         # (idk about the truncation though).
-        data += calculateMAC(data, additional)
+        dr_additional = additional["DoubleRatchet"]
+
+        ad  = dr_additional["ad"]
+        key = dr_additional["key"]
+
+        data += calculateMAC(data, key, ad["IK_own"], ad["IK_other"])
         
         return data
 

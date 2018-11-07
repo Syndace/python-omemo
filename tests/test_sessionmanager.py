@@ -386,21 +386,28 @@ def messageEncryption_singleRecipient(
 def test_create_supplyInfo():
     createSessionManagers()
 
-def test_create_missingInfo():
-    st_sync  = SyncInMemoryStorage()
-    st_async = AsyncInMemoryStorage()
-
-    with pytest.raises(NotInitializedException):
-        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
-
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
-    assert isinstance(assertPromiseRejected(sm_async), NotInitializedException)
-
-def test_create_storedInfo():
+def test_create_inconsistentInfo():
     st_sync, _, st_async, _ = createSessionManagers()
 
-    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND)
+    with pytest.raises(InconsistentInfoException):
+        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, B_DID)
+    with pytest.raises(InconsistentInfoException):
+        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, A_DID)
+    with pytest.raises(InconsistentInfoException):
+        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, B_DID)
+
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, B_DID)
+    assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, A_DID)
+    assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, B_DID)
+    assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
+
+def test_create_consistentInfo():
+    st_sync, _, st_async, _ = createSessionManagers()
+
+    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
 
     assert isinstance(sm_sync, SessionManager)
     assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
@@ -708,7 +715,7 @@ def otpkPolicyTest(otpkpolicy, expect_exception):
     )
 
 def test_otpkPolicy_default():
-    pass#assert False
+    pass#assert False TODO
 
 def test_otpkPolicy_deleting():
     otpkPolicyTest(DeletingOTPKPolicy, True)

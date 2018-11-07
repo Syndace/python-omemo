@@ -78,3 +78,9 @@ class DoubleRatchet(doubleratchet.ratchets.DoubleRatchet):
 
     def _makeAD(self, header, ad):
         return ad
+
+    def encryptMessage(self, *args, **kwargs):
+        result = super(DoubleRatchet, self).encryptMessage(*args, **kwargs)
+        result["additional"] = result["ciphertext"]["additional"]
+        result["ciphertext"] = result["ciphertext"]["ciphertext"]
+        return result
