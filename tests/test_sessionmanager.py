@@ -8,6 +8,8 @@ import omemo
 from omemo import SessionManager
 from omemo.exceptions import *
 
+from omemo_backend_signal import BACKEND as SignalBackend
+
 import x3dh
 
 from asyncinmemorystorage import AsyncInMemoryStorage
@@ -64,8 +66,8 @@ def createSessionManagers():
     st_sync  = SyncInMemoryStorage()
     st_async = AsyncInMemoryStorage()
 
-    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
+    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
 
     assert isinstance(sm_sync, SessionManager)
     assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
@@ -83,8 +85,8 @@ def createOtherSessionManagers(jid, dids, other_dids, otpkpolicy = None):
         st_sync  = SyncInMemoryStorage()
         st_async = AsyncInMemoryStorage()
 
-        sm_sync  = SessionManager.create(st_sync,  otpkpolicy, omemo.backends.signal.BACKEND, jid, did)
-        sm_async = SessionManager.create(st_async, otpkpolicy, omemo.backends.signal.BACKEND, jid, did)
+        sm_sync  = SessionManager.create(st_sync,  otpkpolicy, SignalBackend, jid, did)
+        sm_async = SessionManager.create(st_async, otpkpolicy, SignalBackend, jid, did)
 
         assert isinstance(sm_sync, SessionManager)
         assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
@@ -390,24 +392,24 @@ def test_create_inconsistentInfo():
     st_sync, _, st_async, _ = createSessionManagers()
 
     with pytest.raises(InconsistentInfoException):
-        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, B_DID)
+        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, SignalBackend, A_JID, B_DID)
     with pytest.raises(InconsistentInfoException):
-        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, A_DID)
+        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, SignalBackend, B_JID, A_DID)
     with pytest.raises(InconsistentInfoException):
-        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, B_DID)
+        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, SignalBackend, B_JID, B_DID)
 
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, B_DID)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, A_JID, B_DID)
     assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, A_DID)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, B_JID, A_DID)
     assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, B_JID, B_DID)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, B_JID, B_DID)
     assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
 
 def test_create_consistentInfo():
     st_sync, _, st_async, _ = createSessionManagers()
 
-    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, omemo.backends.signal.BACKEND, A_JID, A_DID)
+    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
+    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
 
     assert isinstance(sm_sync, SessionManager)
     assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)

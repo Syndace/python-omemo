@@ -1,15 +1,7 @@
 import omemo
 
-import base64
 import copy
 import json
-import time
-
-def b64enc(data):
-    return base64.b64encode(data).decode("US-ASCII")
-
-def b64enc_pub(data):
-    return b64enc(omemo.wireformat.decodePublicKey(data))
 
 class SyncInMemoryStorage(omemo.Storage):
     def __init__(self):
@@ -30,71 +22,6 @@ class SyncInMemoryStorage(omemo.Storage):
 
     def trust(self, trusted):
         self.__trusted = trusted
-
-    @classmethod
-    def fromKeys(cls, ik_in, spk_in, otpks_in):
-        ik = {
-            "super": None,
-            "pub":  b64enc_pub(ik_in["pub"]),
-            "priv": b64enc(ik_in["priv"])
-        }
-
-        spk = {
-            "timestamp": time.time(),
-            "key": {
-                "super": None,
-                "pub":  b64enc_pub(spk_in["pub"]),
-                "priv": b64enc(spk_in["priv"])
-            },
-            "signature": b64enc(spk_in["sig"])
-        }
-
-        spk_id  = spk_in["id"]
-        spk_pub = spk["key"]["pub"]
-
-        otpks = []
-
-        otpk_id_counter = 0
-        otpk_ids = {}
-
-        for otpk_id, otpk in otpks_in.items():
-            otpk_pub  = b64enc_pub(otpk["pub"])
-            otpk_priv = b64enc(otpk["priv"])
-
-            otpks.append({
-                "super": None,
-                "pub":  otpk_pub,
-                "priv": otpk_priv
-            })
-
-            otpk_ids[otpk_pub] = otpk_id
-
-            if otpk_id > otpk_id_counter:
-                otpk_id_counter = otpk_id
-
-        self = cls()
-        self.storeState(None, {
-            "super": {
-                "super": {
-                    "super": {
-                        "ik": ik,
-                        "spk": spk,
-                        "otpks": otpks,
-                        "hidden_otpks": [],
-                        "changed": True
-                    }
-                },
-                "spk_id": spk_id,
-                "spk_pub": spk_pub,
-                "otpk_id_counter": otpk_id_counter,
-                "otpk_ids": otpk_ids
-            },
-            "bound_otpks": {},
-            "pk_messages": {}
-        })
-
-        return self
-
 
     def loadOwnData(self, callback):
         return ({
