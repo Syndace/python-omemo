@@ -60,11 +60,11 @@ def make(backend):
 
         def getPublicBundle(self):
             """
-            The current signal OMEMO standard works with ids instead of sending full public
-            keys whenever possible, probably to reduce traffic.
+            The current OMEMO standard works with ids instead of sending full public keys
+            whenever possible, probably to reduce traffic.
             This is not part of the core specification though, so it has to be added here.
-            It is added in the getPublicBundle method, because this method is the only way to
-            get public data and is the perfect spot to update ids.
+            It is added in the getPublicBundle method, because this method is the only way
+            to get public data and is the perfect spot to update ids.
             """
 
             bundle = super(State, self).getPublicBundle()

@@ -6,16 +6,14 @@ python:
   - "3.6"
 
 env:
-  - CRYPTOGRAPHY_VERSION=2.2.2 PROTOBUF_VERSION=3.6.1 PYNACL_VERSION=1.2.1 # Most recent versions on pip
-  - CRYPTOGRAPHY_VERSION=1.7.1 PROTOBUF_VERSION=3.0.0 PYNACL_VERSION=1.0.1 # Versions in Debian 9's apt repositories
+  - CRYPTOGRAPHY_VERSION=2.2.2 # Most recent versions on pip
+  - CRYPTOGRAPHY_VERSION=1.7.1 # Versions in Debian 9's apt repositories
 
 
 protobuf
 
 install:
   - pip install cryptography==$CRYPTOGRAPHY_VERSION
-  - pip install protobuf==$PROTOBUF_VERSION
-  - pip install pynacl==$PYNACL_VERSION
   - pip install pytest
   - python setup.py install
 

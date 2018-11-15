@@ -34,7 +34,8 @@ def make(backend):
             pk_messages = {}
 
             for otpk, value in self.__pre_key_messages.items():
-                pk_messages[base64.b64encode(otpk).decode("US-ASCII")] = copy.deepcopy(value)
+                otpk = base64.b64encode(otpk).decode("US-ASCII")
+                pk_messages[otpk] = copy.deepcopy(value)
 
             return {
                 "super"       : super(X3DHDoubleRatchet, self).serialize(),
@@ -66,7 +67,8 @@ def make(backend):
             pk_messages = {}
 
             for otpk, value in serialized["pk_messages"].items():
-                pk_messages[base64.b64decode(otpk.encode("US-ASCII"))] = copy.deepcopy(value)
+                otpk = base64.b64decode(otpk.encode("US-ASCII"))
+                pk_messages[otpk] = copy.deepcopy(value)
 
             self.__bound_otpks = bound_otpks
             self.__pre_key_messages = pk_messages
@@ -126,7 +128,10 @@ def make(backend):
         ):
             self.__decompressSessionInitData(session_init_data, bare_jid, device)
 
-            self.__preKeyMessageReceived(session_init_data["otpk"], additional_information)
+            self.__preKeyMessageReceived(
+                session_init_data["otpk"],
+                additional_information
+            )
 
             session_data = super(X3DHDoubleRatchet, self).getSharedSecretPassive(
                 session_init_data,
@@ -138,7 +143,8 @@ def make(backend):
 
             # When passively initializing the session
             # - The shared secret becomes the root key
-            # - The public SPK used by the active part for X3DH becomes the own dh ratchet key
+            # - The public SPK used by the active part for X3DH becomes the own dh ratchet
+            #   key
             # - The associated data calculated by X3DH becomes the ad used by the double
             #   ratchet encryption/decryption
             return backend.DoubleRatchet(
@@ -176,8 +182,8 @@ def make(backend):
                 if otpk_id == session_init_data["otpk_id"]:
                     session_init_data["otpk"] = self.getBoundOTPK(bare_jid, device)
 
-                # If the OTPK ids don't match, consider the old bound OTPK as deleteable and
-                # bind the new OTPK
+                # If the OTPK ids don't match, consider the old bound OTPK as deleteable
+                # and bind the new OTPK
                 else:
                     self.deleteBoundOTPK(bare_jid, device)
 
