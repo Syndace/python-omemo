@@ -9,9 +9,6 @@ env:
   - CRYPTOGRAPHY_VERSION=2.2.2 # Most recent versions on pip
   - CRYPTOGRAPHY_VERSION=1.7.1 # Versions in Debian 9's apt repositories
 
-
-protobuf
-
 install:
   - pip install cryptography==$CRYPTOGRAPHY_VERSION
   - pip install pytest
