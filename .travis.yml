@@ -12,7 +12,7 @@ env:
 install:
   - pip install cryptography==$CRYPTOGRAPHY_VERSION
   - pip install pytest
-  - pip install omemo-backend-signal
   - python setup.py install
+  - pip install omemo-backend-signal
 
 script: py.test
