@@ -1,0 +1,2 @@
+class NoEligibleDevicesException(Exception):
+    pass

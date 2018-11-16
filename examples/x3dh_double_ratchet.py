@@ -1,6 +1,10 @@
 import omemo
 
+from omemo_backend_signal import BACKEND as SignalBackend
+
+import os
 import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tests")))
 
 from deletingotpkpolicy import DeletingOTPKPolicy
 from dr_chat import mainLoop
@@ -11,9 +15,11 @@ try:
 except NameError:
     pass
 
+X3DHDoubleRatchet = omemo.make_X3DHDoubleRatchet(SignalBackend)
+
 def main(who, use_wireformat = False):
-    alice_state = omemo.X3DHDoubleRatchet()
-    bob_state   = omemo.X3DHDoubleRatchet()
+    alice_state = X3DHDoubleRatchet()
+    bob_state   = X3DHDoubleRatchet()
 
     alice_public_bundle = alice_state.getPublicBundle()
     bob_public_bundle   = bob_state.getPublicBundle()
@@ -24,8 +30,8 @@ def main(who, use_wireformat = False):
 
     if who == "a":
         # Prepare the session init data and the DoubleRatchet from the active part
-        session_init_data = alice_state.initSessionActive(bob_public_bundle)
-        alice_dr = session_init_data["dr"]
+        session_init_data = alice_state.getSharedSecretActive(bob_public_bundle)
+        alice_dr          = session_init_data["dr"]
         session_init_data = session_init_data["to_other"]
 
         if use_wireformat:
@@ -35,40 +41,43 @@ def main(who, use_wireformat = False):
             )
 
             # Prepare the message
-            initial_message_serialized = omemo.wireformat.message_header.toWire(
-                initial_message_encrypted["ciphertext"]["ciphertext"],
+            initial_message_serialized = SignalBackend.WireFormat.messageToWire(
+                initial_message_encrypted["ciphertext"],
                 initial_message_encrypted["header"],
-                initial_message_encrypted["ciphertext"]["ad"],
-                initial_message_encrypted["ciphertext"]["authentication_key"]
+                {
+                    "DoubleRatchet": initial_message_encrypted["additional"]
+                }
             )
 
             # Bundle the session init data and the initial message into a pre_key packet
-            initial_pre_key_message_serialized = omemo.wireformat.pre_key_message_header.toWire(
+            pre_key_message_serialized = SignalBackend.WireFormat.preKeyMessageToWire(
                 session_init_data,
-                initial_message_serialized
+                initial_message_serialized,
+                {
+                    "DoubleRatchet": initial_message_encrypted["additional"]
+                }
             )
 
             # Send to the receiver...
 
             # Unpack the session init data into the initial message
-            initial_pre_key_message = omemo.wireformat.pre_key_message_header.fromWire(
-                initial_pre_key_message_serialized
+            pre_key_message = SignalBackend.WireFormat.preKeyMessageFromWire(
+                pre_key_message_serialized
             )
 
-            initial_message_serialized = initial_pre_key_message["message"]
+            initial_message_serialized = pre_key_message["message"]
 
             # Unpack the contained message
-            initial_message_encrypted = omemo.wireformat.message_header.fromWire(
+            initial_message_encrypted = SignalBackend.WireFormat.messageFromWire(
                 initial_message_serialized
             )
 
             # Create the session for the passive part
-            bob_dr = bob_state.initSessionPassive(
-                initial_pre_key_message["session_init_data"],
+            bob_dr = bob_state.getSharedSecretPassive(
+                pre_key_message["session_init_data"],
                 example_data.ALICE_BARE_JID,
                 example_data.ALICE_DEVICE_ID,
-                DeletingOTPKPolicy,
-                False
+                DeletingOTPKPolicy
             )
             
             # Decrypt the initial message
@@ -78,26 +87,27 @@ def main(who, use_wireformat = False):
             )
 
             # Check the authentication
-            omemo.wireformat.message_header.checkAuthentication(
-                initial_message_encrypted["mac"],
-                initial_message_encrypted["auth_data"],
-                initial_message_plaintext["ad"],
-                initial_message_plaintext["authentication_key"]
+            SignalBackend.WireFormat.finalizeMessageFromWire(
+                initial_message_serialized,
+                {
+                    "DoubleRatchet": initial_message_plaintext["additional"],
+                    "WireFormat": initial_message_encrypted["additional"]
+                }
             )
 
-            initial_message_plaintext = initial_message_plaintext["plaintext"].decode("UTF-8")
+            initial_message_plaintext = initial_message_plaintext["plaintext"]
+            initial_message_plaintext = initial_message_plaintext.decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
-            bob_dr = bob_state.initSessionPassive(
+            bob_dr = bob_state.getSharedSecretPassive(
                 session_init_data,
                 example_data.ALICE_BARE_JID,
                 example_data.ALICE_DEVICE_ID,
-                DeletingOTPKPolicy,
-                False
+                DeletingOTPKPolicy
             )
 
     if who == "b":
-        session_init_data = bob_state.initSessionActive(alice_public_bundle)
+        session_init_data = bob_state.getSharedSecretActive(alice_public_bundle)
         bob_dr = session_init_data["dr"]
         session_init_data = session_init_data["to_other"]
 
@@ -108,40 +118,43 @@ def main(who, use_wireformat = False):
             )
 
             # Prepare the message
-            initial_message_serialized = omemo.wireformat.message_header.toWire(
-                initial_message_encrypted["ciphertext"]["ciphertext"],
+            initial_message_serialized = SignalBackend.WireFormat.messageToWire(
+                initial_message_encrypted["ciphertext"],
                 initial_message_encrypted["header"],
-                initial_message_encrypted["ciphertext"]["ad"],
-                initial_message_encrypted["ciphertext"]["authentication_key"]
+                {
+                    "DoubleRatchet": initial_message_encrypted["additional"]
+                }
             )
 
             # Bundle the session init data and the initial message into a pre_key packet
-            initial_pre_key_message_serialized = omemo.wireformat.pre_key_message_header.toWire(
+            pre_key_message_serialized = SignalBackend.WireFormat.preKeyMessageToWire(
                 session_init_data,
-                initial_message_serialized
+                initial_message_serialized,
+                {
+                    "DoubleRatchet": initial_message_encrypted["additional"]
+                }
             )
 
             # Send to the receiver...
 
             # Unpack the session init data into the initial message
-            initial_pre_key_message = omemo.wireformat.pre_key_message_header.fromWire(
-                initial_pre_key_message_serialized
+            pre_key_message = SignalBackend.WireFormat.preKeyMessageFromWire(
+                pre_key_message_serialized
             )
 
-            initial_message_serialized = initial_pre_key_message["message"]
+            initial_message_serialized = pre_key_message["message"]
 
             # Unpack the contained message
-            initial_message_encrypted = omemo.wireformat.message_header.fromWire(
+            initial_message_encrypted = SignalBackend.WireFormat.messageFromWire(
                 initial_message_serialized
             )
 
             # Create the session for the passive part
-            alice_dr = alice_state.initSessionPassive(
-                initial_pre_key_message["session_init_data"],
+            alice_dr = alice_state.getSharedSecretPassive(
+                pre_key_message["session_init_data"],
                 example_data.BOB_BARE_JID,
                 example_data.BOB_DEVICE_ID,
-                DeletingOTPKPolicy,
-                False
+                DeletingOTPKPolicy
             )
             
             # Decrypt the initial message
@@ -151,22 +164,23 @@ def main(who, use_wireformat = False):
             )
 
             # Check the authentication
-            omemo.wireformat.message_header.checkAuthentication(
-                initial_message_encrypted["mac"],
-                initial_message_encrypted["auth_data"],
-                initial_message_plaintext["ad"],
-                initial_message_plaintext["authentication_key"]
+            SignalBackend.WireFormat.finalizeMessageFromWire(
+                initial_message_serialized,
+                {
+                    "DoubleRatchet": initial_message_plaintext["additional"],
+                    "WireFormat": initial_message_encrypted["additional"]
+                }
             )
 
-            initial_message_plaintext = initial_message_plaintext["plaintext"].decode("UTF-8")
+            initial_message_plaintext = initial_message_plaintext["plaintext"]
+            initial_message_plaintext = initial_message_plaintext.decode("UTF-8")
         else:
             # Otherwise, just initialize the passive session directly
-            alice_dr = alice_state.initSessionPassive(
+            alice_dr = alice_state.getSharedSecretPassive(
                 session_init_data,
                 example_data.BOB_BARE_JID,
                 example_data.BOB_DEVICE_ID,
-                DeletingOTPKPolicy,
-                False
+                DeletingOTPKPolicy
             )
 
     if use_wireformat:

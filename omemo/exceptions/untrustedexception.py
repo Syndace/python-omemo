@@ -1,0 +1,2 @@
+class UntrustedException(Exception):
+    pass

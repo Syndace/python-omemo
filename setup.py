@@ -1,12 +1,22 @@
 from setuptools import setup, find_packages
 
+import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "omemo"))
+
+import version
+
 with open("README.md") as f:
     long_description = f.read()
 
 setup(
     name = "OMEMO",
-    version = "0.7.1",
-    description = "A Python implementation of the OMEMO Multi-End Message and Object Encryption protocol.",
+    version = version.__version__,
+    description = (
+        "A Python implementation of the OMEMO Multi-End Message and Object Encryption " +
+        "protocol."
+    ),
     long_description = long_description,
     long_description_content_type = "text/markdown",
     url = "https://github.com/Syndace/python-omemo",
@@ -16,16 +26,12 @@ setup(
     packages = find_packages(),
     install_requires = [
         "X3DH>=0.5.3,<0.6",
-        "DoubleRatchet>=0.4.0,<0.5",
-        "hkdf==0.0.3",
-        "pynacl>=1.0.1",
-        "cryptography>=1.7.1",
-        "protobuf>=2.6.1"
+        "cryptography>=1.7.1"
     ],
     python_requires = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, <4",
     zip_safe = True,
     classifiers = [
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
 
         "Intended Audience :: Developers",
 
@@ -33,10 +39,6 @@ setup(
         "Topic :: Security :: Cryptography",
 
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-
-        "Operating System :: OS Independent",
-
-        "Programming Language :: Python :: Implementation :: CPython",
 
         "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 2.7",

@@ -146,16 +146,11 @@ def returnValue(value):
     coroutine.
 
     Python 3.7 for some fucking reason changed it so you can't raise a StopIteration
-    exception yourself. Really fucking great idea. Let's make it harder every fucking
-    version to write software for Python 2 AND 3.
+    exception yourself. Really fucking great idea. Let's make it harder every version to
+    write software for Python 2 and 3.
 
     For this awesome reason, we don't raise a StopIteration exception but a self-made
     exception called ReturnValueException.
-
-    I don't know, the whole asyncio thing to me seems like some cancer that slowly makes
-    Python less and less usable.
-
-    It was fine, when we just had generators and yield.
     """
 
     raise ReturnValueException(value)

@@ -1,0 +1,15 @@
+ALICE_BARE_JID   = "alice@alice.alice"
+ALICE_DEVICE_ID  = 42
+ALICE_DEVICE_IDS = [ 42, 43, 44, 45 ]
+
+BOB_BARE_JID   = "bob@bob.bob"
+BOB_DEVICE_ID  = 1337
+BOB_DEVICE_IDS = [ 1337, 1338, 1339 ]
+
+CHARLIE_BARE_JID   = "charlie@charlie.charlie"
+CHARLIE_DEVICE_ID  = 935
+CHARLIE_DEVICE_IDS = [ 935, 936 ]
+
+DAVE_BARE_JID   = "dave@dave.dave"
+DAVE_DEVICE_ID  = 115
+DAVE_DEVICE_IDS = [ 115 ]

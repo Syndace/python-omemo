@@ -1,31 +1,28 @@
 from __future__ import absolute_import
 
-import binascii
-
-from . import default
 from .exceptions import UnknownKeyException
 
 class ExtendedPublicBundle(object):
     """
-    This class looks exactly the same as the PublicBundle class,
-    but the types of the fields are a bit different:
+    This class looks exactly the same as the PublicBundle class, but the types of the
+    fields are a bit different:
 
     The spk field is not a key, but a dictionary containing the key and the id:
     spk = {
-        "key": key,
-        "id": id
+        "key" : key,
+        "id"  : id
     }
 
-    The otpks field is not an array of keys, but an array of dictionaries
-    containing the key and the id:
+    The otpks field is not an array of keys, but an array of dictionaries containing the
+    key and the id:
     otpks = [
         {
-            "key": key,
-            "id": id
+            "key" : key,
+            "id"  : id
         },
         {
-            "key": key,
-            "id": id
+            "key" : key,
+            "id"  : id
         },
         ...
     ]
@@ -52,10 +49,6 @@ class ExtendedPublicBundle(object):
     @property
     def otpks(self):
         return self.__otpks
-
-    @property
-    def fingerprint(self):
-        return binascii.hexlify(default.wireformat.encodePublicKey(self.__ik)).decode("ASCII")
 
     def findOTPKId(self, otpk):
         otpks = list(filter(lambda x: x["key"] == otpk, self.otpks))

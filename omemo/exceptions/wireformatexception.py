@@ -1,0 +1,2 @@
+class WireFormatException(Exception):
+    pass

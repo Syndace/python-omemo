@@ -98,7 +98,8 @@ class Storage(object):
         You can dump this object using for example the json module.
 
         For more information on how the session object is structured, look at the
-        omemo.default.doubleratchet.DoubleRatchet.serialize method.
+        serialize method of the DoubleRatchet implementation offered by the backend you're
+        running.
         """
 
         raise NotImplementedError

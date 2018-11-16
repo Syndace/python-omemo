@@ -1,0 +1,2 @@
+class InconsistentInfoException(Exception):
+    pass
