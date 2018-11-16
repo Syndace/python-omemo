@@ -2,6 +2,8 @@ from __future__ import print_function
 
 import omemo
 
+from omemo_backend_signal import BACKEND as SignalBackend
+
 import json
 import pickle
 import time
@@ -50,15 +52,14 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
         message = sender_dr.encryptMessage(msg.encode("UTF-8"))
 
         if use_wireformat:
-            message = omemo.wireformat.message_header.toWire(
-                message["ciphertext"]["ciphertext"],
+            message = SignalBackend.WireFormat.messageToWire(
+                message["ciphertext"],
                 message["header"],
-                message["ciphertext"]["ad"],
-                message["ciphertext"]["authentication_key"]
+                {
+                    "DoubleRatchet": message["additional"]
+                }
             )
             # Send to the receiver...
-        else:
-            message["ciphertext"] = message["ciphertext"]["ciphertext"]
 
         while True:
             send_or_defer = input("Send the message or defer it for later? (s or d): ")
@@ -69,7 +70,7 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
             print("Sending the message to " + receiver)
 
             if use_wireformat:
-                message_decoded = omemo.wireformat.message_header.fromWire(message)
+                message_decoded = SignalBackend.WireFormat.messageFromWire(message)
             else:
                 message_decoded = message
 
@@ -81,11 +82,12 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
 
             if use_wireformat:
                 # Check the authentication
-                omemo.wireformat.message_header.checkAuthentication(
-                    message_decoded["mac"],
-                    message_decoded["auth_data"],
-                    plaintext["ad"],
-                    plaintext["authentication_key"]
+                SignalBackend.WireFormat.finalizeMessageFromWire(
+                    message,
+                    {
+                        "DoubleRatchet": plaintext["additional"],
+                        "WireFormat": message_decoded["additional"]
+                    }
                 )
 
             print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
@@ -126,7 +128,7 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
             message = deferred_local.pop(msg_index)["ciphertext_header"]
 
             if use_wireformat:
-                message_decoded = omemo.wireformat.message_header.fromWire(message)
+                message_decoded = SignalBackend.WireFormat.messageFromWire(message)
             else:
                 message_decoded = message
 
@@ -140,11 +142,12 @@ def loop(alice_dr, bob_dr, use_wireformat = False):
 
             if use_wireformat:
                 # Check the authentication
-                omemo.wireformat.message_header.checkAuthentication(
-                    message_decoded["mac"],
-                    message_decoded["auth_data"],
-                    plaintext["ad"],
-                    plaintext["authentication_key"]
+                SignalBackend.WireFormat.finalizeMessageFromWire(
+                    message,
+                    {
+                        "DoubleRatchet": plaintext["additional"],
+                        "WireFormat": message_decoded["additional"]
+                    }
                 )
 
             print(receiver + " received:", plaintext["plaintext"].decode("UTF-8"))
@@ -174,10 +177,10 @@ def main(shared_secret, associated_data):
     try:
         # Look for stored ratchets and deferred messages
         with open("dr_chat/bob_dr.json") as f:
-            bob_dr = omemo.doubleratchet.DoubleRatchet.fromSerialized(json.load(f))
+            bob_dr = SignalBackend.DoubleRatchet.fromSerialized(json.load(f))
 
         with open("dr_chat/alice_dr.json") as f:
-            alice_dr = omemo.doubleratchet.DoubleRatchet.fromSerialized(json.load(f))
+            alice_dr = SignalBackend.DoubleRatchet.fromSerialized(json.load(f))
 
         with open("dr_chat/deferred.pickle", "rb") as f:
             deferred = pickle.load(f)
@@ -185,10 +188,10 @@ def main(shared_secret, associated_data):
         print("Loading failed, creating fresh data...")
 
         # Create Bob's DoubleRatchet with just the shared secret.
-        bob_dr = omemo.doubleratchet.DoubleRatchet(associated_data, shared_secret)
+        bob_dr = SignalBackend.DoubleRatchet(associated_data, shared_secret)
 
         # Create Alice's DoubleRatchet, passing Bob's encryption key to the initializer.
-        alice_dr = omemo.doubleratchet.DoubleRatchet(
+        alice_dr = SignalBackend.DoubleRatchet(
             associated_data,
             shared_secret,
             other_pub = bob_dr.pub

@@ -1,7 +1,7 @@
-unsupportedversionexception
-===========================
+wireformat
+==========
 
-.. autoclass:: omemo.signal.exceptions.UnsupportedVersionException
+.. autoclass:: omemo.backends.WireFormat
     :members:
     :special-members:
     :member-order: bysource

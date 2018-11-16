@@ -1,7 +1,7 @@
-deserializationexception
-========================
+wireformatexception
+===================
 
-.. autoclass:: omemo.signal.exceptions.DeserializationException
+.. autoclass:: omemo.exceptions.WireFormatException
     :members:
     :special-members:
     :member-order: bysource

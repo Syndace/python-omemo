@@ -1,7 +1,7 @@
-notinitializedexception
-=======================
+inconsistentinfoexception
+=========================
 
-.. autoclass:: omemo.exceptions.NotInitializedException
+.. autoclass:: omemo.exceptions.InconsistentInfoException
     :members:
     :special-members:
     :member-order: bysource

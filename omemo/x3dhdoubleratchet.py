@@ -3,14 +3,14 @@ from __future__ import absolute_import
 from x3dh.exceptions import KeyExchangeException
 
 from .exceptions import UnknownKeyException
-from .state import make as make_state
+from .state import make as make_State
 
 import base64
 import copy
 import time
 
 def make(backend):
-    class X3DHDoubleRatchet(make_state(backend)):
+    class X3DHDoubleRatchet(make_State(backend)):
         def __init__(self):
             super(X3DHDoubleRatchet, self).__init__()
 

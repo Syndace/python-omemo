@@ -8,4 +8,6 @@ from . import util
 from .extendedpublicbundle import ExtendedPublicBundle
 from .otpkpolicy import OTPKPolicy
 from .sessionmanager import SessionManager
+from .state import make as make_State
 from .storage import Storage
+from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet

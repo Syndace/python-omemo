@@ -11,5 +11,5 @@ omemo
     Module: util <util>
     Module: x3dhdoubleratchet <x3dhdoubleratchet>
 
+    Package: backends <backends/package>
     Package: exceptions <exceptions/package>
-    Package: signal <signal/package>

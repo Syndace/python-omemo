@@ -11,7 +11,7 @@ from x3dh.exceptions import KeyExchangeException
 from . import promise
 from . import storagewrapper
 from .exceptions import *
-from .x3dhdoubleratchet import make as make_x3dhdoubleratchet
+from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet
 
 def d(*args, **kwargs):
     logging.getLogger("omemo.SessionManager").debug(*args, **kwargs)
@@ -56,7 +56,7 @@ class SessionManager(object):
         self.__sessions_cache = {}
 
         self.__backend = backend
-        self.__X3DHDoubleRatchet = make_x3dhdoubleratchet(self.__backend)
+        self.__X3DHDoubleRatchet = make_X3DHDoubleRatchet(self.__backend)
 
         yield self.__prepare()
 

@@ -1,7 +1,7 @@
-state
-=====
+backend
+=======
 
-.. autoclass:: omemo.signal.x3dh.State
+.. autoclass:: omemo.backends.Backend
     :members:
     :special-members:
     :member-order: bysource
