@@ -7,7 +7,7 @@ python:
 
 env:
   - CRYPTOGRAPHY_VERSION=2.2.2 # Most recent versions on pip
-  - CRYPTOGRAPHY_VERSION=1.7.1 # Versions in Debian 9's apt repositories
+  - CRYPTOGRAPHY_VERSION=2     # The first version supporting AESGCM
 
 install:
   - pip install cryptography==$CRYPTOGRAPHY_VERSION

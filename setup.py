@@ -36,7 +36,7 @@ setup(
     packages = find_packages(),
     install_requires = [
         "X3DH>=0.5.3,<0.6",
-        "cryptography>=1.7.1"
+        "cryptography>=2"
     ],
     python_requires = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, <4",
     zip_safe = False,
