@@ -3,16 +3,26 @@ from setuptools import setup, find_packages
 import os
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "omemo"))
+version_file_path = os.path.join(
+	os.path.dirname(os.path.abspath(__file__)),
+	"omemo",
+	"version.py"
+)
 
-import version
+version = {}
+
+try:
+	execfile(version_file_path, version)
+except:
+	with open(version_file_path) as fp:
+		exec(fp.read(), version)
 
 with open("README.md") as f:
     long_description = f.read()
 
 setup(
     name = "OMEMO",
-    version = version.__version__,
+    version = version["__version__"],
     description = (
         "A Python implementation of the OMEMO Multi-End Message and Object Encryption " +
         "protocol."
@@ -29,7 +39,7 @@ setup(
         "cryptography>=1.7.1"
     ],
     python_requires = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, <4",
-    zip_safe = True,
+    zip_safe = False,
     classifiers = [
         "Development Status :: 4 - Beta",
 

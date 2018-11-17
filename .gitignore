@@ -10,3 +10,4 @@ docs/_build/
 examples/*/*
 
 install.sh
+Makefile
