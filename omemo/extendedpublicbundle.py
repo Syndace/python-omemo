@@ -34,6 +34,46 @@ class ExtendedPublicBundle(object):
         self.__spk_signature = spk_signature
         self.__otpks = otpks
 
+    @classmethod
+    def parse(cls, backend, ik, spk, spk_signature, otpks):
+        """
+        Use this method when creating a bundle from data you retrieved directly from some
+        PEP node. This method applies an additional decoding step to the public keys in
+        the bundle. Pass the same structure as the constructor expects.
+        """
+
+        ik = backend.decodePublicKey(ik)[0]
+
+        spk["key"] = backend.decodePublicKey(spk["key"])[0]
+
+        otpks = list(map(lambda otpk: {
+            "key" : backend.decodePublicKey(otpk["key"])[0],
+            "id"  : otpk["id"]
+        }, otpks))
+
+        return cls(ik, spk, spk_signature, otpks)
+
+    def serialize(self, backend):
+        """
+        Use this method to prepare the data to be uploaded directly to some PEP node. This
+        method applies an additional encoding step to the public keys in the bundle. The
+        result is a dictionary with the keys ik, spk, spk_signature and otpks. The values
+        are structured the same way as the inputs of the constructor.
+        """
+
+        return {
+            "ik": backend.encodePublicKey(self.ik, "25519"),
+            "spk": {
+                "id"  : self.spk["id"],
+                "key" : backend.encodePublicKey(self.spk["key"], "25519"),
+            },
+            "spk_signature": self.spk_signature,
+            "otpks": list(map(lambda otpk: {
+                "id"  : otpk["id"],
+                "key" : backend.encodePublicKey(otpk["key"], "25519")
+            }, self.otpks))
+        }
+
     @property
     def ik(self):
         return self.__ik
