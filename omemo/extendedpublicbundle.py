@@ -105,3 +105,14 @@ class ExtendedPublicBundle(object):
             return self.spk["id"]
 
         raise UnknownKeyException("Tried to get the id of an unknown SPK.")
+
+    def __eq__(self, other):
+        try:
+            return (
+                self.ik == other.ik and
+                self.spk == other.spk and
+                self.spk_signature == other.spk_signature and
+                self.otpks == other.otpks
+            )
+        except:
+            return False

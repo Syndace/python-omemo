@@ -388,6 +388,18 @@ def messageEncryption_singleRecipient(
 def test_create_supplyInfo():
     createSessionManagers()
 
+def test_bundle_serialization():
+    _, sm_sync, _, sm_async = createSessionManagers()
+
+    bundle_sync  = sm_sync.public_bundle
+    bundle_async = sm_async.public_bundle
+
+    sb = SignalBackend
+    ex = omemo.ExtendedPublicBundle
+    
+    assert ex.parse(sb, **bundle_sync.serialize(sb))  == bundle_sync
+    assert ex.parse(sb, **bundle_async.serialize(sb)) == bundle_async
+
 def test_create_inconsistentInfo():
     st_sync, _, st_async, _ = createSessionManagers()
 

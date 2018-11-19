@@ -13,11 +13,11 @@ class Backend(object):
     def X3DHState(self):
         return self.__X3DHState
 
-    def encodePublicKey(self, public_key):
-        return self.__X3DHPKEncoder.encodePublicKey(public_key)
+    def encodePublicKey(self, *args, **kwargs):
+        return self.__X3DHPKEncoder.encodePublicKey(*args, **kwargs)
 
-    def decodePublicKey(self, public_key_encoded):
-        return self.__X3DHPKEncoder.decodePublicKey(public_key_encoded)
+    def decodePublicKey(self, *args, **kwargs):
+        return self.__X3DHPKEncoder.decodePublicKey(*args, **kwargs)
 
     @property
     def DoubleRatchet(self):
