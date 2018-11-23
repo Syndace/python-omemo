@@ -89,8 +89,31 @@ def manageOwnDeviceList(devices):
 
 ### 2. Bundle management
 
+The next thing you need to manager are the bundles used for the X3DH key exchange. Each device publishes its own bundle to a unique PEP node. Right after publishing 
+
 ### 3. Decryption
 
 ### 4. Encryption
 
-### 5. Trust management
+### 5. A note about trust management
+
+### 6. A note about fingerprints
+
+Fingerprints initially were part of the library but I decided to remove them. Fingerprints are not specified at all, that's why I leave it open for the client dev to decide on a way to build and show fingerprints. Some implementations simply take the public part of the identity key and show it as a QR-code or encoded as hex bytes. Pseudocode:
+```Python
+# Get the ik public part from some bundle
+ik_pub = some_bundle.ik
+
+# Show a qr code somehow...
+showQRCode(ik_pub)
+
+# ...or create a hex byte representation
+# Wanted format: 01:23:45:67:89:AB:CD:EF
+# This is surprisingly tricky:
+import codecs
+import re
+ik_pub_hex = codecs.getencoder("hex")(ik_pub)[0].decode("US-ASCII").upper()
+ik_pub_hex = ":".join(re.findall("..?", ik_pub_hex))
+```
+
+### 7. A note about asynchronism

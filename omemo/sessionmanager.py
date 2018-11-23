@@ -470,10 +470,6 @@ class SessionManager(object):
         return self.__state.getPublicBundle()
 
     @property
-    def fingerprint(self):
-        return self.public_bundle.fingerprint
-
-    @property
     def republish_bundle(self):
         return self.__state.changed
 
