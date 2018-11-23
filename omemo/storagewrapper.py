@@ -34,11 +34,13 @@ def wrap(is_async, attr):
 
 class StorageWrapper(object):
     def __init__(self, wrapped):
-        self.__wrapped = wrapped
+        self._wrapped = wrapped
 
-    @property
-    def is_async(self):
-        return self.__wrapped.is_async
+    def __getattribute__(self, attr):
+        if attr == "_wrapped":
+            return super(StorageWrapper, self).__getattribute__(attr)
 
-    def __getattr__(self, attr):
-        return wrap(self.is_async, getattr(self.__wrapped, attr))
+        if attr == "is_async":
+            return self._wrapped.is_async
+
+        return wrap(self.is_async, getattr(self._wrapped, attr))
