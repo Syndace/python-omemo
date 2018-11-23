@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from .promise import Promise
 from .storage import Storage
 
-def makeCBPromise(function, *args, **kwargs):
+def makeCallbackPromise(function, *args, **kwargs):
     """
     Take a function that reports its result using a callback and return a Promise that
     listenes for this callback.
@@ -23,76 +23,22 @@ def makeCBPromise(function, *args, **kwargs):
 
     return Promise(_resolver)
 
-class StorageWrapper(Storage):
+def wrap(is_async, attr):
+    def _wrap(*args, **kwargs):
+        if is_async:
+            return makeCallbackPromise(attr, *args, **kwargs)
+        else:
+            return attr(None, *args, **kwargs)
+
+    return _wrap
+
+class StorageWrapper(object):
     def __init__(self, wrapped):
         self.__wrapped = wrapped
-
-    def loadOwnData(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.loadOwnData, *args, **kwargs)
-        else:
-            return self.__wrapped.loadOwnData(None, *args, **kwargs)
-
-    def storeOwnData(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.storeOwnData, *args, **kwargs)
-        else:
-            return self.__wrapped.storeOwnData(None, *args, **kwargs)
-
-    def loadState(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.loadState, *args, **kwargs)
-        else:
-            return self.__wrapped.loadState(None, *args, **kwargs)
-
-    def storeState(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.storeState, *args, **kwargs)
-        else:
-            return self.__wrapped.storeState(None, *args, **kwargs)
-
-    def loadSession(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.loadSession, *args, **kwargs)
-        else:
-            return self.__wrapped.loadSession(None, *args, **kwargs)
-
-    def storeSession(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.storeSession, *args, **kwargs)
-        else:
-            return self.__wrapped.storeSession(None, *args, **kwargs)
-
-    def loadActiveDevices(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.loadActiveDevices, *args, **kwargs)
-        else:
-            return self.__wrapped.loadActiveDevices(None, *args, **kwargs)
-
-    def loadInactiveDevices(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.loadInactiveDevices, *args, **kwargs)
-        else:
-            return self.__wrapped.loadInactiveDevices(None, *args, **kwargs)
-
-    def storeActiveDevices(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.storeActiveDevices, *args, **kwargs)
-        else:
-            return self.__wrapped.storeActiveDevices(None, *args, **kwargs)
-
-    def storeInactiveDevices(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.storeInactiveDevices, *args, **kwargs)
-        else:
-            return self.__wrapped.storeInactiveDevices(None, *args, **kwargs)
-
-    def isTrusted(self, *args, **kwargs):
-        if self.__wrapped.is_async:
-            return makeCBPromise(self.__wrapped.isTrusted, *args, **kwargs)
-        else:
-            return self.__wrapped.isTrusted(None, *args, **kwargs)
 
     @property
     def is_async(self):
         return self.__wrapped.is_async
+
+    def __getattr__(self, attr):
+        return wrap(self.is_async, getattr(self.__wrapped, attr))
