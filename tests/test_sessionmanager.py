@@ -48,13 +48,13 @@ def assertPromiseRejected(promise):
 
 def getDevices(sm_sync, sm_async, jid, inactive, active):
     inactive = set(inactive)
-    active   = set(active)
+    active = set(active)
 
     devices_sync  = sm_sync.getDevices(jid)
     devices_async = assertPromiseFulfilled(sm_async.getDevices(jid))
 
-    assert devices_sync ["inactive"] == inactive
-    assert devices_async["inactive"] == inactive
+    assert set(devices_sync ["inactive"].keys()) == inactive
+    assert set(devices_async["inactive"].keys()) == inactive
     assert devices_sync ["active"]   == active
     assert devices_async["active"]   == active
 

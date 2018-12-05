@@ -47,11 +47,15 @@ class SyncInMemoryStorage(omemo.Storage):
         self.__sessions[bare_jid] = self.__sessions.get(bare_jid, {})
         self.__sessions[bare_jid][device_id] = session
 
+    def deleteSession(self, callback, bare_jid, device_id):
+        self.__sessions[bare_jid] = self.__sessions.get(bare_jid, {})
+        self.__sessions[bare_jid].pop(device_id, None)
+
     def loadActiveDevices(self, callback, bare_jid):
         return self.__devices.get(bare_jid, {}).get("active", [])
 
     def loadInactiveDevices(self, callback, bare_jid):
-        return self.__devices.get(bare_jid, {}).get("inactive", [])
+        return self.__devices.get(bare_jid, {}).get("inactive", {})
 
     def storeActiveDevices(self, callback, bare_jid, devices):
         self.__devices[bare_jid] = self.__devices.get(bare_jid, {})
@@ -60,6 +64,13 @@ class SyncInMemoryStorage(omemo.Storage):
     def storeInactiveDevices(self, callback, bare_jid, devices):
         self.__devices[bare_jid] = self.__devices.get(bare_jid, {})
         self.__devices[bare_jid]["inactive"] = devices
+
+    def listJIDs(self, callback):
+        return list(self.__devices.keys())
+
+    def deleteJID(self, callback, bare_jid):
+        self.__devices.pop(bare_jid, None)
+        self.__sessions.pop(bare_jid, None)
 
     def isTrusted(self, callback, bare_jid, device):
         result = False

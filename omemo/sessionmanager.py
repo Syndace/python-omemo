@@ -1,8 +1,10 @@
 from __future__ import absolute_import
+from __future__ import division
 
 import copy
 import logging
 import os
+import time
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -38,25 +40,45 @@ def checkConst(const):
     return _checkConst
 
 class SessionManager(object):
+    ################################
+    # construction and preparation #
+    ################################
+
     @classmethod
     @promise.maybe_coroutine(checkPositionalArgument(1))
-    def create(cls, storage, otpk_policy, backend, my_bare_jid, my_device_id):
+    def create(
+        cls,
+        storage,
+        otpk_policy,
+        backend,
+        my_bare_jid,
+        my_device_id,
+        inactive_per_jid_max = 15,
+        inactive_global_max = 0,
+        inactive_max_age = 0
+    ):
         self = cls()
 
+        # Store the parameters
         self._storage = storagewrapper.StorageWrapper(storage)
 
         self.__otpk_policy = otpk_policy
 
-        self.__state = None
+        self.__backend = backend
+        self.__X3DHDoubleRatchet = make_X3DHDoubleRatchet(self.__backend)
 
         self.__my_bare_jid  = my_bare_jid
         self.__my_device_id = my_device_id
 
+        self.__inactive_per_jid_max = inactive_per_jid_max
+        self.__inactive_global_max  = inactive_global_max
+        self.__inactive_max_age     = inactive_max_age
+
+        # Prepare the caches
+        self.__state = None
+
         self.__devices_cache  = {}
         self.__sessions_cache = {}
-
-        self.__backend = backend
-        self.__X3DHDoubleRatchet = make_X3DHDoubleRatchet(self.__backend)
 
         yield self.__prepare()
 
@@ -69,7 +91,8 @@ class SessionManager(object):
             self.__state = self.__X3DHDoubleRatchet()
 
             yield self._storage.storeState(self.__state.serialize())
-            yield self._storage.storeActiveDevices(self.__my_bare_jid, [
+
+            yield self.__storeActiveDevices(self.__my_bare_jid, [
                 self.__my_device_id
             ])
         else:
@@ -77,7 +100,6 @@ class SessionManager(object):
 
         own_data = yield self._storage.loadOwnData()
         if own_data == None:
-
             yield self._storage.storeOwnData(self.__my_bare_jid, self.__my_device_id)
         else:
             if (not self.__my_bare_jid  == own_data["own_bare_jid"] or
@@ -87,39 +109,9 @@ class SessionManager(object):
                     "\" on device " + str(own_data["own_device_id"]) + "."
                 )
 
-    @promise.maybe_coroutine(checkSelf)
-    def __listDevices(self, bare_jid):
-        if not (bare_jid in self.__devices_cache):
-            active   = yield self._storage.loadActiveDevices(bare_jid)
-            inactive = yield self._storage.loadInactiveDevices(bare_jid)
-
-            self.__devices_cache[bare_jid] = {
-                "active"   : set(active),
-                "inactive" : set(inactive)
-            }
-
-        promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]))
-
-    @promise.maybe_coroutine(checkSelf)
-    def __loadSession(self, bare_jid, device):
-        self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
-
-        if not (device in self.__sessions_cache[bare_jid]):
-            session = yield self._storage.loadSession(bare_jid, device)
-
-            if session != None:
-                session = self.__backend.DoubleRatchet.fromSerialized(session)
-
-            self.__sessions_cache[bare_jid][device] = session
-
-        promise.returnValue(self.__sessions_cache[bare_jid][device])
-
-    @promise.maybe_coroutine(checkSelf)
-    def __storeSession(self, bare_jid, device, session):
-        self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
-        self.__sessions_cache[bare_jid][device] = session
-
-        yield self._storage.storeSession(bare_jid, device, session.serialize())
+    ##############
+    # encryption #
+    ##############
 
     def __loggingEncryptMessageCallback(self, e, bare_jid, device):
         w(
@@ -145,6 +137,8 @@ class SessionManager(object):
         _DEBUG_ek = None,
         _DEBUG_sendingRatchetKey = None
     ):
+        yield self.runInactiveDeviceCleanup()
+
         # Lift a single bare_jid into a list
         if not isinstance(bare_jids, list):
             bare_jids = [ bare_jids ]
@@ -161,17 +155,20 @@ class SessionManager(object):
             bundles = {}
 
         if devices != None:
-            devices = { bare_jid: devices.get(bare_jid, []) for bare_jid in bare_jids }
+            devices = {
+                bare_jid: set(devices.get(bare_jid, [])) for bare_jid in bare_jids
+            }
         else:
             devices = {}
 
             for bare_jid in bare_jids:
                 # Load all active devices for this bare_jid
-                devices[bare_jid] = (yield self.__listDevices(bare_jid))["active"]
+                devices[bare_jid] = yield self.__loadActiveDevices(bare_jid)
 
                 # If there are no active devices for this jid, generate an exception
                 if len(devices[bare_jid]) == 0:
                     del devices[bare_jid]
+
                     callback(NoDevicesException(), bare_jid, None)
 
         # Don't encrypt the message for the sending device
@@ -321,7 +318,7 @@ class SessionManager(object):
         sending an initial text message.
         """
 
-        promise.returnValue((yield self.encryptKeyTransportMessage(
+        result = yield self.encryptKeyTransportMessage(
             bare_jid,
             { bare_jid: { device: bundle } },
             { bare_jid: [ device ] },
@@ -330,7 +327,13 @@ class SessionManager(object):
             dry_run = dry_run,
             _DEBUG_ek = _DEBUG_ek,
             _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
-        )))
+        )
+
+        promise.returnValue(result)
+
+    ##############
+    # decryption #
+    ##############
 
     @promise.maybe_coroutine(checkSelf)
     def _decryptMessage(
@@ -342,6 +345,8 @@ class SessionManager(object):
         additional_information = None,
         _DEBUG_newRatchetKey = None
     ):
+        yield self.runInactiveDeviceCleanup()
+
         if is_pre_key_message:
             # Unpack the pre key message data
             message_and_init_data = self.__backend.WireFormat.preKeyMessageFromWire(
@@ -438,139 +443,323 @@ class SessionManager(object):
                 aes_gcm.decrypt(iv, payload + aes_gcm_tag, None)
             ))
 
-    @promise.maybe_coroutine(checkSelf)
-    def newDeviceList(self, devices, bare_jid):
-        devices = set(devices)
-
-        if bare_jid == self.__my_bare_jid:
-            # The own device can never become inactive
-            devices |= set([ self.__my_device_id ])
-
-        devices_old = yield self.__listDevices(bare_jid)
-        devices_old = devices_old["active"] | devices_old["inactive"]
-
-        active   = devices
-        inactive = devices_old - active
-
-        self.__devices_cache[bare_jid] = { "active": active, "inactive": inactive }
-
-        yield self._storage.storeActiveDevices(bare_jid, active)
-        yield self._storage.storeInactiveDevices(bare_jid, inactive)
-
-    @promise.maybe_coroutine(checkSelf)
-    def getDevices(self, bare_jid = None):
-        if not bare_jid:
-            bare_jid = self.__my_bare_jid
-
-        result = yield self.__listDevices(bare_jid)
-        promise.returnValue(result)
+    ############################
+    # public bundle management #
+    ############################
 
     @property
     def public_bundle(self):
+        """
+        Fill a PublicBundle object with the public bundle data of this State.
+
+        :returns: An instance of ExtendedPublicBundle, filled with the public data of this
+            State.
+        """
+
         return self.__state.getPublicBundle()
 
     @property
     def republish_bundle(self):
+        """
+        Read, whether this State has changed since it was loaded/since this flag was last
+        cleared.
+
+        :returns: A boolean indicating, whether the public bundle data has changed since
+            last reading this flag.
+
+        Clears the flag when reading.
+        """
+
         return self.__state.changed
 
-    ###############################
-    # DEBUG ADDITIONS, DO NOT USE #
-    ###############################
+    #####################
+    # device management #
+    #####################
 
-    def _DEBUG_simulatePreKeyMessage(
-        self,
-        other_session_manager,
-        otpk_id,
-        ek,
-        sending_ratchet_key
-    ):
-        from .extendedpublicbundle import ExtendedPublicBundle
+    @promise.maybe_coroutine(checkSelf)
+    def __loadActiveDevices(self, bare_jid):
+        self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
 
-        e("WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION")
-        d("Simulating pre key message.")
+        if not "active" in self.__devices_cache[bare_jid]:
+            devices = yield self._storage.loadActiveDevices(bare_jid)
 
-        other_bundle = other_session_manager.state.getPublicBundle()
+            self.__devices_cache[bare_jid]["active"] = set(devices)
 
-        ik  = other_bundle.ik
-        spk = other_bundle.spk
-        spk_signature = other_bundle.spk_signature
-        otpks = [ otpk for otpk in other_bundle.otpks if otpk["id"] == otpk_id ]
+        promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]["active"]))
 
-        other_bundle = ExtendedPublicBundle(ik, spk, spk_signature, otpks)
+    @promise.maybe_coroutine(checkSelf)
+    def __loadInactiveDevices(self, bare_jid):
+        self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
 
-        my_own_data    = self._storage.loadOwnData()
-        other_own_data = other_session_manager._storage.loadOwnData()
+        if not "inactive" in self.__devices_cache[bare_jid]:
+            devices = yield self._storage.loadInactiveDevices(bare_jid)
+            devices = copy.deepcopy(devices)
 
-        self.newDeviceList(
-            [ my_own_data["own_device_id"] ],
-            my_own_data["own_bare_jid"]
+            self.__devices_cache[bare_jid]["inactive"] = devices
+
+        promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]["inactive"]))
+
+    @promise.maybe_coroutine(checkSelf)
+    def __storeActiveDevices(self, bare_jid, devices):
+        self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
+        self.__devices_cache[bare_jid]["active"] = set(devices)
+
+        yield self._storage.storeActiveDevices(
+            bare_jid,
+            self.__devices_cache[bare_jid]["active"]
         )
 
-        self.newDeviceList(
-            [ other_own_data["own_device_id"] ],
-            other_own_data["own_bare_jid"]
+    @promise.maybe_coroutine(checkSelf)
+    def __storeInactiveDevices(self, bare_jid, devices):
+        self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
+        self.__devices_cache[bare_jid]["inactive"] = copy.deepcopy(devices)
+        
+        yield self._storage.storeInactiveDevices(
+            bare_jid,
+            self.__devices_cache[bare_jid]["inactive"]
         )
 
-        self.buildSession(
-            other_own_data["own_bare_jid"],
-            other_own_data["own_device_id"],
-            other_bundle,
-            _DEBUG_ek = ek,
-            _DEBUG_sendingRatchetKey = sending_ratchet_key
+    @promise.maybe_coroutine(checkSelf)
+    def newDeviceList(self, active_new, bare_jid):
+        active_new = set(active_new)
+
+        if bare_jid == self.__my_bare_jid:
+            # The own device can never become inactive
+            active_new |= set([ self.__my_device_id ])
+
+        active_old   = yield self.__loadActiveDevices(bare_jid)
+        inactive_old = yield self.__loadInactiveDevices(bare_jid)
+
+        devices_old = active_old | set(inactive_old.keys())
+
+        inactive_new = devices_old - active_new
+
+        now = time.time()
+
+        inactive_new = {
+            device: inactive_old.get(device, now)
+            for device in inactive_new
+        }
+
+        yield self.__storeActiveDevices(bare_jid, active_new)
+        yield self.__storeInactiveDevices(bare_jid, inactive_new)
+
+        yield self.runInactiveDeviceCleanup()
+
+    @promise.maybe_coroutine(checkSelf)
+    def getDevices(self, bare_jid = None):
+        yield self.runInactiveDeviceCleanup()
+
+        if bare_jid == None:
+            bare_jid = self.__my_bare_jid
+
+        active   = yield self.__loadActiveDevices(bare_jid)
+        inactive = yield self.__loadInactiveDevices(bare_jid)
+
+        promise.returnValue({
+            "active"   : active,
+            "inactive" : inactive
+        })
+
+    @promise.maybe_coroutine(checkSelf)
+    def __deleteInactiveDevices(self, bare_jid, delete_devices):
+        for device in delete_devices:
+            yield self.__deleteSession(bare_jid, device)
+
+        inactive_devices = yield self.__loadInactiveDevices(bare_jid)
+        
+        for device in delete_devices:
+            inactive_devices.pop(device, None)
+
+        yield self.__storeInactiveDevices(bare_jid, inactive_devices)
+
+    @promise.maybe_coroutine(checkSelf)
+    def deleteInactiveDevicesByQuota(self, per_jid_max = 15, global_max = 0):
+        """
+        Delete inactive devices by setting a quota. With per_jid_max you can define the
+        amount of inactive devices that are kept for each jid, with global_max you can
+        define a global maximum for inactive devices. If any of the quotas is reached,
+        inactive devices are deleted on an LRU basis. This also deletes the corresponding
+        sessions, so if a device comes active again and tries to send you an encrypted
+        message you will not be able to decrypt it.
+
+        The value "0" means no limitations/keep all inactive devices.
+
+        It is recommended to always restrict the amount of per-jid inactive devices. If
+        storage space limitations don't play a role, it is recommended to not restrict the
+        global amount of inactive devices. Otherwise, the global_max can be used to
+        control the amount of storage that can be used up by inactive sessions. The
+        default of 15 per-jid devices is very permissive, but it is not recommended to
+        decrease that number without a good reason.
+
+        This is the recommended way to handle inactive device deletion. For a time-based
+        alternative, look at the deleteInactiveDevicesByAge method.
+        """
+
+        if per_jid_max < 1 and global_max < 1:
+            return
+
+        if per_jid_max < 1:
+            per_jid_max = None
+
+        if global_max < 1:
+            global_max = None
+
+        bare_jids = yield self._storage.listJIDs()
+
+        if not per_jid_max == None:
+            for bare_jid in bare_jids:
+                devices = yield self.__loadInactiveDevices(bare_jid)
+
+                if len(devices) > per_jid_max:
+                    # This sorts the devices from smaller to bigger timestamp, which means
+                    # from old to young.
+                    devices = sorted(devices.items(), key = lambda device: device[1])
+
+                    # This gets the first (=oldest) n entries, so that only the
+                    # per_jid_max youngest entries are left.
+                    devices = devices[:-per_jid_max]
+
+                    # Get the device ids and discard the timestamps.
+                    devices = list(map(lambda device: device[0], devices))
+
+                    yield self.__deleteInactiveDevices(bare_jid, devices)
+        
+        if not global_max == None:
+            all_inactive_devices = []
+
+            for bare_jid in bare_jids:
+                devices = yield self.__loadInactiveDevices(bare_jid)
+
+                all_inactive_devices.extend(map(
+                    lambda device: (bare_jid, device[0], device[1]),
+                    devices.items()
+                ))
+
+            if len(all_inactive_devices) > global_max:
+                # This sorts the devices from smaller to bigger timestamp, which means
+                # from old to young.
+                devices = sorted(all_inactive_devices, key = lambda device: device[2])
+
+                # This gets the first (=oldest) n entries, so that only the global_max
+                # youngest entries are left.
+                devices = devices[:-global_max]
+
+                # Get the list of devices to delete for each jid
+                delete_devices = {}
+
+                for device in devices:
+                    bare_jid  = device[0]
+                    device_id = device[1]
+
+                    delete_devices[bare_jid] = delete_devices.get(bare_jid, [])
+                    delete_devices[bare_jid].append(device_id)
+
+                # Now, delete the devices
+                for bare_jid, devices in delete_devices.items():
+                    yield self.__deleteInactiveDevices(bare_jid, devices)
+
+    @promise.maybe_coroutine(checkSelf)
+    def deleteInactiveDevicesByAge(self, age_days):
+        """
+        Delete all inactive devices from the device list storage and cache that are older
+        then a given number of days. This also deletes the corresponding sessions, so if
+        a device comes active again and tries to send you an encrypted message you will
+        not be able to decrypt it. You are not allowed to delete inactive devices that
+        were inactive for less than a day. Thus, the minimum value for age_days is 1.
+
+        It is recommended to keep inactive devices for a longer period of time (e.g.
+        multiple months), as it reduces the chance for message loss and doesn't require a
+        lot of storage.
+
+        The recommended alternative to deleting inactive devices by age is to delete them
+        by count/quota. Look at the deleteInactiveDevicesByQuota method for that variant.
+        """
+
+        if age_days < 1:
+            return
+
+        now = time.time()
+
+        bare_jids = yield self._storage.listJIDs()
+
+        for bare_jid in bare_jids:
+            devices = yield self.__loadInactiveDevices(bare_jid)
+
+            delete_devices = []
+            for device, timestamp in list(devices.items()):
+                elapsed_s = now - timestamp
+                elapsed_m = elapsed_s / 60
+                elapsed_h = elapsed_m / 60
+                elapsed_d = elapsed_h / 24
+
+                if elapsed_d >= age_days:
+                    delete_devices.append(device)
+
+            if len(delete_devices) > 0:
+                yield self.__deleteInactiveDevices(bare_jid, delete_devices)
+
+    @promise.maybe_coroutine(checkSelf)
+    def runInactiveDeviceCleanup(self):
+        """
+        Runs both the deleteInactiveDevicesByAge and the deleteInactiveDevicesByQuota
+        methods with the configuration that was set when calling create.
+        """
+
+        yield self.deleteInactiveDevicesByQuota(
+            self.__inactive_per_jid_max,
+            self.__inactive_global_max
         )
 
-    def _DEBUG_simulateMessage(self, other_session_manager):
-        e("WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION")
-        d("Simulating message.")
+        yield self.deleteInactiveDevicesByAge(self.__inactive_max_age)
 
-        my_own_data    = self._storage.loadOwnData()
-        other_own_data = other_session_manager._storage.loadOwnData()
+    ######################
+    # session management #
+    ######################
 
-        self.newDeviceList(
-            [ my_own_data["own_device_id"] ],
-            my_own_data["own_bare_jid"]
-        )
+    @promise.maybe_coroutine(checkSelf)
+    def __loadSession(self, bare_jid, device):
+        self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
 
-        self.newDeviceList(
-            [ other_own_data["own_device_id"] ],
-            other_own_data["own_bare_jid"]
-        )
+        if not (device in self.__sessions_cache[bare_jid]):
+            session = yield self._storage.loadSession(bare_jid, device)
 
-        self.encryptKeyTransportMessage(other_own_data["own_bare_jid"])
+            if session != None:
+                session = self.__backend.DoubleRatchet.fromSerialized(session)
 
-    def _DEBUG_compareState(self, other_session_manager, state):
-        e("WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION")
-        d("Comparing states.")
+            self.__sessions_cache[bare_jid][device] = session
 
-        import base64
+        promise.returnValue(self.__sessions_cache[bare_jid][device])
 
-        other_own_data = other_session_manager._storage.loadOwnData()
+    @promise.maybe_coroutine(checkSelf)
+    def __storeSession(self, bare_jid, device, session):
+        self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
+        self.__sessions_cache[bare_jid][device] = session
 
-        dr = self.__loadSession(
-            other_own_data["own_bare_jid"],
-            other_own_data["own_device_id"]
-        )
+        yield self._storage.storeSession(bare_jid, device, session.serialize())
 
-        assert dr != None
+    @promise.maybe_coroutine(checkSelf)
+    def __deleteSession(self, bare_jid, device):
+        self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
 
-        dr = dr.serialize()
+        self.__sessions_cache[bare_jid].pop(device, None)
 
-        root_key = base64.b64decode(dr["root_chain"]["super"]["key"].encode("US-ASCII"))
-        assert root_key == state["rootKey"]
+        yield self._storage.deleteSession(bare_jid, device)
 
-        try:
-            schain_key = dr["skr"]["super"]["schain"]["super"]["super"]["key"]
-            schain_key = base64.b64decode(schain_key.encode("US-ASCII"))
-        except TypeError:
-            pass
-        else:
-            assert schain_key == state["senderChainKey"]
+    #########
+    # other #
+    #########
 
-        if state["receiverChainKey"] != None:
-            try:
-                rchain_key = dr["skr"]["super"]["rchain"]["super"]["super"]["key"]
-                rchain_key = base64.b64decode(rchain_key.encode("US-ASCII"))
-            except TypeError:
-                pass
-            else:
-                assert rchain_key == state["receiverChainKey"]
+    @promise.maybe_coroutine(checkSelf)
+    def deleteJID(self, bare_jid):
+        """
+        Delete all data associated with a JID. This includes the list of active/inactive
+        devices and all sessions with that JID.
+        """
+
+        yield self.runInactiveDeviceCleanup()
+
+        self.__sessions_cache.pop(bare_jid, None)
+        self.__devices_cache.pop(bare_jid, None)
+
+        yield self._storage.deleteJID(bare_jid)

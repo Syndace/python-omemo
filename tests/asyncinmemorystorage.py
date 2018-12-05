@@ -53,11 +53,17 @@ class AsyncInMemoryStorage(omemo.Storage):
 
         callback(True, None)
 
+    def deleteSession(self, callback, bare_jid, device_id):
+        self.__sessions[bare_jid] = self.__sessions.get(bare_jid, {})
+        self.__sessions[bare_jid].pop(device_id, None)
+
+        callback(True, None)
+
     def loadActiveDevices(self, callback, bare_jid):
         callback(True, self.__devices.get(bare_jid, {}).get("active", []))
 
     def loadInactiveDevices(self, callback, bare_jid):
-        callback(True, self.__devices.get(bare_jid, {}).get("inactive", []))
+        callback(True, self.__devices.get(bare_jid, {}).get("inactive", {}))
 
     def storeActiveDevices(self, callback, bare_jid, devices):
         self.__devices[bare_jid] = self.__devices.get(bare_jid, {})
@@ -68,6 +74,15 @@ class AsyncInMemoryStorage(omemo.Storage):
     def storeInactiveDevices(self, callback, bare_jid, devices):
         self.__devices[bare_jid] = self.__devices.get(bare_jid, {})
         self.__devices[bare_jid]["inactive"] = devices
+
+        callback(True, None)
+
+    def listJIDs(self, callback):
+        callback(True, list(self.__devices.keys()))
+
+    def deleteJID(self, callback, bare_jid):
+        self.__devices.pop(bare_jid, None)
+        self.__sessions.pop(bare_jid, None)
 
         callback(True, None)
 

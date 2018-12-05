@@ -1,19 +1,26 @@
-"""
-The interface used by the SessionManager to persist data between runs.
-
-There are two possible ways to implement the Storage class: synchronous or asynchronous.
-
-The mode is determined by the result of the is_async method.
-
-If the implementation is asynchronous, the callback parameter is a function that takes
-two arguments:
-- success: True or False
-- result: The result of the operation if success is True or the error if success is False
-
-If the implementation is synchronous, the callback parameter is None.
-"""
-
 class Storage(object):
+    """
+    The interface used by the SessionManager to persist data between runs.
+
+    There are two possible ways to implement the Storage class: synchronous or
+    asynchronous.
+
+    The mode is determined by the result of the is_async method.
+
+    If the implementation is synchronous, the callback parameter is None.
+
+    If the implementation is asynchronous, the callback parameter is a function that takes
+    two arguments:
+    - success: True or False
+    - result: The result of the operation if success is True or the error if success is
+        False
+
+    Note:
+    The SessionManager does caching to reduce the number of calls to a minimum. There
+    should be no need to add caching or any other logic in here, just plain storing and
+    loading.
+    """
+
     def loadOwnData(self, callback):
         """
         Load the own data.
@@ -104,6 +111,14 @@ class Storage(object):
 
         raise NotImplementedError
 
+    def deleteSession(self, callback, bare_jid, device_id):
+        """
+        Completely wipe the session associated with given bare_jid and device_id from the
+        storage.
+        """
+
+        raise NotImplementedError
+
     def loadActiveDevices(self, callback, bare_jid):
         """
         Load the list of active devices for a given bare_jid.
@@ -118,12 +133,14 @@ class Storage(object):
 
     def loadInactiveDevices(self, callback, bare_jid):
         """
-        Load the list of active devices for a given bare_jid.
+        Load the list of inactive devices for a given bare_jid.
 
         An "inactive device" is a device, which was listed in an older version of
         the device list pep node, but is NOT listed in the most recent version.
 
-        bare_jid is passed as a string, the result is expected to be a list of integers.
+        bare_jid is passed as a string, the result is expected to be a dict mapping from
+        int to int, where the keys are device ids and the values are timestamps (seconds
+        since epoch).
         """
 
         raise NotImplementedError
@@ -143,7 +160,26 @@ class Storage(object):
         Store the inactive devices for given bare_jid, overwriting the old stored list,
         if it exists.
 
-        bare_jid is passed as a string, devices as a list of integers.
+        bare_jid is passed as a string, devices as a dict mapping from int to int, where
+        the keys are device ids and the values are timestamps (seconds since epoch).
+        """
+
+        raise NotImplementedError
+
+    def listJIDs(self, callback):
+        """
+        List all bare jids that have associated device lists stored in the storage. It
+        doesn't matter if the lists are empty or not.
+
+        Return a list of strings.
+        """
+
+        raise NotImplementedError
+
+    def deleteJID(self, callback, bare_jid):
+        """
+        Delete all data associated with given bare_jid. This includes the active and
+        inactive devices and all sessions stored for that jid.
         """
 
         raise NotImplementedError
