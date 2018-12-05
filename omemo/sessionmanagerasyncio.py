@@ -33,8 +33,6 @@ class SessionManagerAsyncIO(SessionManager):
     def __getattribute__(self, attr_name):
         attr = super(SessionManagerAsyncIO, self).__getattribute__(attr_name)
 
-        print("Requested:", attr_name)
-
         if attr_name in [
             "encryptMessage",
             "encryptKeyTransportMessage",
