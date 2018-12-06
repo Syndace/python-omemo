@@ -10,8 +10,6 @@ from omemo.exceptions import *
 
 from omemo_backend_signal import BACKEND as SignalBackend
 
-import x3dh
-
 from asyncinmemorystorage import AsyncInMemoryStorage
 from syncinmemorystorage  import SyncInMemoryStorage
 
@@ -40,43 +38,95 @@ def assertPromiseFulfilled(promise):
 
     return promise.value
 
+def assertPromiseFulfilledOrRaise(promise):
+    assert isinstance(promise, omemo.promise.Promise)
+
+    assert promise.done
+
+    if promise.fulfilled:
+        return promise.value
+
+    raise promise.reason
+
 def assertPromiseRejected(promise):
     assert isinstance(promise, omemo.promise.Promise)
     assert promise.rejected
 
     return promise.reason
 
+def overrideOwnData(st_sync, st_async, jid, did):
+    done = False
+
+    def cb(success, value):
+        assert success
+        done = True
+
+    st_sync.storeOwnData(None, jid, did)
+    st_async.storeOwnData(cb, jid, did)
+    
+    while not cb: pass
+
+def trust(st_sync, st_async, trusted):
+    st_sync.trust(trusted)
+    st_async.trust(trusted)
+
 def getDevices(sm_sync, sm_async, jid, inactive, active):
     inactive = set(inactive)
-    active = set(active)
+    active   = set(active)
 
     devices_sync  = sm_sync.getDevices(jid)
     devices_async = assertPromiseFulfilled(sm_async.getDevices(jid))
 
     assert set(devices_sync ["inactive"].keys()) == inactive
     assert set(devices_async["inactive"].keys()) == inactive
-    assert devices_sync ["active"]   == active
-    assert devices_async["active"]   == active
+    assert devices_sync ["active"] == active
+    assert devices_async["active"] == active
 
-def newDeviceList(sm_sync, sm_async, devices, jid):
-    sm_sync.newDeviceList(devices, jid)
-    assertPromiseFulfilled(sm_async.newDeviceList(devices, jid))
+def newDeviceList(sm_sync, sm_async, jid, devices):
+    sm_sync.newDeviceList(jid, devices)
+    assertPromiseFulfilled(sm_async.newDeviceList(jid, devices))
 
-def createSessionManagers():
-    st_sync  = SyncInMemoryStorage()
-    st_async = AsyncInMemoryStorage()
+def createSessionManagers(st_sync = None, st_async = None, expect = None):
+    if st_sync == None:
+        st_sync = SyncInMemoryStorage()
 
-    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
+    if st_async == None:
+        st_async = AsyncInMemoryStorage()
 
-    assert isinstance(sm_sync, SessionManager)
-    assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
+    try:
+        sm_sync = SessionManager.create(
+            st_sync,
+            DeletingOTPKPolicy,
+            SignalBackend,
+            A_JID,
+            A_DID
+        )
+    except Exception as e:
+        assert expect != None
+        assert isinstance(e, expect)
 
-    return st_sync, sm_sync, st_async, sm_async.value
+    sm_async_promise = SessionManager.create(
+        st_async,
+        DeletingOTPKPolicy,
+        SignalBackend,
+        A_JID,
+        A_DID
+    )
 
-def createOtherSessionManagers(jid, dids, other_dids, otpkpolicy = None):
-    if otpkpolicy == None:
-        otpkpolicy = DeletingOTPKPolicy
+    if expect == None:
+        sm_async = assertPromiseFulfilled(sm_async_promise)
+    else:
+        assert isinstance(assertPromiseRejected(sm_async_promise), expect)
+
+    if expect == None:
+        assert isinstance(sm_sync,  SessionManager)
+        assert isinstance(sm_async, SessionManager)
+
+        return st_sync, sm_sync, st_async, sm_async
+
+def createOtherSessionManagers(jid, dids, other_dids, otpk_policy = None):
+    if otpk_policy == None:
+        otpk_policy = DeletingOTPKPolicy
 
     sms_sync  = {}
     sms_async = {}
@@ -85,302 +135,155 @@ def createOtherSessionManagers(jid, dids, other_dids, otpkpolicy = None):
         st_sync  = SyncInMemoryStorage()
         st_async = AsyncInMemoryStorage()
 
-        sm_sync  = SessionManager.create(st_sync,  otpkpolicy, SignalBackend, jid, did)
-        sm_async = SessionManager.create(st_async, otpkpolicy, SignalBackend, jid, did)
+        sm_sync  = SessionManager.create(st_sync, otpk_policy, SignalBackend, jid, did)
+        sm_async = assertPromiseFulfilled(SessionManager.create(
+            st_async,
+            otpk_policy,
+            SignalBackend,
+            jid,
+            did
+        ))
 
-        assert isinstance(sm_sync, SessionManager)
-        assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
-
-        sm_async = sm_async.value
+        assert isinstance(sm_sync,  SessionManager)
+        assert isinstance(sm_async, SessionManager)
 
         for other_jid in other_dids:
-            newDeviceList(sm_sync, sm_async, other_dids[other_jid], other_jid)
+            newDeviceList(sm_sync, sm_async, other_jid, other_dids[other_jid])
 
         sms_sync[did]  = sm_sync
         sms_async[did] = sm_async
     
     return sms_sync, sms_async
 
-def encryptMessage(
-    sm_sync,
-    sm_async,
-    sms_sync,
-    sms_async,
-    jids,
-    dids,
-    pass_bundles,
-    plaintext,
-    explicit_devices,
-    callback,
-    dry_run = False
+def messageEncryption(
+    pass_bundles      = None,
+    trust_devices     = None,
+    pass_devices      = True,
+    expect_problems   = None,
+    expected_problems = None
 ):
-    is_single_recipient = isinstance(jids, str)
-
-    if is_single_recipient:
-        sms_sync  = { jids: sms_sync }
-        sms_async = { jids: sms_async }
-        dids      = { jids: dids }
-
-        if pass_bundles != True and pass_bundles != False:
-            pass_bundles = { jids: pass_bundles }
-
-        jids = [ jids ]
-
-    devices = None
-
-    if explicit_devices:
-        devices = dids
-
-    bundles_sync  = None
-    bundles_async = None
-
-    if pass_bundles != False:
-        bundles_sync  = {}
-        bundles_async = {}
-
-        for jid in jids:
-            bundles_sync [jid] = {}
-            bundles_async[jid] = {}
-
-            bundles_to_pass = None
-
-            if pass_bundles == True:
-                bundles_to_pass = dids[jid]
-            else:
-                bundles_to_pass = pass_bundles[jid]
-
-            for did in bundles_to_pass:
-                bundles_sync [jid][did] = sms_sync [jid][did].public_bundle
-                bundles_async[jid][did] = sms_async[jid][did].public_bundle
-
-    actualCallback = callback
-
-    if isinstance(callback, ErrorExpectingCallback):
-        actualCallback = callback.callback
-
-    sync_encrypted = sm_sync.encryptMessage(
-        jids,
-        plaintext,
-        bundles  = bundles_sync,
-        devices  = devices,
-        callback = actualCallback,
-        dry_run  = dry_run
-    )
-
-    if isinstance(callback, ErrorExpectingCallback):
-        callback.next()
-
-    async_encrypted = assertPromiseFulfilled(sm_async.encryptMessage(
-        jids,
-        plaintext,
-        bundles  = bundles_async,
-        devices  = devices,
-        callback = actualCallback,
-        dry_run  = dry_run
-    ))
-
-    if isinstance(callback, ErrorExpectingCallback):
-        callback.done()
-
-    return {
-        "sync"  : sync_encrypted,
-        "async" : async_encrypted
-    }
-
-def buildSession(sm_sync, sm_async, other_sm_sync, other_sm_async, jid, did, callback):
-    actualCallback = callback
-
-    if isinstance(callback, ErrorExpectingCallback):
-        actualCallback = callback.callback
-
-    result_sync = sm_sync.encryptMessage(
-        jid,
-        "session init".encode("UTF-8"),
-        bundles  = { jid: { did: other_sm_sync.public_bundle } },
-        devices  = { jid: [ did ] },
-        callback = actualCallback
-    )
-
-    if isinstance(callback, ErrorExpectingCallback):
-        callback.next()
-
-    result_async = assertPromiseFulfilled(sm_async.encryptMessage(
-        jid,
-        "session init".encode("UTF-8"),
-        bundles  = { jid: { did: other_sm_async.public_bundle } },
-        devices  = { jid: [ did ] },
-        callback = actualCallback
-    ))
-
-    if isinstance(callback, ErrorExpectingCallback):
-        callback.done()
-
-
-    return {
-        "sync"  : result_sync,
-        "async" : result_async
-    }
-
-def failingErrorCallback(error, jid, device):
-    assert False
-
-class ErrorExpectingCallback(object):
-    def __init__(self, expected_errors):
-        self.__original_expected_errors = expected_errors[:]
-
-        self.__refresh()
-
-    def callback(self, error, jid, device):
-        assert len(self.__expected_errors) > 0
-
-        expected_error = self.__expected_errors.pop(0)
-        assert isinstance(error, expected_error[0])
-        assert jid    == expected_error[1]
-        assert device == expected_error[2]
-
-    def __refresh(self):
-        self.__expected_errors = self.__original_expected_errors[:]
-
-    def next(self):
-        self.done()
-        self.__refresh()
-
-    def done(self):
-        assert len(self.__expected_errors) == 0
-
-def decryptMessage(
-    s_jid,
-    r_dids,
-    sms_sync,
-    sms_async,
-    msgs,
-    plaintext,
-    expect_cipher = False,
-    expected_exception = None
-):
-    msgs_sync  = msgs["sync"]
-    msgs_async = msgs["async"]
-
-    for jid in r_dids:
-        for did in r_dids[jid]:
-            sm_sync  = sms_sync [jid][did]
-            sm_async = sms_async[jid][did]
-
-            msg_sync = msgs_sync["messages"]
-            msg_sync = list(
-                filter(lambda m: m["bare_jid"] == jid and m["rid"] == did, msg_sync)
-            )
-
-            assert len(msg_sync) == 1
-
-            msg_sync = msg_sync[0]
-
-            msg_async = msgs_async["messages"]
-            msg_async = list(
-                filter(lambda m: m["bare_jid"] == jid and m["rid"] == did, msg_async)
-            )
-
-            assert len(msg_async) == 1
-
-            msg_async = msg_async[0]
-
-            if expected_exception == None:
-                plaintext_sync = sm_sync.decryptMessage(
-                    s_jid,
-                    msgs_sync["sid"],
-                    msgs_sync["iv"],
-                    msg_sync["message"],
-                    msg_sync["pre_key"],
-                    msgs_sync.get("payload", None)
-                )
-
-                plaintext_async = assertPromiseFulfilled(
-                    sm_async.decryptMessage(
-                        s_jid,
-                        msgs_async["sid"],
-                        msgs_async["iv"],
-                        msg_async["message"],
-                        msg_async["pre_key"],
-                        msgs_async.get("payload", None)
-                    )
-                )
-            
-                assert plaintext_sync  == plaintext
-                assert plaintext_async == plaintext
-            else:
-                with pytest.raises(expected_exception):
-                    sm_sync.decryptMessage(
-                        s_jid,
-                        msgs_sync["sid"],
-                        msgs_sync["iv"],
-                        msg_sync["message"],
-                        msg_sync["pre_key"],
-                        msgs_sync.get("payload", None)
-                    )
-
-                assert isinstance(assertPromiseRejected(
-                    sm_async.decryptMessage(
-                        s_jid,
-                        msgs_async["sid"],
-                        msgs_async["iv"],
-                        msg_async["message"],
-                        msg_async["pre_key"],
-                        msgs_async.get("payload", None)
-                    )
-                ), expected_exception)
-
-def messageEncryption_singleRecipient(
-    expected_successes,
-    callback,
-    explicit_devices = False,
-    pass_bundles     = True,
-    pass_devices     = True,
-    trusted_devices  = True
-):
-    st_sync, sm_sync, st_async, sm_async = createSessionManagers()
-
-    if trusted_devices == True:
-        st_sync.trust({ B_JID: B_DIDS })
-        st_async.trust({ B_JID: B_DIDS })
+    if pass_bundles == None:
+        pass_bundles = set(B_DIDS)
     else:
-        st_sync.trust({ B_JID: trusted_devices })
-        st_async.trust({ B_JID: trusted_devices })
+        pass_bundles = set(pass_bundles)
 
-    if pass_devices:
-        newDeviceList(sm_sync, sm_async, B_DIDS, B_JID)
+    if trust_devices == None:
+        trust_devices = set(B_DIDS)
+    else:
+        trust_devices = set(trust_devices)
 
+    if expect_problems == None:
+        expect_problems = set()
+    else:
+        expect_problems = set(expect_problems)
+
+    st_sync, sm_sync, st_async, sm_async = createSessionManagers()
     b_sms_sync, b_sms_async = createOtherSessionManagers(
         B_JID,
         B_DIDS,
         { A_JID: [ A_DID ] }
     )
 
-    plaintext = "This is a test!".encode("US-ASCII")
+    if pass_devices:
+        newDeviceList(sm_sync, sm_async, B_JID, B_DIDS)
 
-    encrypted_messages = encryptMessage(
-        sm_sync,
-        sm_async,
-        b_sms_sync,
-        b_sms_async,
-        B_JID,
-        B_DIDS,
-        pass_bundles     = pass_bundles,
-        plaintext        = plaintext,
-        explicit_devices = explicit_devices,
-        callback         = callback
-    )
+    trust(st_sync, st_async, { B_JID: trust_devices })
 
-    decryptMessage(
-        A_JID,
-        { B_JID: expected_successes },
-        { B_JID: b_sms_sync },
-        { B_JID: b_sms_async },
-        encrypted_messages,
-        plaintext
-    )
+    bundles_sync = {
+        did: b_sms_sync [did].public_bundle
+        for did in B_DIDS
+        if did in pass_bundles
+    }
 
-def test_create_supplyInfo():
-    createSessionManagers()
+    bundles_async = {
+        did: b_sms_async[did].public_bundle
+        for did in B_DIDS
+        if did in pass_bundles
+    }
+
+    problems_sync  = []
+    problems_async = []
+
+    try:
+        encrypted_sync = sm_sync.encryptMessage(
+            [ B_JID ],
+            "single message".encode("UTF-8"),
+            { B_JID: bundles_sync },
+            { B_JID: expect_problems }
+        )
+    except EncryptionProblemsException as e:
+        problems_sync = e.problems
+
+    try:
+        encrypted_async = assertPromiseFulfilledOrRaise(sm_async.encryptMessage(
+            [ B_JID ],
+            "single message".encode("UTF-8"),
+            { B_JID: bundles_async },
+            { B_JID: expect_problems }
+        ))
+    except EncryptionProblemsException as e:
+        problems_async = e.problems
+
+    if expected_problems == None:
+        successes_sync  = set(encrypted_sync ["keys"][B_JID].keys())
+        successes_async = set(encrypted_async["keys"][B_JID].keys())
+
+        expected_successes = set(B_DIDS) - expect_problems
+
+        assert expected_successes == successes_sync == successes_async
+
+        for did in expected_successes:
+            decrypted_sync = b_sms_sync[did].decryptMessage(
+                A_JID,
+                A_DID,
+                encrypted_sync["iv"],
+                encrypted_sync["keys"][B_JID][did]["data"],
+                encrypted_sync["keys"][B_JID][did]["pre_key"],
+                encrypted_sync["payload"]
+            )
+
+            decrypted_async = assertPromiseFulfilled(b_sms_async[did].decryptMessage(
+                A_JID,
+                A_DID,
+                encrypted_async["iv"],
+                encrypted_async["keys"][B_JID][did]["data"],
+                encrypted_async["keys"][B_JID][did]["pre_key"],
+                encrypted_async["payload"]
+            ))
+
+            assert decrypted_sync == decrypted_async == "single message".encode("UTF-8")
+    else:
+        assert problems_sync == problems_async == expected_problems
+
+def test_create():
+    st_sync, _, st_async, _ = createSessionManagers()
+
+    # Create using the same storage with the same information
+    createSessionManagers(st_sync, st_async)
+
+    # Replace the device id
+    overrideOwnData(st_sync, st_async, A_JID, B_DID)
+
+    # This time, the create call should raise an InconsistentInfoException
+    createSessionManagers(st_sync, st_async, InconsistentInfoException)
+
+    # Replace the jid
+    overrideOwnData(st_sync, st_async, B_JID, A_DID)
+
+    # This time, the create call should raise an InconsistentInfoException
+    createSessionManagers(st_sync, st_async, InconsistentInfoException)
+
+    # Replace both the device id and the jid
+    overrideOwnData(st_sync, st_async, B_JID, B_DID)
+
+    # This time, the create call should raise an InconsistentInfoException
+    createSessionManagers(st_sync, st_async, InconsistentInfoException)
+
+    # Go back to the original data
+    overrideOwnData(st_sync, st_async, A_JID, A_DID)
+
+    # Create using the same storage with the same information
+    createSessionManagers(st_sync, st_async)
 
 def test_bundle_serialization():
     _, sm_sync, _, sm_async = createSessionManagers()
@@ -394,302 +297,196 @@ def test_bundle_serialization():
     assert ex.parse(sb, **bundle_sync.serialize(sb))  == bundle_sync
     assert ex.parse(sb, **bundle_async.serialize(sb)) == bundle_async
 
-def test_create_inconsistentInfo():
-    st_sync, _, st_async, _ = createSessionManagers()
-
-    with pytest.raises(InconsistentInfoException):
-        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, SignalBackend, A_JID, B_DID)
-    with pytest.raises(InconsistentInfoException):
-        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, SignalBackend, B_JID, A_DID)
-    with pytest.raises(InconsistentInfoException):
-        sm_sync = SessionManager.create(st_sync, DeletingOTPKPolicy, SignalBackend, B_JID, B_DID)
-
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, A_JID, B_DID)
-    assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, B_JID, A_DID)
-    assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, B_JID, B_DID)
-    assert isinstance(assertPromiseRejected(sm_async), InconsistentInfoException)
-
-def test_create_consistentInfo():
-    st_sync, _, st_async, _ = createSessionManagers()
-
-    sm_sync  = SessionManager.create(st_sync,  DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
-    sm_async = SessionManager.create(st_async, DeletingOTPKPolicy, SignalBackend, A_JID, A_DID)
-
-    assert isinstance(sm_sync, SessionManager)
-    assert isinstance(assertPromiseFulfilled(sm_async), SessionManager)
-
 def test_deviceList():
     _, sm_sync, _, sm_async = createSessionManagers()
 
     getDevices(sm_sync, sm_async, None,  [], [ A_DID ])
     getDevices(sm_sync, sm_async, A_JID, [], [ A_DID ])
     
-    newDeviceList(sm_sync, sm_async, A_DIDS, A_JID)
+    newDeviceList(sm_sync, sm_async, A_JID, A_DIDS)
     getDevices(sm_sync, sm_async, A_JID, [], A_DIDS)
     
-    newDeviceList(sm_sync, sm_async, A_DIDS[:2], A_JID)
+    newDeviceList(sm_sync, sm_async, A_JID, A_DIDS[:2])
     getDevices(sm_sync, sm_async, A_JID, A_DIDS[2:], A_DIDS[:2])
     
-    newDeviceList(sm_sync, sm_async, [], A_JID)
+    newDeviceList(sm_sync, sm_async, A_JID, [])
     getDevices(sm_sync, sm_async, A_JID, set(A_DIDS) - set([ A_DID ]), [ A_DID ])
 
-def test_messageEncryption_singleRecipient_implicitDevices():
-    messageEncryption_singleRecipient(
-        expected_successes = B_DIDS,
-        callback           = failingErrorCallback
-    )
-
-def test_messageEncryption_singleRecipient_explicitDevices():
-    messageEncryption_singleRecipient(
-        expected_successes = B_DIDS,
-        callback           = failingErrorCallback,
-        explicit_devices   = True
-    )
-
-def test_messageEncryption_multipleRecipients():
-    _, sm_sync, _, sm_async = createSessionManagers()
-
-    newDeviceList(sm_sync, sm_async, B_DIDS, B_JID)
-    newDeviceList(sm_sync, sm_async, C_DIDS, C_JID)
-
-    b_sms_sync, b_sms_async = createOtherSessionManagers(
-        B_JID,
-        B_DIDS,
-        { A_JID: [ A_JID ], B_JID: B_DIDS, C_JID: C_DIDS }
-    )
-
-    c_sms_sync, c_sms_async = createOtherSessionManagers(
-        C_JID,
-        C_DIDS,
-        { A_JID: [ A_JID ], B_JID: B_DIDS, C_JID: C_DIDS }
-    )
-
-    plaintext = "This is a test!".encode("US-ASCII")
-
-    encrypted_messages = encryptMessage(
-        sm_sync,
-        sm_async,
-        { B_JID: b_sms_sync,  C_JID: c_sms_sync },
-        { B_JID: b_sms_async, C_JID: c_sms_async },
-        [ B_JID, C_JID ],
-        { B_JID: B_DIDS, C_JID: C_DIDS },
-        pass_bundles     = True,
-        plaintext        = plaintext,
-        explicit_devices = False,
-        callback         = failingErrorCallback
-    )
-
-    decryptMessage(
-        A_JID,
-        { B_JID: B_DIDS,      C_JID: C_DIDS },
-        { B_JID: b_sms_sync,  C_JID: c_sms_sync },
-        { B_JID: b_sms_async, C_JID: c_sms_async },
-        encrypted_messages,
-        plaintext
-    )
-
-def test_messageEncryption_implicitOwnDevices():
-    a_sms_sync, a_sms_async = createOtherSessionManagers(
-        A_JID,
-        A_DIDS,
-        { A_JID: A_DIDS, B_JID: B_DIDS }
-    )
-
-    b_sms_sync, b_sms_async = createOtherSessionManagers(
-        B_JID,
-        B_DIDS,
-        { A_JID: A_DIDS, B_JID: B_DIDS }
-    )
-
-    plaintext = "This is a test!".encode("US-ASCII")
-
-    encrypted_messages = encryptMessage(
-        a_sms_sync[A_DID],
-        a_sms_async[A_DID],
-        { A_JID: a_sms_sync,  B_JID: b_sms_sync },
-        { A_JID: a_sms_async, B_JID: b_sms_async },
-        [ A_JID, B_JID ],
-        { A_JID: A_DIDS, B_JID: B_DIDS },
-        pass_bundles     = True,
-        plaintext        = plaintext,
-        explicit_devices = False,
-        callback         = failingErrorCallback
-    )
-
-    decryptMessage(
-        A_JID,
-        { A_JID: set(A_DIDS) - set([ A_DID ]), B_JID: B_DIDS },
-        { A_JID: a_sms_sync,  B_JID: b_sms_sync },
-        { A_JID: a_sms_async, B_JID: b_sms_async },
-        encrypted_messages,
-        plaintext
-    )
+def test_messageEncryption():
+    messageEncryption()
 
 def test_messageEncryption_missingBundle():
-    expected_errors = [ (MissingBundleException, B_JID, did) for did in B_DIDS[2:] ]
-
-    messageEncryption_singleRecipient(
-        expected_successes = B_DIDS[:2],
-        callback           = ErrorExpectingCallback(expected_errors),
-        pass_bundles       = B_DIDS[:2]
-    )
+    messageEncryption(pass_bundles = B_DIDS[:2], expected_problems = [
+        MissingBundleException(B_JID, B_DIDS[2])
+    ])
 
 def test_messageEncryption_allBundlesMissing():
-    expected_errors = [ (MissingBundleException, B_JID, did) for did in B_DIDS ]
-    expected_errors.append((NoEligibleDevicesException, B_JID, None))
-
-    messageEncryption_singleRecipient(
-        expected_successes = [],
-        callback           = ErrorExpectingCallback(expected_errors),
-        pass_bundles       = []
-    )
+    messageEncryption(pass_bundles = [], expected_problems = [
+        MissingBundleException(B_JID, B_DIDS[0]),
+        MissingBundleException(B_JID, B_DIDS[1]),
+        MissingBundleException(B_JID, B_DIDS[2]),
+        NoEligibleDevicesException(B_JID)
+    ])
 
 def test_messageEncryption_untrustedDevice():
-    expected_errors = [ (UntrustedException, B_JID, did) for did in B_DIDS[2:] ]
-
-    messageEncryption_singleRecipient(
-        expected_successes = B_DIDS[:2],
-        callback           = ErrorExpectingCallback(expected_errors),
-        trusted_devices    = B_DIDS[:2]
-    )
+    messageEncryption(trust_devices = B_DIDS[:2], expected_problems = [
+        UntrustedException(B_JID, B_DIDS[2])
+    ])
 
 def test_messageEncryption_noTrustedDevices():
-    expected_errors = [ (UntrustedException, B_JID, did) for did in B_DIDS ]
-    expected_errors.append((NoEligibleDevicesException, B_JID, None))
-
-    messageEncryption_singleRecipient(
-        expected_successes = [],
-        callback           = ErrorExpectingCallback(expected_errors),
-        trusted_devices    = []
-    )
+    messageEncryption(trust_devices = [], expected_problems = [
+        UntrustedException(B_JID, B_DIDS[0]),
+        UntrustedException(B_JID, B_DIDS[1]),
+        UntrustedException(B_JID, B_DIDS[2]),
+        NoEligibleDevicesException(B_JID)
+    ])
 
 def test_messageEncryption_noDevices():
-    expected_errors = [ (NoDevicesException, B_JID, None) ]
+    messageEncryption(pass_devices = False, expected_problems = [
+        NoDevicesException(B_JID)
+    ])
 
-    messageEncryption_singleRecipient(
-        expected_successes = [],
-        callback           = ErrorExpectingCallback(expected_errors),
-        pass_devices       = False
+def test_messageEncryption_expectProblems():
+    messageEncryption(
+        pass_bundles = B_DIDS[:2],
+        trust_devices = B_DIDS[1:],
+        expected_problems = [
+            UntrustedException(B_JID, B_DIDS[0]),
+            MissingBundleException(B_JID, B_DIDS[2])
+        ]
     )
 
-def test_decryptMessage_noSession():
+    messageEncryption(
+        pass_bundles = B_DIDS[:2],
+        trust_devices = B_DIDS[1:],
+        expect_problems = [ B_DIDS[0], B_DIDS[2] ]
+    )
+
+def test_messageDecryption_noSession():
     _, sm_sync, _, sm_async = createSessionManagers()
-
-    newDeviceList(sm_sync, sm_async, [ B_DID ], B_JID)
-
     b_sms_sync, b_sms_async = createOtherSessionManagers(
         B_JID,
         [ B_DID ],
         { A_JID: [ A_DID ] }
     )
 
-    b_sm_sync  = b_sms_sync[B_DID]
+    newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
+
+    b_sm_sync  = b_sms_sync [B_DID]
     b_sm_async = b_sms_async[B_DID]
 
-    result_a = buildSession(
-        sm_sync,
-        sm_async,
-        b_sm_sync,
-        b_sm_async,
-        B_JID,
-        B_DID,
-        failingErrorCallback
+    sm_sync.encryptMessage(
+        [ B_JID ],
+        "first message".encode("UTF-8"),
+        { B_JID: { B_DID: b_sm_sync.public_bundle } }
     )
 
-    assert len(result_a["sync"] ["messages"]) == 1
-    assert len(result_a["async"]["messages"]) == 1
-    assert result_a["sync"] ["messages"][0]["rid"] == B_DID
-    assert result_a["async"]["messages"][0]["rid"] == B_DID
-    assert result_a["sync"] ["messages"][0]["pre_key"]
-    assert result_a["async"]["messages"][0]["pre_key"]
+    assertPromiseFulfilled(sm_async.encryptMessage(
+        [ B_JID ],
+        "first message".encode("UTF-8"),
+        { B_JID: { B_DID: b_sm_async.public_bundle } }
+    ))
 
-    plaintext = "Second message".encode("US_ASCII")
-
-    result_b = encryptMessage(
-        sm_sync,
-        sm_async,
-        b_sms_sync,
-        b_sms_async,
-        B_JID,
-        [ B_DID ],
-        pass_bundles     = False,
-        plaintext        = plaintext,
-        explicit_devices = False,
-        callback         = failingErrorCallback
+    encrypted_sync = sm_sync.encryptMessage(
+        [ B_JID ],
+        "second message".encode("UTF-8")
     )
 
-    assert len(result_b["sync"] ["messages"]) == 1
-    assert len(result_b["async"]["messages"]) == 1
-    assert result_b["sync"] ["messages"][0]["rid"] == B_DID
-    assert result_b["async"]["messages"][0]["rid"] == B_DID
-    assert not result_b["sync"] ["messages"][0]["pre_key"]
-    assert not result_b["async"]["messages"][0]["pre_key"]
+    encrypted_async = assertPromiseFulfilled(sm_async.encryptMessage(
+        [ B_JID ],
+        "second message".encode("UTF-8")
+    ))
 
-    decryptMessage(
-        A_JID,
-        { B_JID: [ B_DID ] },
-        { B_JID: b_sms_sync },
-        { B_JID: b_sms_async },
-        result_b,
-        plaintext,
-        expected_exception = NoSessionException
-    )
+    try:
+        decrypted_sync = b_sm_sync.decryptMessage(
+            A_JID,
+            A_DID,
+            encrypted_sync["iv"],
+            encrypted_sync["keys"][B_JID][B_DID]["data"],
+            encrypted_sync["keys"][B_JID][B_DID]["pre_key"],
+            encrypted_sync["payload"]
+        )
 
-def otpkPolicyTest(otpkpolicy, expect_exception):
+        assert False
+    except NoSessionException as e:
+        assert e == NoSessionException(A_JID, A_DID)
+
+    try:
+        decrypted_async = assertPromiseFulfilledOrRaise(b_sm_async.decryptMessage(
+            A_JID,
+            A_DID,
+            encrypted_async["iv"],
+            encrypted_async["keys"][B_JID][B_DID]["data"],
+            encrypted_async["keys"][B_JID][B_DID]["pre_key"],
+            encrypted_async["payload"]
+        ))
+
+        assert False
+    except NoSessionException as e:
+        assert e == NoSessionException(A_JID, A_DID)
+
+def otpkPolicyTest(otpk_policy, expect_exception):
     _, sm_sync, _, sm_async = createSessionManagers()
-
-    newDeviceList(sm_sync, sm_async, [ B_DID ], B_JID)
-
     b_sms_sync, b_sms_async = createOtherSessionManagers(
         B_JID,
         [ B_DID ],
         { A_JID: [ A_DID ] },
-        otpkpolicy = otpkpolicy
+        otpk_policy = otpk_policy
     )
 
-    b_sm_sync  = b_sms_sync[B_DID]
+    newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
+
+    b_sm_sync  = b_sms_sync [B_DID]
     b_sm_async = b_sms_async[B_DID]
 
-    result = buildSession(
-        sm_sync,
-        sm_async,
-        b_sm_sync,
-        b_sm_async,
-        B_JID,
-        B_DID,
-        failingErrorCallback
+    pre_key_message_sync = sm_sync.encryptMessage(
+        [ B_JID ],
+        "first message".encode("UTF-8"),
+        { B_JID: { B_DID: b_sm_sync.public_bundle } }
     )
 
-    decryptMessage(
+    pre_key_message_async = assertPromiseFulfilled(sm_async.encryptMessage(
+        [ B_JID ],
+        "first message".encode("UTF-8"),
+        { B_JID: { B_DID: b_sm_async.public_bundle } }
+    ))
+
+    params_sync = [
         A_JID,
-        { B_JID: [ B_DID ] },
-        { B_JID: b_sms_sync },
-        { B_JID: b_sms_async },
-        result,
-        plaintext = "session init".encode("UTF-8"),
-        expect_cipher = False
-    )
+        A_DID,
+        pre_key_message_sync["iv"],
+        pre_key_message_sync["keys"][B_JID][B_DID]["data"],
+        pre_key_message_sync["keys"][B_JID][B_DID]["pre_key"],
+        pre_key_message_sync["payload"]
+    ]
 
-    expected_exception = None
-
-    if expect_exception:
-        expected_exception = x3dh.exceptions.KeyExchangeException
-
-    decryptMessage(
+    params_async = [
         A_JID,
-        { B_JID: [ B_DID ] },
-        { B_JID: b_sms_sync },
-        { B_JID: b_sms_async },
-        result,
-        plaintext = "session init".encode("UTF-8"),
-        expect_cipher = False,
-        expected_exception = expected_exception
-    )
+        A_DID,
+        pre_key_message_async["iv"],
+        pre_key_message_async["keys"][B_JID][B_DID]["data"],
+        pre_key_message_async["keys"][B_JID][B_DID]["pre_key"],
+        pre_key_message_async["payload"]
+    ]
 
-def test_otpkPolicy_default():
-    pass#assert False TODO
+    b_sm_sync.decryptMessage(*params_sync)
+    assertPromiseFulfilled(b_sm_async.decryptMessage(*params_async))
+
+    try:
+        b_sm_sync.decryptMessage(*params_sync)
+
+        assert not expect_exception
+    except KeyExchangeException as e:
+        assert expect_exception
+        assert e == KeyExchangeException(A_JID, A_DID, "unused")
+
+    try:
+        assertPromiseFulfilledOrRaise(b_sm_async.decryptMessage(*params_async))
+
+        assert not expect_exception
+    except KeyExchangeException as e:
+        assert expect_exception
+        assert e == KeyExchangeException(A_JID, A_DID, "unused")
 
 def test_otpkPolicy_deleting():
     otpkPolicyTest(DeletingOTPKPolicy, True)
@@ -697,75 +494,8 @@ def test_otpkPolicy_deleting():
 def test_otpkPolicy_keeping():
     otpkPolicyTest(KeepingOTPKPolicy, False)
 
-def test_dryRun():
-    st_sync, sm_sync, st_async, sm_async = createSessionManagers()
-
-    st_sync.trust({  B_JID: B_DIDS[1:] })
-    st_async.trust({ B_JID: B_DIDS[1:] })
-
-    newDeviceList(sm_sync, sm_async, B_DIDS, B_JID)
-
-    b_sms_sync, b_sms_async = createOtherSessionManagers(
-        B_JID,
-        B_DIDS,
-        { A_JID: [ A_DID ] }
-    )
-
-    plaintext = "This is a test!".encode("US-ASCII")
-
-    expected_errors = [
-        (UntrustedException,     B_JID, B_DIDS[0]),
-        (MissingBundleException, B_JID, B_DIDS[2])
-    ]
-
-    before_dry_run_sync  = st_sync.dump()
-    before_dry_run_async = st_async.dump()
-
-    encrypted_messages = encryptMessage(
-        sm_sync,
-        sm_async,
-        b_sms_sync,
-        b_sms_async,
-        B_JID,
-        B_DIDS,
-        pass_bundles     = B_DIDS[:2],
-        plaintext        = plaintext,
-        explicit_devices = False,
-        callback         = ErrorExpectingCallback(expected_errors),
-        dry_run          = True
-    )
-
-    after_dry_run_sync  = st_sync.dump()
-    after_dry_run_async = st_async.dump()
-
-    assert before_dry_run_sync  == after_dry_run_sync
-    assert before_dry_run_async == after_dry_run_async
-
-    encrypted_messages = encryptMessage(
-        sm_sync,
-        sm_async,
-        b_sms_sync,
-        b_sms_async,
-        B_JID,
-        B_DIDS,
-        pass_bundles     = B_DIDS[:2],
-        plaintext        = plaintext,
-        explicit_devices = False,
-        callback         = ErrorExpectingCallback(expected_errors),
-        dry_run          = False
-    )
-
-    decryptMessage(
-        A_JID,
-        { B_JID: [ B_DIDS[1] ] },
-        { B_JID: b_sms_sync },
-        { B_JID: b_sms_async },
-        encrypted_messages,
-        plaintext
-    )
-
-    after_normal_run_sync  = st_sync.dump()
-    after_normal_run_async = st_async.dump()
-
-    assert not after_dry_run_sync  == after_normal_run_sync
-    assert not after_dry_run_async == after_normal_run_async
+# TODO
+# Default OTPKPolicy
+# KeyExchangeExceptions during encryptMessage
+# Inactive device cleanup
+# Whole JID deletion

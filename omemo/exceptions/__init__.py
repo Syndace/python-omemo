@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 
+from .encryptionproblemsexception import EncryptionProblemsException
 from .inconsistentinfoexception import InconsistentInfoException
+from .keyexchangeexception import KeyExchangeException
 from .missingbundleexception import MissingBundleException
 from .nodevicesexception import NoDevicesException
 from .noeligibledevicesexception import NoEligibleDevicesException

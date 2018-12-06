@@ -1,7 +1,9 @@
-class UntrustedException(Exception):
-    def __init__(self, bare_jid, device):
+class KeyExchangeException(Exception):
+    def __init__(self, bare_jid, device, message):
+        super(KeyExchangeException, self).__init__(message)
+
         self.__bare_jid = bare_jid
-        self.__device   = device
+        self.__device = device
 
     @property
     def bare_jid(self):
@@ -13,7 +15,7 @@ class UntrustedException(Exception):
 
     def __eq__(self, other):
         return (
-            isinstance(other, UntrustedException) and
+            isinstance(other, KeyExchangeException) and
             other.bare_jid == self.bare_jid and
             other.device == self.device
         )

@@ -78,7 +78,6 @@ def make(backend):
         def getSharedSecretActive(
             self,
             other_public_bundle,
-            _DEBUG_sendingRatchetKey = None,
             *args,
             **kwargs
         ):
@@ -88,16 +87,6 @@ def make(backend):
                 **kwargs
             )
 
-            own_key = None
-            if _DEBUG_sendingRatchetKey != None:
-                import logging
-
-                logging.getLogger("omemo.X3DHDoubleRatchet").error(
-                    "WARNING: RUNNING UNSAFE DEBUG-ONLY OPERATION"
-                )
-
-                own_key = _DEBUG_sendingRatchetKey
-
             # When actively initializing a session
             # - The shared secret becomes the root key
             # - The public SPK used for X3DH becomes the other's enc for the dh ratchet
@@ -106,7 +95,7 @@ def make(backend):
             session_init_data["dr"] = backend.DoubleRatchet(
                 session_init_data["ad"],
                 session_init_data["sk"],
-                own_key = own_key,
+                own_key = None,
                 other_pub = other_public_bundle.spk["key"]
             )
 

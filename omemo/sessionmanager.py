@@ -8,12 +8,12 @@ import time
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from x3dh.exceptions import KeyExchangeException
-
 from . import promise
 from . import storagewrapper
 from .exceptions import *
 from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet
+
+import x3dh
 
 def d(*args, **kwargs):
     logging.getLogger("omemo.SessionManager").debug(*args, **kwargs)
@@ -32,12 +32,6 @@ def checkPositionalArgument(position):
         return args[position].is_async
 
     return _checkPositionalArgument
-
-def checkConst(const):
-    def _checkConst(*args, **kwargs):
-        return const
-
-    return _checkConst
 
 class SessionManager(object):
     ################################
@@ -113,167 +107,238 @@ class SessionManager(object):
     # encryption #
     ##############
 
-    def __loggingEncryptMessageCallback(self, e, bare_jid, device):
-        w(
-            "Exception during encryption for device " +
-            str(device) +
-            " of bare jid " +
-            bare_jid +
-            ": " +
-            str(e.__class__.__name__),
-            exc_info = e
-        )
-
     @promise.maybe_coroutine(checkSelf)
     def encryptMessage(
         self,
         bare_jids,
         plaintext,
         bundles = None,
-        devices = None,
-        callback = None,
-        dry_run = False
+        expect_problems = None
     ):
+        """
+        bare_jids: iterable<string>
+        plaintext: bytes
+        bundles: { [bare_jid: string] => { [device_id: int] => ExtendedPublicBundle } }
+        expect_problems: { [bare_jid: string] => iterable<int> }
+
+        returns: {
+            iv: bytes,
+            sid: int,
+            keys: {
+                [bare_jid: string] => {
+                    [device: int] => {
+                        "data"    : bytes,
+                        "pre_key" : boolean
+                    }
+                }
+            },
+            payload: bytes
+        }
+        """
+
         yield self.runInactiveDeviceCleanup()
 
-        # Lift a single bare_jid into a list
-        if not isinstance(bare_jids, list):
-            bare_jids = [ bare_jids ]
+        #########################
+        # parameter preparation #
+        #########################
 
-        # Add the own bare_jid to the list
-        bare_jids = set(bare_jids) | set([ self.__my_bare_jid ])
+        try:
+            bare_jids = set(bare_jids)
+        except TypeError:
+            bare_jids = set([ bare_jids ])
 
-        # If no callback was passed, log the exceptions
-        if not callback:
-            callback = self.__loggingEncryptMessageCallback
-
-        # If no bundles were passed, default to an empty dict
         if bundles == None:
             bundles = {}
 
-        if devices != None:
-            devices = {
-                bare_jid: set(devices.get(bare_jid, [])) for bare_jid in bare_jids
-            }
+        if expect_problems == None:
+            expect_problems = {}
         else:
-            devices = {}
+            for bare_jid in expect_problems:
+                expect_problems[bare_jid] = set(expect_problems[bare_jid])
 
-            for bare_jid in bare_jids:
-                # Load all active devices for this bare_jid
-                devices[bare_jid] = yield self.__loadActiveDevices(bare_jid)
+        # Add the own bare jid to the set of jids
+        bare_jids.add(self.__my_bare_jid)
 
-                # If there are no active devices for this jid, generate an exception
-                if len(devices[bare_jid]) == 0:
-                    del devices[bare_jid]
+        ########################################################
+        # check all preconditions and prepare missing sessions #
+        ########################################################
 
-                    callback(NoDevicesException(), bare_jid, None)
+        problems = []
 
-        # Don't encrypt the message for the sending device
-        try:
-            devices[self.__my_bare_jid].remove(self.__my_device_id)
-        except (KeyError, ValueError):
-            pass
+        # Prepare the lists of devices to encrypt for
+        encrypt_for = {}
 
-        # Store all encrypted messages into this array
-        # The elements will look like this:
-        # {
-        #     "rid"      : receiver_id  :int,
-        #     "pre_key"  : pre_key      :bool,
-        #     "message"  : message_data :bytes,
-        #     "bare_jid" : bare_jid     :string
-        # }
-        messages = []
+        for bare_jid in bare_jids:
+            devices = yield self.__loadActiveDevices(bare_jid)
 
-        aes_gcm_key = AESGCM.generate_key(bit_length = 128)
+            if len(devices) == 0:
+                problems.append(NoDevicesException(bare_jid))
+            else:
+                encrypt_for[bare_jid] = devices
+
+        # Remove the sending devices from the list
+        encrypt_for[self.__my_bare_jid].remove(self.__my_device_id)
+
+        # Check the trust for each device
+        for bare_jid, devices in encrypt_for.items():
+            untrusted = set()
+
+            for device in devices:
+                device_trusted = yield self._storage.isTrusted(bare_jid, device)
+
+                if not device_trusted:
+                    untrusted.add(device)
+
+            devices -= untrusted
+
+            for device in untrusted:
+                if not device in expect_problems.get(bare_jid, set()):
+                    problems.append(UntrustedException(bare_jid, device))
+
+        # Check whether all required bundles are available
+        for bare_jid, devices in encrypt_for.items():
+            missing_bundles = set()
+
+            for device in devices:
+                session = yield self.__loadSession(bare_jid, device)
+
+                if session == None:
+                    if not device in bundles.get(bare_jid, {}):
+                        missing_bundles.add(device)
+
+            devices -= missing_bundles
+
+            for device in missing_bundles:
+                if not device in expect_problems.get(bare_jid, set()):
+                    problems.append(MissingBundleException(bare_jid, device))
+
+        # Check for jids with no eligible devices
+        for bare_jid, devices in list(encrypt_for.items()):
+            # Skip this check for my own bare jid
+            if bare_jid == self.__my_bare_jid:
+                continue
+
+            if len(devices) == 0:
+                problems.append(NoEligibleDevicesException(bare_jid))
+                del encrypt_for[bare_jid]
+
+        # Prepare missing sessions
+        for bare_jid, devices in encrypt_for.items():
+            key_exchange_problems = {}
+
+            for device in devices:
+                # Load the session
+                session = yield self.__loadSession(bare_jid, device)
+
+                # If no session exists, create a new session
+                if session == None:
+                    # Get the required bundle
+                    bundle = bundles[bare_jid][device]
+
+                    try:
+                        # Build the session, discarding the result afterwards. This is
+                        # just to check that the key exchange works.
+                        self.__state.getSharedSecretActive(bundle)
+                    except x3dh.exceptions.KeyExchangeExcetion as e:
+                        key_exchange_problems[device] = str(e)
+
+            encrypt_for[bare_jid] -= set(key_exchange_problems.keys())
+
+            for device, message in key_exchange_problems.items():
+                if not device in expect_problems.get(bare_jid, set()):
+                    problems.append(KeyExchangeException(
+                        bare_jid,
+                        device,
+                        message
+                    ))
+                    
+        if len(problems) > 0:
+            raise EncryptionProblemsException(problems)
+
+        ##############
+        # encryption #
+        ##############
+
+        # Prepare the AES-GCM cipher and encrypt the plaintext
+
+        # TODO: Change this to 12 as soon as all other OMEMO libs support that.
         aes_gcm_iv  = os.urandom(16)
-
-        aes_gcm = AESGCM(aes_gcm_key)
+        aes_gcm_key = AESGCM.generate_key(bit_length = 128)
+        aes_gcm     = AESGCM(aes_gcm_key)
 
         ciphertext = aes_gcm.encrypt(aes_gcm_iv, plaintext, None)
 
+        # Split the tag and the ciphertext
         aes_gcm_tag = ciphertext[-16:]
         ciphertext  = ciphertext[:-16]
 
-        @promise.maybe_coroutine(checkConst(checkSelf(self)))
-        def __encryptAll(devices, bare_jid):
-            encrypted_count = 0
+        # {
+        #     [bare_jid: string] => {
+        #         [device: int] => {
+        #             "data"    : bytes,
+        #             "pre_key" : boolean
+        #         }
+        #     }
+        # }
+        encrypted_keys = {}
+
+        for bare_jid, devices in encrypt_for.items():
+            encrypted_keys[bare_jid] = {}
 
             for device in devices:
-                is_trusted = yield self._storage.isTrusted(bare_jid, device)
-                if not is_trusted:
-                    callback(UntrustedException(), bare_jid, device)
-                    continue
-
+                # Note whether this is a response to a PreKeyMessage
                 if self.__state.hasBoundOTPK(bare_jid, device):
-                    if not dry_run:
-                        self.__state.respondedTo(bare_jid, device)
-                        yield self._storage.storeState(self.__state.serialize())
+                    self.__state.respondedTo(bare_jid, device)
+                    yield self._storage.storeState(self.__state.serialize())
 
-                dr = yield self.__loadSession(bare_jid, device)
+                # Load the session
+                session = yield self.__loadSession(bare_jid, device)
 
-                pre_key = dr == None
+                # If no session exists, this will be a PreKeyMessage
+                pre_key = session == None
 
+                # Create a new session                
                 if pre_key:
-                    try:
-                        bundle = bundles[bare_jid][device]
-                    except KeyError:
-                        callback(MissingBundleException(), bare_jid, device)
-                        continue
+                    # Get the required bundle
+                    bundle = bundles[bare_jid][device]
 
-                    if not dry_run:
-                        try:
-                            session_init_data = self.__state.getSharedSecretActive(bundle)
-                        except KeyExchangeException as e:
-                            callback(e, bare_jid, device)
-                            continue
+                    # Build the session
+                    session_and_init_data = self.__state.getSharedSecretActive(bundle)
+                    
+                    session = session_and_init_data["dr"]
+                    session_init_data = session_and_init_data["to_other"]
 
-                        # Store the changed state
-                        yield self._storage.storeState(self.__state.serialize())
+                # Encrypt the AES GCM key and tag
+                encrypted_data = session.encryptMessage(aes_gcm_key + aes_gcm_tag)
 
-                        dr                = session_init_data["dr"]
-                        session_init_data = session_init_data["to_other"]
+                # Store the new/changed session
+                yield self.__storeSession(bare_jid, device, session)
 
-                        pre_key = True
+                # Serialize the data into a simple message format
+                serialized = self.__backend.WireFormat.messageToWire(
+                    encrypted_data["ciphertext"],
+                    encrypted_data["header"],
+                    { "DoubleRatchet": encrypted_data["additional"] }
+                )
 
-                if not dry_run:
-                    message = dr.encryptMessage(aes_gcm_key + aes_gcm_tag)
-
-                    # Store the new/changed session
-                    yield self.__storeSession(bare_jid, device, dr)
-
-                    message_data = self.__backend.WireFormat.messageToWire(
-                        message["ciphertext"],
-                        message["header"],
-                        { "DoubleRatchet": message["additional"] }
+                # If it is a PreKeyMessage, apply an additional step to the serialization.
+                if pre_key:
+                    serialized = self.__backend.WireFormat.preKeyMessageToWire(
+                        session_init_data,
+                        serialized,
+                        { "DoubleRatchet": encrypted_data["additional"] }
                     )
 
-                    if pre_key:
-                        message_data = self.__backend.WireFormat.preKeyMessageToWire(
-                            session_init_data,
-                            message_data,
-                            { "DoubleRatchet": message["additional"] }
-                        )
-
-                    messages.append({
-                        "message"  : message_data,
-                        "pre_key"  : pre_key,
-                        "bare_jid" : bare_jid,
-                        "rid"      : device
-                    })
-
-                encrypted_count += 1
-
-            if encrypted_count == 0:
-                if bare_jid != self.__my_bare_jid:
-                    callback(NoEligibleDevicesException(), bare_jid, None)
-
-        for bare_jid, deviceList in devices.items():
-            yield __encryptAll(deviceList, bare_jid)
+                # Add the final encrypted and serialized data.
+                encrypted_keys[bare_jid][device] = {
+                    "data"    : serialized,
+                    "pre_key" : pre_key
+                }
 
         promise.returnValue({
             "iv": aes_gcm_iv,
             "sid": self.__my_device_id,
-            "messages": messages,
+            "keys": encrypted_keys,
             "payload": ciphertext
         })
 
@@ -289,7 +354,7 @@ class SessionManager(object):
         iv,
         message,
         is_pre_key_message,
-        payload = None,
+        payload,
         additional_information = None
     ):
         yield self.runInactiveDeviceCleanup()
@@ -301,25 +366,28 @@ class SessionManager(object):
             )
 
             # Prepare the DoubleRatchet
-            dr = self.__state.getSharedSecretPassive(
-                message_and_init_data["session_init_data"],
-                bare_jid,
-                device,
-                self.__otpk_policy,
-                additional_information
-            )
+            try:
+                session = self.__state.getSharedSecretPassive(
+                    message_and_init_data["session_init_data"],
+                    bare_jid,
+                    device,
+                    self.__otpk_policy,
+                    additional_information
+                )
+            except x3dh.exceptions.KeyExchangeException as e:
+                raise KeyExchangeException(bare_jid, device, str(e))
 
             # Store the changed state
             yield self._storage.storeState(self.__state.serialize())
 
             # Store the new session
-            yield self.__storeSession(bare_jid, device, dr)
+            yield self.__storeSession(bare_jid, device, session)
 
             # Unpack the "normal" message that was wrapped into the PreKeyMessage
             message = message_and_init_data["message"]
         else:
-            # If this is not part of a PreKeyMessage,
-            # we received a normal Message and can safely delete the OTPK
+            # If this is not part of a PreKeyMessage, we received a normal Message and can
+            # safely delete the OTPK bound to this bare_jid+device.
             self.__state.deleteBoundOTPK(bare_jid, device)
             yield self._storage.storeState(self.__state.serialize())
 
@@ -327,15 +395,15 @@ class SessionManager(object):
         message_data = self.__backend.WireFormat.messageFromWire(message)
 
         # Load the session
-        dr = yield self.__loadSession(bare_jid, device)
-        if dr == None:
-            raise NoSessionException(
-                "Don't have a session with \"" + bare_jid + "\" on device " +
-                str(device) + "."
-            )
+        session = yield self.__loadSession(bare_jid, device)
+        if session == None:
+            raise NoSessionException(bare_jid, device)
 
         # Get the concatenation of the AES GCM key and tag
-        plaintext = dr.decryptMessage(message_data["ciphertext"], message_data["header"])
+        plaintext = session.decryptMessage(
+            message_data["ciphertext"],
+            message_data["header"]
+        )
 
         # Check the authentication
         self.__backend.WireFormat.finalizeMessageFromWire(
@@ -347,7 +415,7 @@ class SessionManager(object):
         )
 
         # Store the changed session
-        yield self.__storeSession(bare_jid, device, dr)
+        yield self.__storeSession(bare_jid, device, session)
 
         plaintext = plaintext["plaintext"]
 
@@ -437,7 +505,7 @@ class SessionManager(object):
         )
 
     @promise.maybe_coroutine(checkSelf)
-    def newDeviceList(self, active_new, bare_jid):
+    def newDeviceList(self, bare_jid, active_new):
         active_new = set(active_new)
 
         if bare_jid == self.__my_bare_jid:
