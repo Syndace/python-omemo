@@ -125,17 +125,14 @@ class SessionManager(object):
         )
 
     @promise.maybe_coroutine(checkSelf)
-    def __encryptMessage(
+    def encryptMessage(
         self,
         bare_jids,
         plaintext,
         bundles = None,
         devices = None,
         callback = None,
-        always_trust = False,
-        dry_run = False,
-        _DEBUG_ek = None,
-        _DEBUG_sendingRatchetKey = None
+        dry_run = False
     ):
         yield self.runInactiveDeviceCleanup()
 
@@ -203,7 +200,7 @@ class SessionManager(object):
 
             for device in devices:
                 is_trusted = yield self._storage.isTrusted(bare_jid, device)
-                if not is_trusted and not always_trust:
+                if not is_trusted:
                     callback(UntrustedException(), bare_jid, device)
                     continue
 
@@ -225,11 +222,7 @@ class SessionManager(object):
 
                     if not dry_run:
                         try:
-                            session_init_data = self.__state.getSharedSecretActive(
-                                bundle,
-                                _DEBUG_ek = _DEBUG_ek,
-                                _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
-                            )
+                            session_init_data = self.__state.getSharedSecretActive(bundle)
                         except KeyExchangeException as e:
                             callback(e, bare_jid, device)
                             continue
@@ -281,69 +274,23 @@ class SessionManager(object):
             "iv": aes_gcm_iv,
             "sid": self.__my_device_id,
             "messages": messages,
-            "payload": ciphertext,
-            "cipher": aes_gcm
+            "payload": ciphertext
         })
-
-    @promise.maybe_coroutine(checkSelf)
-    def encryptMessage(self, *args, **kwargs):
-        result = yield self.__encryptMessage(*args, **kwargs)
-        del result["cipher"]
-        promise.returnValue(result)
-
-    @promise.maybe_coroutine(checkSelf)
-    def encryptKeyTransportMessage(self, bare_jids, *args, **kwargs):
-        result = yield self.__encryptMessage(bare_jids, b"", *args, **kwargs)
-        del result["payload"]
-        promise.returnValue(result)
-
-    @promise.maybe_coroutine(checkSelf)
-    def buildSession(
-        self,
-        bare_jid,
-        device,
-        bundle,
-        callback = None,
-        dry_run = False,
-        _DEBUG_ek = None,
-        _DEBUG_sendingRatchetKey = None
-    ):
-        """
-        Special version of encryptKeyTransportMessage, which does not encrypt a
-        new KeyTransportMessage for all devices of the receiver and all devices
-        of the sender but encrypts it for just the one specific device of the
-        receiver.
-
-        This can be used to build a session with a specific device without
-        sending an initial text message.
-        """
-
-        result = yield self.encryptKeyTransportMessage(
-            bare_jid,
-            { bare_jid: { device: bundle } },
-            { bare_jid: [ device ] },
-            callback,
-            always_trust = True,
-            dry_run = dry_run,
-            _DEBUG_ek = _DEBUG_ek,
-            _DEBUG_sendingRatchetKey = _DEBUG_sendingRatchetKey
-        )
-
-        promise.returnValue(result)
 
     ##############
     # decryption #
     ##############
 
     @promise.maybe_coroutine(checkSelf)
-    def _decryptMessage(
+    def decryptMessage(
         self,
         bare_jid,
         device,
+        iv,
         message,
         is_pre_key_message,
-        additional_information = None,
-        _DEBUG_newRatchetKey = None
+        payload = None,
+        additional_information = None
     ):
         yield self.runInactiveDeviceCleanup()
 
@@ -381,7 +328,6 @@ class SessionManager(object):
 
         # Load the session
         dr = yield self.__loadSession(bare_jid, device)
-
         if dr == None:
             raise NoSessionException(
                 "Don't have a session with \"" + bare_jid + "\" on device " +
@@ -389,11 +335,7 @@ class SessionManager(object):
             )
 
         # Get the concatenation of the AES GCM key and tag
-        plaintext = dr.decryptMessage(
-            message_data["ciphertext"],
-            message_data["header"],
-            _DEBUG_newRatchetKey = _DEBUG_newRatchetKey
-        )
+        plaintext = dr.decryptMessage(message_data["ciphertext"], message_data["header"])
 
         # Check the authentication
         self.__backend.WireFormat.finalizeMessageFromWire(
@@ -407,41 +349,16 @@ class SessionManager(object):
         # Store the changed session
         yield self.__storeSession(bare_jid, device, dr)
 
-        promise.returnValue(plaintext["plaintext"])
-
-    @promise.maybe_coroutine(checkSelf)
-    def decryptMessage(
-        self,
-        bare_jid,
-        device,
-        iv,
-        message,
-        is_pre_key_message,
-        payload = None,
-        additional_information = None
-    ):
-        plaintext = yield self._decryptMessage(
-            bare_jid,
-            device,
-            message,
-            is_pre_key_message,
-            additional_information
-        )
+        plaintext = plaintext["plaintext"]
 
         aes_gcm_key = plaintext[:16]
         aes_gcm_tag = plaintext[16:]
 
         aes_gcm = AESGCM(aes_gcm_key)
 
-        if payload == None:
-            # Return the prepared cipher
-            promise.returnValue(( aes_gcm, None ))
-        else:
+        if payload != None:
             # Return the plaintext
-            promise.returnValue((
-                None,
-                aes_gcm.decrypt(iv, payload + aes_gcm_tag, None)
-            ))
+            promise.returnValue(aes_gcm.decrypt(iv, payload + aes_gcm_tag, None))
 
     ############################
     # public bundle management #

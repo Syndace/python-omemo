@@ -193,21 +193,23 @@ def buildSession(sm_sync, sm_async, other_sm_sync, other_sm_async, jid, did, cal
     if isinstance(callback, ErrorExpectingCallback):
         actualCallback = callback.callback
 
-    result_sync = sm_sync.buildSession(
+    result_sync = sm_sync.encryptMessage(
         jid,
-        did,
-        other_sm_sync.public_bundle,
-        actualCallback
+        "session init".encode("UTF-8"),
+        bundles  = { jid: { did: other_sm_sync.public_bundle } },
+        devices  = { jid: [ did ] },
+        callback = actualCallback
     )
 
     if isinstance(callback, ErrorExpectingCallback):
         callback.next()
 
-    result_async = assertPromiseFulfilled(sm_async.buildSession(
+    result_async = assertPromiseFulfilled(sm_async.encryptMessage(
         jid,
-        did,
-        other_sm_async.public_bundle,
-        actualCallback
+        "session init".encode("UTF-8"),
+        bundles  = { jid: { did: other_sm_async.public_bundle } },
+        devices  = { jid: [ did ] },
+        callback = actualCallback
     ))
 
     if isinstance(callback, ErrorExpectingCallback):
@@ -283,7 +285,7 @@ def decryptMessage(
             msg_async = msg_async[0]
 
             if expected_exception == None:
-                cipher_sync, plaintext_sync = sm_sync.decryptMessage(
+                plaintext_sync = sm_sync.decryptMessage(
                     s_jid,
                     msgs_sync["sid"],
                     msgs_sync["iv"],
@@ -292,7 +294,7 @@ def decryptMessage(
                     msgs_sync.get("payload", None)
                 )
 
-                cipher_async, plaintext_async = assertPromiseFulfilled(
+                plaintext_async = assertPromiseFulfilled(
                     sm_async.decryptMessage(
                         s_jid,
                         msgs_async["sid"],
@@ -303,16 +305,8 @@ def decryptMessage(
                     )
                 )
             
-                if expect_cipher:
-                    assert cipher_sync  != None
-                    assert cipher_async != None
-                    assert plaintext_sync  == None
-                    assert plaintext_async == None
-                else:
-                    assert cipher_sync  == None
-                    assert cipher_async == None
-                    assert plaintext_sync  == plaintext
-                    assert plaintext_async == plaintext
+                assert plaintext_sync  == plaintext
+                assert plaintext_async == plaintext
             else:
                 with pytest.raises(expected_exception):
                     sm_sync.decryptMessage(
@@ -580,40 +574,6 @@ def test_messageEncryption_noDevices():
         pass_devices       = False
     )
 
-def test_buildSession():
-    _, sm_sync, _, sm_async = createSessionManagers()
-
-    newDeviceList(sm_sync, sm_async, [ B_DID ], B_JID)
-
-    b_sms_sync, b_sms_async = createOtherSessionManagers(
-        B_JID,
-        [ B_DID ],
-        { A_JID: [ A_DID ] }
-    )
-
-    b_sm_sync  = b_sms_sync[B_DID]
-    b_sm_async = b_sms_async[B_DID]
-
-    result = buildSession(
-        sm_sync,
-        sm_async,
-        b_sm_sync,
-        b_sm_async,
-        B_JID,
-        B_DID,
-        failingErrorCallback
-    )
-
-    decryptMessage(
-        A_JID,
-        { B_JID: [ B_DID ] },
-        { B_JID: b_sms_sync },
-        { B_JID: b_sms_async },
-        result,
-        plaintext = None,
-        expect_cipher = True
-    )
-
 def test_decryptMessage_noSession():
     _, sm_sync, _, sm_async = createSessionManagers()
 
@@ -708,8 +668,8 @@ def otpkPolicyTest(otpkpolicy, expect_exception):
         { B_JID: b_sms_sync },
         { B_JID: b_sms_async },
         result,
-        plaintext = None,
-        expect_cipher = True
+        plaintext = "session init".encode("UTF-8"),
+        expect_cipher = False
     )
 
     expected_exception = None
@@ -723,8 +683,8 @@ def otpkPolicyTest(otpkpolicy, expect_exception):
         { B_JID: b_sms_sync },
         { B_JID: b_sms_async },
         result,
-        plaintext = None,
-        expect_cipher = True,
+        plaintext = "session init".encode("UTF-8"),
+        expect_cipher = False,
         expected_exception = expected_exception
     )
 
