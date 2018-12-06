@@ -3,7 +3,7 @@ from __future__ import print_function
 import logging
 
 import omemo
-import x3dh
+from omemo.exceptions import KeyExchangeException
 
 from omemo_backend_signal import BACKEND as SignalBackend
 
@@ -24,7 +24,7 @@ from syncinmemorystorage  import SyncInMemoryStorage
 # this lib expects a jid as parameter, please pass a bare jid (name@host) without the
 # resource.
 # Note: To use OMEMO in a MUC, you can't use the MUC-style jids (muc@host/name) but you
-# have to use the user's bare jids (name@host).
+# have to use the user's bare jids (name@host) aswell.
 from example_data import *
 
 logging.basicConfig(level = logging.INFO)
@@ -33,13 +33,6 @@ try:
     input = raw_input
 except NameError:
     pass
-
-use_alternative = ""
-while not use_alternative in [ "y", "n" ]:
-    use_alternative = input(
-        "Initialize sessions using empty KeyTransportMessages? (y/n): "
-    )
-use_alternative = use_alternative == "y"
 
 use_async_storage = ""
 while not use_async_storage in [ "y", "n" ]:
@@ -116,17 +109,17 @@ def main():
     # In OMEMO the device lists are handled using a pep node.
     # This next part simulates getting the device list from the pep node and telling the
     # session manager about the device lists.
-    yield alice_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_BARE_JID)
-    yield bob_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_BARE_JID)
-    yield charlie_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_BARE_JID)
+    yield alice_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
+    yield bob_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
+    yield charlie_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
-    yield alice_session_manager.newDeviceList([ BOB_DEVICE_ID ], BOB_BARE_JID)
-    yield bob_session_manager.newDeviceList([ BOB_DEVICE_ID ], BOB_BARE_JID)
-    yield charlie_session_manager.newDeviceList([ BOB_DEVICE_ID ], BOB_BARE_JID)
+    yield alice_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
+    yield bob_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
+    yield charlie_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
 
-    yield alice_session_manager.newDeviceList([ CHARLIE_DEVICE_ID ], CHARLIE_BARE_JID)
-    yield bob_session_manager.newDeviceList([ CHARLIE_DEVICE_ID ], CHARLIE_BARE_JID)
-    yield charlie_session_manager.newDeviceList([ CHARLIE_DEVICE_ID ], CHARLIE_BARE_JID)
+    yield alice_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
+    yield bob_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
+    yield charlie_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
 
     # You can get the list of (in)active devices for each jid from the session manager.
     # If you don't pass a bare jid, the method assumes your own bare jid.
@@ -135,8 +128,8 @@ def main():
 
     assert(aliceDevices["active"]          == set([ ALICE_DEVICE_ID ]))
     assert(aliceBareJIDDevices["active"]   == set([ ALICE_DEVICE_ID ]))
-    assert(aliceDevices["inactive"]        == set())
-    assert(aliceBareJIDDevices["inactive"] == set())
+    assert(aliceDevices["inactive"]        == {})
+    assert(aliceBareJIDDevices["inactive"] == {})
 
     # Send an initial message from Alice to Bob.
     # The message is built for:
@@ -155,71 +148,40 @@ def main():
     # In a real XMPP scenario, Bobs device has published its public bundle to a pep node
     # and you have to download his bundle from the node first.
     # The bundle_xml file shows how to (de)serialize a public bundle to/from xml.
-    if not use_alternative:
-        initial_message = yield alice_session_manager.encryptMessage(
-            BOB_BARE_JID,
-            "Hey Bob!".encode("UTF-8"),
-            {
-                BOB_BARE_JID: {
-                    BOB_DEVICE_ID: bob_session_manager.public_bundle
-                }
+    initial_message = yield alice_session_manager.encryptMessage(
+        BOB_BARE_JID,
+        "Hey Bob!".encode("UTF-8"),
+        {
+            BOB_BARE_JID: {
+                BOB_DEVICE_ID: bob_session_manager.public_bundle
             }
-        )
-
-    # Alternatively, you can use the buildSession method to initiate a session with a
-    # device directly, by sending an empty KeyTransportMessage to it.
-    # This requires the public bundle aswell, which you would download from the pep node.
-    else:
-        initial_message = yield alice_session_manager.buildSession(
-            BOB_BARE_JID,
-            BOB_DEVICE_ID,
-            bob_session_manager.public_bundle
-        )
+        }
+    )
 
     # The values
     # - initial_message["iv"]
-    # - initial_message["messages"]
+    # - initial_message["sid"]
+    # - initial_message["keys"]
     # - initial_message["payload"]
     # should contain everything you need to build a stanza and send it.
 
     # Get the message specified for Bob on his only device
-    bob_messages = [ x for x in initial_message["messages"] if x["rid"] == BOB_DEVICE_ID ]
-    bob_message  = bob_messages[0]
+    bob_message = initial_message["keys"][BOB_BARE_JID][BOB_DEVICE_ID]
 
     # The initial session-building messages are called pre key messages.
     assert(bob_message["pre_key"])
 
     # Decrypt the initial message.
-    # This function returns two values:
-    #     - An AES object, if the message is a KeyTransportElement, otherwise None
-    #     - The plaintext, if the message is a normal message, otherwise None
-    # Both values are never set at the same time.
-    if not use_alternative:
-        cipher, plaintext = yield bob_session_manager.decryptMessage(
-            ALICE_BARE_JID, # The jid and device id of the user who sent you this message
-            ALICE_DEVICE_ID,
-            initial_message["iv"],
-            bob_message["message"],
-            bob_message["pre_key"],
-            initial_message["payload"]
-        )
+    plaintext = yield bob_session_manager.decryptMessage(
+        ALICE_BARE_JID, # The jid and device id of the user who sent you this message
+        ALICE_DEVICE_ID,
+        initial_message["iv"],
+        bob_message["data"],
+        bob_message["pre_key"],
+        initial_message["payload"]
+    )
 
-        assert(cipher == None)
-        assert(plaintext.decode("UTF-8") == "Hey Bob!")
-
-    # For the alternative way using an empty KeyTransportMessage,
-    # the initializaion looks like this:
-    else:
-        cipher, plaintext = yield bob_session_manager.decryptMessage(
-            ALICE_BARE_JID, # The jid and device id of the user who sent you this message
-            ALICE_DEVICE_ID,
-            initial_message["iv"],
-            bob_message["message"],
-            bob_message["pre_key"]
-        )
-
-        assert(cipher)
-        assert(plaintext == None)
+    assert(plaintext.decode("UTF-8") == "Hey Bob!")
 
     # Now, any party can send follow-up messages.
     # If the session was established before, you don't have to pass any public bundles.
@@ -229,24 +191,23 @@ def main():
     )
 
     # Get the message specified for Alice on her only device
-    alice_message = [ x for x in message["messages"] if x["rid"] == ALICE_DEVICE_ID ][0]
+    alice_message = message["keys"][ALICE_BARE_JID][ALICE_DEVICE_ID]
 
     assert(not alice_message["pre_key"])
 
-    cipher, plaintext = yield alice_session_manager.decryptMessage(
+    plaintext = yield alice_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         message["iv"],
-        alice_message["message"],
+        alice_message["data"],
         alice_message["pre_key"],
         message["payload"]
     )
 
-    assert(cipher == None)
     assert(plaintext.decode("UTF-8") == "Yo Alice!")
 
-    # You can encrypt a message for multiple recipients with just one call to encrypt*,
-    # just pass a list of bare jids instead of a single bare jid.
+    # You can encrypt a message for multiple recipients with just one call to
+    # encryptMessage, just pass a list of bare jids instead of a single bare jid.
     # Alice already has a session with Bob but she doesn't have a session with Charlie,
     # that's why we have to pass Charlies public bundle.
     muc_message = yield alice_session_manager.encryptMessage(
@@ -260,41 +221,35 @@ def main():
     )
 
     # Get the message specified for Bob on his only device
-    bob_message = [ x for x in muc_message["messages"] if x["rid"] == BOB_DEVICE_ID ][0]
+    bob_message = muc_message["keys"][BOB_BARE_JID][BOB_DEVICE_ID]
 
     assert(not bob_message["pre_key"])
 
     # Get the message specified for Charlie on his/her only device
-    charlie_messages = [
-        x for x in muc_message["messages"] if x["rid"] == CHARLIE_DEVICE_ID
-    ]
-
-    charlie_message = charlie_messages[0]
+    charlie_message = muc_message["keys"][CHARLIE_BARE_JID][CHARLIE_DEVICE_ID]
 
     assert(charlie_message["pre_key"])
 
-    cipher, plaintext = yield bob_session_manager.decryptMessage(
+    plaintext = yield bob_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         muc_message["iv"],
-        bob_message["message"],
+        bob_message["data"],
         bob_message["pre_key"],
         muc_message["payload"]
     )
 
-    assert(cipher == None)
     assert(plaintext.decode("UTF-8") == "Hey Bob and Charlie!")
 
-    cipher, plaintext = yield charlie_session_manager.decryptMessage(
+    plaintext = yield charlie_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         muc_message["iv"],
-        charlie_message["message"],
+        charlie_message["data"],
         charlie_message["pre_key"],
         muc_message["payload"]
     )
 
-    assert(cipher == None)
     assert(plaintext.decode("UTF-8") == "Hey Bob and Charlie!")
 
     #################
@@ -314,10 +269,10 @@ def main():
     # drawback if all keys get deleted instantly after the first use.
     #
     # This is where the OTPK policy comes in: Instead of deleting the keys instantly, you
-    # can override the OTPKPolicy class and use it to decide yourself, whether to delete
+    # can override the OTPKPolicy class and use it to decide yourself whether to delete
     # the key or not.
     #
-    # Let's look at the simplest implementation of the OTPKPolicy: The implementation,
+    # Let's look at the simplest implementation of the OTPKPolicy: The implementation
     # that simply always deletes the keys, no matter what. This behaviour is implemented
     # by the DeletingOTPKPolicy class.
     #
@@ -326,8 +281,8 @@ def main():
     # deleted the key after its first use.
 
     # Tell Alice' and Bobs session managers about Dave and his device
-    yield alice_session_manager.newDeviceList([ DAVE_DEVICE_ID ], DAVE_BARE_JID)
-    yield bob_session_manager.newDeviceList([ DAVE_DEVICE_ID ], DAVE_BARE_JID)
+    yield alice_session_manager.newDeviceList(DAVE_BARE_JID, [ DAVE_DEVICE_ID ])
+    yield bob_session_manager.newDeviceList(DAVE_BARE_JID, [ DAVE_DEVICE_ID ])
 
     # Create a session manager for Dave that uses the DeletingOTPKPolicy class
     dave_session_manager = yield omemo.SessionManager.create(
@@ -338,35 +293,35 @@ def main():
         DAVE_DEVICE_ID
     )
 
-    yield dave_session_manager.newDeviceList([ ALICE_DEVICE_ID ], ALICE_BARE_JID)
+    yield dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
     # Create an initial message from Alice to Dave
-    initial_message = yield alice_session_manager.buildSession(
+    initial_message = yield alice_session_manager.encryptMessage(
         DAVE_BARE_JID,
-        DAVE_DEVICE_ID,
-        dave_session_manager.public_bundle
+        "DeletingOTPKPolicy example".encode("UTF-8"),
+        {
+            DAVE_BARE_JID: {
+                DAVE_DEVICE_ID: dave_session_manager.public_bundle
+            }
+        }
     )
 
     # Get the message specified for Dave on his only device
-    dave_messages = [
-        x for x in initial_message["messages"] if x["rid"] == DAVE_DEVICE_ID
-    ]
-
-    dave_message = dave_messages[0]
+    dave_message = initial_message["keys"][DAVE_BARE_JID][DAVE_DEVICE_ID]
 
     assert(dave_message["pre_key"])
 
     # Let Dave initialize the session for the first time, this should work fine
-    cipher, plaintext = yield dave_session_manager.decryptMessage(
+    plaintext = yield dave_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         initial_message["iv"],
-        dave_message["message"],
-        dave_message["pre_key"]
+        dave_message["data"],
+        dave_message["pre_key"],
+        initial_message["payload"]
     )
 
-    assert(cipher)
-    assert(plaintext == None)
+    assert(plaintext.decode("UTF-8") == "DeletingOTPKPolicy example")
 
     # Whenever the public bundle somehow changes, for example because one of the one-time
     # pre keys was used, the republish_bundle flag is set:
@@ -377,17 +332,18 @@ def main():
 
     # Now, try the same thing a second time. This sould raise an exception
     try:
-        cipher, plaintext = yield dave_session_manager.decryptMessage(
+        plaintext = yield dave_session_manager.decryptMessage(
             ALICE_BARE_JID,
             ALICE_DEVICE_ID,
             initial_message["iv"],
-            dave_message["message"],
-            dave_message["pre_key"]
+            dave_message["data"],
+            dave_message["pre_key"],
+            initial_message["payload"]
         )
 
         assert(False) # This line should not execute
-    except x3dh.exceptions.KeyExchangeException:
-        pass
+    except KeyExchangeException as e:
+        assert(e == KeyExchangeException(ALICE_BARE_JID, ALICE_DEVICE_ID, "woops!"))
 
     # Finally, let's do the same thing but using a policy that never deletes keys instead
     # of always.
@@ -401,35 +357,35 @@ def main():
         DAVE_DEVICE_ID
     )
 
-    yield dave_session_manager.newDeviceList([ BOB_DEVICE_ID ], BOB_BARE_JID)
+    yield dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
     # Create an initial message from Bob to Dave
-    initial_message = yield bob_session_manager.buildSession(
+    initial_message = yield bob_session_manager.encryptMessage(
         DAVE_BARE_JID,
-        DAVE_DEVICE_ID,
-        dave_session_manager.public_bundle
+        "DeletingOTPKPolicy example".encode("UTF-8"),
+        {
+            DAVE_BARE_JID: {
+                DAVE_DEVICE_ID: dave_session_manager.public_bundle
+            }
+        }
     )
 
     # Get the message specified for Dave on his only device
-    dave_messages = [
-        x for x in initial_message["messages"] if x["rid"] == DAVE_DEVICE_ID
-    ]
-
-    dave_message = dave_messages[0]
+    dave_message = initial_message["keys"][DAVE_BARE_JID][DAVE_DEVICE_ID]
 
     assert(dave_message["pre_key"])
 
     # Let Dave initialize the session for the first time, this should work fine
-    cipher, plaintext = yield dave_session_manager.decryptMessage(
+    plaintext = yield dave_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         initial_message["iv"],
-        dave_message["message"],
-        dave_message["pre_key"]
+        dave_message["data"],
+        dave_message["pre_key"],
+        initial_message["payload"]
     )
 
-    assert(cipher)
-    assert(plaintext == None)
+    assert(plaintext.decode("UTF-8") == "DeletingOTPKPolicy example")
 
     # Daves public bundle should have the "republish_bundle" flag set and it should not
     # contain the used pre key any more.
@@ -437,16 +393,16 @@ def main():
     assert(len(dave_session_manager.public_bundle.otpks) == 99)
 
     # Now, the second try should work aswell, because the policy decided to keep the OTPK
-    cipher, plaintext = yield dave_session_manager.decryptMessage(
+    plaintext = yield dave_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         initial_message["iv"],
-        dave_message["message"],
-        dave_message["pre_key"]
+        dave_message["data"],
+        dave_message["pre_key"],
+        initial_message["payload"]
     )
 
-    assert(cipher)
-    assert(plaintext == None)
+    assert(plaintext.decode("UTF-8") == "DeletingOTPKPolicy example")
 
     omemo.promise.returnValue("Done!")
 

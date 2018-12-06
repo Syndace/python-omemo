@@ -4,6 +4,7 @@ from __future__ import division
 import copy
 import logging
 import os
+import sys
 import time
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -12,6 +13,12 @@ from . import promise
 from . import storagewrapper
 from .exceptions import *
 from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet
+
+# This shit makes be sad
+if sys.version_info[0] == 3:
+    string_type = str
+else:
+    string_type = basestring
 
 import x3dh
 
@@ -142,10 +149,10 @@ class SessionManager(object):
         # parameter preparation #
         #########################
 
-        try:
-            bare_jids = set(bare_jids)
-        except TypeError:
+        if isinstance(bare_jids, string_type):
             bare_jids = set([ bare_jids ])
+        else:
+            bare_jids = set(bare_jids)
 
         if bundles == None:
             bundles = {}
