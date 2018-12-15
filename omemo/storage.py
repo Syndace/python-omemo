@@ -103,10 +103,6 @@ class Storage(object):
         - None
 
         You can dump this object using for example the json module.
-
-        For more information on how the session object is structured, look at the
-        serialize method of the DoubleRatchet implementation offered by the backend you're
-        running.
         """
 
         raise NotImplementedError
@@ -115,6 +111,8 @@ class Storage(object):
         """
         Completely wipe the session associated with given bare_jid and device_id from the
         storage.
+
+        bare_jid is passed as string, device_id as an integer.
         """
 
         raise NotImplementedError
@@ -166,10 +164,29 @@ class Storage(object):
 
         raise NotImplementedError
 
+    def storeTrust(self, callback, bare_jid, device_id, trust):
+        """
+        bare_jid: string
+        device_id: int
+
+        trust: {
+            "key"     : string (Base64 encoded bytes),
+            "trusted" : bool
+        }
+        """
+
+        raise NotImplementedError
+
+    def loadTrust(self, callback, bare_jid, device_id):
+        """
+        """
+
+        raise NotImplementedError
+
     def listJIDs(self, callback):
         """
-        List all bare jids that have associated device lists stored in the storage. It
-        doesn't matter if the lists are empty or not.
+        List all bare jids that have associated device lists stored in the storage.
+        It doesn't matter if the lists are empty or not.
 
         Return a list of strings.
         """
@@ -179,16 +196,8 @@ class Storage(object):
     def deleteJID(self, callback, bare_jid):
         """
         Delete all data associated with given bare_jid. This includes the active and
-        inactive devices and all sessions stored for that jid.
-        """
-
-        raise NotImplementedError
-
-    def isTrusted(self, callback, bare_jid, device):
-        """
-        Return, whether the given device of given bare_jid is trusted.
-
-        bare_jid is passed as a string, device as an integer.
+        inactive devices, all sessions stored for that jid and all information about
+        trusted keys.
         """
 
         raise NotImplementedError

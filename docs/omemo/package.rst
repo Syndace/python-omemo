@@ -2,6 +2,7 @@ omemo
 =====
 
 .. toctree::
+    Module: extendeddoubleratchet <extendeddoubleratchet>
     Module: extendedpublicbundle <extendedpublicbundle>
     Module: otpkpolicy <otpkpolicy>
     Module: promise <promise>

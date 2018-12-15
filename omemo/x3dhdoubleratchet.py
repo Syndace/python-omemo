@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from x3dh.exceptions import KeyExchangeException
 
 from .exceptions import UnknownKeyException
+from .extendeddoubleratchet import make as make_ExtendedDoubleRatchet
 from .state import make as make_State
 
 import base64
@@ -16,6 +17,8 @@ def make(backend):
 
             self.__bound_otpks = {}
             self.__pre_key_messages = {}
+
+            self.__ExtendedDoubleRatchet = make_ExtendedDoubleRatchet(backend)
 
         def serialize(self):
             bound_otpks = {}
@@ -92,10 +95,11 @@ def make(backend):
             # - The public SPK used for X3DH becomes the other's enc for the dh ratchet
             # - The associated data calculated by X3DH becomes the ad used by the
             #   double ratchet encryption/decryption
-            session_init_data["dr"] = backend.DoubleRatchet(
+            session_init_data["dr"] = self.__ExtendedDoubleRatchet(
+                other_public_bundle.ik,
                 session_init_data["ad"],
                 session_init_data["sk"],
-                own_key = None,
+                own_key   = None,
                 other_pub = other_public_bundle.spk["key"]
             )
 
@@ -136,7 +140,8 @@ def make(backend):
             #   key
             # - The associated data calculated by X3DH becomes the ad used by the double
             #   ratchet encryption/decryption
-            return backend.DoubleRatchet(
+            return self.__ExtendedDoubleRatchet(
+                session_init_data["ik"],
                 session_data["ad"],
                 session_data["sk"],
                 own_key = self.spk

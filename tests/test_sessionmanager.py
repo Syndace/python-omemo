@@ -66,10 +66,6 @@ def overrideOwnData(st_sync, st_async, jid, did):
     
     while not cb: pass
 
-def trust(st_sync, st_async, trusted):
-    st_sync.trust(trusted)
-    st_async.trust(trusted)
-
 def getDevices(sm_sync, sm_async, jid, inactive, active):
     inactive = set(inactive)
     active   = set(active)
@@ -155,12 +151,30 @@ def createOtherSessionManagers(jid, dids, other_dids, otpk_policy = None):
     
     return sms_sync, sms_async
 
+def trust(sm_sync, sm_async, sms_sync, sms_async, jid_to_trust, devices_to_trust):
+    try:
+        for device in devices_to_trust:
+            ik_sync  = sms_sync [device].public_bundle.ik
+            ik_async = sms_async[device].public_bundle.ik
+
+            sm_sync.trust(jid_to_trust, device, ik_sync)
+            assertPromiseFulfilled(sm_async.trust(jid_to_trust, device, ik_async))
+    except TypeError:
+        ik_sync  = sms_sync .public_bundle.ik
+        ik_async = sms_async.public_bundle.ik
+
+        sm_sync.trust(jid_to_trust, devices_to_trust, ik_sync)
+        assertPromiseFulfilled(sm_async.trust(jid_to_trust, devices_to_trust, ik_async))
+
 def messageEncryption(
     pass_bundles      = None,
     trust_devices     = None,
     pass_devices      = True,
     expect_problems   = None,
-    expected_problems = None
+    expected_problems = None,
+    trust_alice       = True,
+    allow_untrusted_decryption = False,
+    expect_untrusted_decryption = False
 ):
     if pass_bundles == None:
         pass_bundles = set(B_DIDS)
@@ -187,10 +201,14 @@ def messageEncryption(
     if pass_devices:
         newDeviceList(sm_sync, sm_async, B_JID, B_DIDS)
 
-    trust(st_sync, st_async, { B_JID: trust_devices })
+    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, trust_devices)
+
+    if trust_alice:
+        for b_did in B_DIDS:
+            trust(b_sms_sync[b_did], b_sms_async[b_did], sm_sync, sm_async, A_JID, A_DID)
 
     bundles_sync = {
-        did: b_sms_sync [did].public_bundle
+        did: b_sms_sync[did].public_bundle
         for did in B_DIDS
         if did in pass_bundles
     }
@@ -204,10 +222,12 @@ def messageEncryption(
     problems_sync  = []
     problems_async = []
 
+    msg = "single message".encode("UTF-8")
+
     try:
         encrypted_sync = sm_sync.encryptMessage(
             [ B_JID ],
-            "single message".encode("UTF-8"),
+            msg,
             { B_JID: bundles_sync },
             { B_JID: expect_problems }
         )
@@ -217,7 +237,7 @@ def messageEncryption(
     try:
         encrypted_async = assertPromiseFulfilledOrRaise(sm_async.encryptMessage(
             [ B_JID ],
-            "single message".encode("UTF-8"),
+            msg,
             { B_JID: bundles_async },
             { B_JID: expect_problems }
         ))
@@ -233,27 +253,69 @@ def messageEncryption(
         assert expected_successes == successes_sync == successes_async
 
         for did in expected_successes:
-            decrypted_sync = b_sms_sync[did].decryptMessage(
-                A_JID,
-                A_DID,
-                encrypted_sync["iv"],
-                encrypted_sync["keys"][B_JID][did]["data"],
-                encrypted_sync["keys"][B_JID][did]["pre_key"],
-                encrypted_sync["payload"]
-            )
+            try:
+                decrypted_sync = b_sms_sync[did].decryptMessage(
+                    A_JID,
+                    A_DID,
+                    encrypted_sync["iv"],
+                    encrypted_sync["keys"][B_JID][did]["data"],
+                    encrypted_sync["keys"][B_JID][did]["pre_key"],
+                    encrypted_sync["payload"],
+                    allow_untrusted = allow_untrusted_decryption
+                )
 
-            decrypted_async = assertPromiseFulfilled(b_sms_async[did].decryptMessage(
-                A_JID,
-                A_DID,
-                encrypted_async["iv"],
-                encrypted_async["keys"][B_JID][did]["data"],
-                encrypted_async["keys"][B_JID][did]["pre_key"],
-                encrypted_async["payload"]
-            ))
+                assert not expect_untrusted_decryption
+            except UntrustedException as e:
+                assert expect_untrusted_decryption
+                assert e == UntrustedException(A_JID, A_DID, sm_sync.public_bundle.ik)
 
-            assert decrypted_sync == decrypted_async == "single message".encode("UTF-8")
+            try:
+                decrypted_async = assertPromiseFulfilledOrRaise(
+                    b_sms_async[did].decryptMessage(
+                        A_JID,
+                        A_DID,
+                        encrypted_async["iv"],
+                        encrypted_async["keys"][B_JID][did]["data"],
+                        encrypted_async["keys"][B_JID][did]["pre_key"],
+                        encrypted_async["payload"],
+                        allow_untrusted = allow_untrusted_decryption
+                    )
+                )
+
+                assert not expect_untrusted_decryption
+            except UntrustedException as e:
+                assert expect_untrusted_decryption
+                assert e == UntrustedException(A_JID, A_DID, sm_async.public_bundle.ik)
+
+            if not expect_untrusted_decryption:
+                assert decrypted_sync == decrypted_async == msg
     else:
-        assert problems_sync == problems_async == expected_problems
+        assert len(problems_sync) == len(problems_async) == len(expected_problems)
+
+        zipped = zip(problems_sync, problems_async, expected_problems)
+
+        for problem_sync, problem_async, problem_expected in zipped:
+            if isinstance(problem_expected, UntrustedException):
+                problem_expected_sync = UntrustedException(
+                    problem_expected.bare_jid,
+                    problem_expected.device,
+                    sm_sync.public_bundle.ik
+                    if problem_expected.bare_jid == A_JID else
+                    b_sms_sync[problem_expected.device].public_bundle.ik
+                )
+
+                problem_expected_async = UntrustedException(
+                    problem_expected.bare_jid,
+                    problem_expected.device,
+                    sm_async.public_bundle.ik
+                    if problem_expected.bare_jid == A_JID else
+                    b_sms_async[problem_expected.device].public_bundle.ik
+                )
+
+                assert problem_sync  == problem_expected_sync
+                assert problem_async == problem_expected_async
+            else:
+                assert problem_sync == problem_async == problem_expected
 
 def test_create():
     st_sync, _, st_async, _ = createSessionManagers()
@@ -330,14 +392,14 @@ def test_messageEncryption_allBundlesMissing():
 
 def test_messageEncryption_untrustedDevice():
     messageEncryption(trust_devices = B_DIDS[:2], expected_problems = [
-        UntrustedException(B_JID, B_DIDS[2])
+        UntrustedException(B_JID, B_DIDS[2], "placeholder")
     ])
 
 def test_messageEncryption_noTrustedDevices():
     messageEncryption(trust_devices = [], expected_problems = [
-        UntrustedException(B_JID, B_DIDS[0]),
-        UntrustedException(B_JID, B_DIDS[1]),
-        UntrustedException(B_JID, B_DIDS[2]),
+        UntrustedException(B_JID, B_DIDS[0], "placeholder"),
+        UntrustedException(B_JID, B_DIDS[1], "placeholder"),
+        UntrustedException(B_JID, B_DIDS[2], "placeholder"),
         NoEligibleDevicesException(B_JID)
     ])
 
@@ -351,8 +413,8 @@ def test_messageEncryption_expectProblems():
         pass_bundles = B_DIDS[:2],
         trust_devices = B_DIDS[1:],
         expected_problems = [
-            UntrustedException(B_JID, B_DIDS[0]),
-            MissingBundleException(B_JID, B_DIDS[2])
+            MissingBundleException(B_JID, B_DIDS[2]),
+            UntrustedException(B_JID, B_DIDS[0], "placeholder")
         ]
     )
 
@@ -361,6 +423,12 @@ def test_messageEncryption_expectProblems():
         trust_devices = B_DIDS[1:],
         expect_problems = [ B_DIDS[0], B_DIDS[2] ]
     )
+
+def test_messageDecryption_noTrust():
+    messageEncryption(trust_alice = False, expect_untrusted_decryption = True)
+
+def test_messageDecryption_noTrust_allowUntrusted():
+    messageEncryption(trust_alice = False, allow_untrusted_decryption = True)
 
 def test_messageDecryption_noSession():
     _, sm_sync, _, sm_async = createSessionManagers()
@@ -371,6 +439,7 @@ def test_messageDecryption_noSession():
     )
 
     newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
+    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
 
     b_sm_sync  = b_sms_sync [B_DID]
     b_sm_async = b_sms_async[B_DID]
@@ -438,6 +507,9 @@ def otpkPolicyTest(otpk_policy, expect_exception):
 
     b_sm_sync  = b_sms_sync [B_DID]
     b_sm_async = b_sms_async[B_DID]
+
+    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
+    trust(b_sm_sync, b_sm_async, sm_sync, sm_async, A_JID, A_DID)
 
     pre_key_message_sync = sm_sync.encryptMessage(
         [ B_JID ],

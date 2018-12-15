@@ -11,7 +11,7 @@ class SyncInMemoryStorage(omemo.Storage):
         self.__own_device_id = None
         self.__sessions = {}
         self.__devices = {}
-        self.__trusted = True
+        self.__trust = {}
 
     def dump(self):
         return copy.deepcopy({
@@ -19,9 +19,6 @@ class SyncInMemoryStorage(omemo.Storage):
             "sessions" : self.__sessions,
             "devices"  : self.__devices
         })
-
-    def trust(self, trusted):
-        self.__trusted = trusted
 
     def loadOwnData(self, callback):
         return ({
@@ -65,22 +62,19 @@ class SyncInMemoryStorage(omemo.Storage):
         self.__devices[bare_jid] = self.__devices.get(bare_jid, {})
         self.__devices[bare_jid]["inactive"] = devices
 
+    def storeTrust(self, callback, bare_jid, device_id, trust):
+        self.__trust[bare_jid] = self.__trust.get(bare_jid, {})
+        self.__trust[bare_jid][device_id] = trust
+
+    def loadTrust(self, callback, bare_jid, device_id):
+        return self.__trust.get(bare_jid, {}).get(device_id, None)
+
     def listJIDs(self, callback):
         return list(self.__devices.keys())
 
     def deleteJID(self, callback, bare_jid):
         self.__devices.pop(bare_jid, None)
         self.__sessions.pop(bare_jid, None)
-
-    def isTrusted(self, callback, bare_jid, device):
-        result = False
-
-        if self.__trusted == True:
-            result = True
-        else:
-            result = bare_jid in self.__trusted and device in self.__trusted[bare_jid]
-
-        return result
 
     @property
     def is_async(self):
