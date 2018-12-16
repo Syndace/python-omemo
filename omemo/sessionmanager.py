@@ -413,8 +413,8 @@ class SessionManager(object):
 
         # Before doing anything else, check the trust
         if not allow_untrusted:
-            if not (yield self.__checkTrust(bare_jid, device, other_ik)):
-                raise UntrustedException(bare_jid, device, other_ik)
+            if not (yield self.__checkTrust(bare_jid, device, session.ik)):
+                raise UntrustedException(bare_jid, device, session.ik)
 
         # Now that the trust was checked, go on with normal processing
         if not is_pre_key_message:

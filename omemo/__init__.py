@@ -7,6 +7,7 @@ import sys
 from . import backends
 from . import promise
 from . import util
+from .defaultotpkpolicy import DefaultOTPKPolicy
 from .extendeddoubleratchet import make as make_ExtendedDoubleRatchet
 from .extendedpublicbundle import ExtendedPublicBundle
 from .otpkpolicy import OTPKPolicy

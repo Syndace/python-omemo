@@ -177,10 +177,10 @@ def main(shared_secret, associated_data):
     try:
         # Look for stored ratchets and deferred messages
         with open("dr_chat/bob_dr.json") as f:
-            bob_dr = SignalBackend.DoubleRatchet.fromSerialized(json.load(f))
+            bob_dr = SignalBackend.DoubleRatchet.fromSerialized(json.load(f), b"", b"")
 
         with open("dr_chat/alice_dr.json") as f:
-            alice_dr = SignalBackend.DoubleRatchet.fromSerialized(json.load(f))
+            alice_dr = SignalBackend.DoubleRatchet.fromSerialized(json.load(f), b"", b"")
 
         with open("dr_chat/deferred.pickle", "rb") as f:
             deferred = pickle.load(f)
@@ -212,7 +212,4 @@ def main(shared_secret, associated_data):
         pickle.dump(deferred, f)
     
 if __name__ == "__main__":
-    main(b"\x42" * 42, {
-        "IK_own"   : b"\x13\x37" * 16,
-        "IK_other" : b"\x09\x35" * 16
-    })
+    main(b"\x42" * 42, b"\x13\x37" * 16 + b"\x09\x35" * 16)

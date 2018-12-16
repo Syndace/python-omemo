@@ -26,13 +26,11 @@ To use this library you have to choose a backend first. Currently, you don't hav
 
 ### Implement the Storage interface
 
-The library has a lot of state/data that it has to persist between runs. To be as flexible as possible the library leaves it open for you to decide how to store the data. Simply implement the `Storage` interface found in `storage.py`. The file contains more info about how to implement the interface2.
+The library has a lot of state/data that it has to persist between runs. To be as flexible as possible the library leaves it open for you to decide how to store the data. Simply implement the `Storage` interface found in `storage.py`. The file contains more info about how to implement the interface.
 
 ### Decide on a one-time pre key policy
 
-This part is kind of tricky as it requires a lot of knowledge about how the protocol works. Basically the key exchange mechanism used by the protocol assumes guaranteed message delivery and a response to the first message before another message is sent. Both conditions are not quite given in all environments, especially not in XMPP, which is the main use-case for this library. For that reason the library has to "relax" some of the protocols rules. Instead of always instantly deleting the keys used in the key exchange, it is now up to you to decide whether to keep keys or not. To do so, implement the `OTPKPolicy` interface found in `otpkpolicy.py`. The file contains more info about how to implement the interface.
-
-Note: One of the following releases will contain a default policy that tries to find a good balance between security and usability.
+This part is kind of tricky as it requires a lot of knowledge about how the protocol works. Basically the key exchange mechanism used by the protocol assumes guaranteed message delivery and a response to the first message before another message is sent. Both conditions are not quite given in all environments, especially not in XMPP, which is the main use-case for this library. For that reason the library has to "relax" some of the protocols rules. Instead of always instantly deleting the keys used in the key exchange, it is now up to you to decide whether to keep keys or not. To do so, implement the `OTPKPolicy` interface found in `otpkpolicy.py` or use the default implementation `DefaultOTPKPolicy`. If you decide to implement the interface yourself, the `otpkpolicy.py` file contains more information on how to implement the interface.
 
 ### Create a SessionManager
 
@@ -89,7 +87,9 @@ def manageOwnDeviceList(devices):
 
 ### 2. Bundle management
 
-The next thing you need to manager are the bundles used for the X3DH key exchange. Each device publishes its own bundle to a unique PEP node. Right after publishing 
+The next thing you need to manager are the bundles used for the X3DH key exchange. Each device publishes its own bundle to a unique PEP node.
+
+**WIP**
 
 ### 3. Decryption
 
