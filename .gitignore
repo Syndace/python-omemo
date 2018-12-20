@@ -11,3 +11,5 @@ examples/*/*
 
 install.sh
 Makefile
+
+tests/confidential_*.txt

@@ -1,6 +1,7 @@
 import pytest
 
 import logging
+import os
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -423,6 +424,142 @@ def test_messageEncryption_expectProblems():
         trust_devices = B_DIDS[1:],
         expect_problems = [ B_DIDS[0], B_DIDS[2] ]
     )
+
+def encryptBigFile(encryptor, name):
+    location = os.path.dirname(os.path.abspath(__file__))
+
+    plaintext_path = os.path.join(location, "confidential.txt")
+    encrypted_path = os.path.join(location, "confidential_encrypted_" + name + ".txt")
+
+    with open(plaintext_path, "rb") as src, open(encrypted_path, "wb") as dest:
+        while True:
+            block = src.read(1024)
+
+            if len(block) == 0:
+                dest.write(encryptor.finalize())
+                break
+
+            dest.write(encryptor.update(block))
+
+def decryptBigFile(decryptor, name):
+    location = os.path.dirname(os.path.abspath(__file__))
+
+    plaintext_path = os.path.join(location, "confidential.txt")
+    encrypted_path = os.path.join(location, "confidential_encrypted_" + name + ".txt")
+    decrypted_path = os.path.join(location, "confidential_decrypted_" + name + ".txt")
+
+    with open(encrypted_path, "rb") as src, open(decrypted_path, "wb") as dest:
+        while True:
+            block = src.read(1024)
+
+            if len(block) == 0:
+                dest.write(decryptor.finalize())
+                break
+
+            dest.write(decryptor.update(block))
+
+    os.remove(encrypted_path)
+
+    with open(plaintext_path, "rb") as src, open(decrypted_path, "rb") as dest:
+        while True:
+            plaintext_block = src.read(1024)
+            decrypted_block = dest.read(1024)
+
+            assert plaintext_block == decrypted_block
+
+            if len(plaintext_block) == len(decrypted_block) == 0:
+                break
+
+    os.remove(decrypted_path)
+
+def test_keyTransportMessage():
+    _, sm_sync, _, sm_async = createSessionManagers()
+    b_sms_sync, b_sms_async = createOtherSessionManagers(
+        B_JID,
+        [ B_DID ],
+        { A_JID: [ A_DID ] }
+    )
+
+    newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
+    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
+
+    b_sm_sync  = b_sms_sync [B_DID]
+    b_sm_async = b_sms_async[B_DID]
+
+    encrypted_sync = sm_sync.encryptKeyTransportMessage(
+        [ B_JID ],
+        lambda encryptor: encryptBigFile(encryptor, "sync"),
+        { B_JID: { B_DID: b_sm_sync.public_bundle } }
+    )
+
+    encrypted_async = assertPromiseFulfilled(sm_async.encryptKeyTransportMessage(
+        [ B_JID ],
+        lambda encryptor: encryptBigFile(encryptor, "async"),
+        { B_JID: { B_DID: b_sm_async.public_bundle } }
+    ))
+
+    decryptor_sync = b_sm_sync.decryptKeyTransportMessage(
+        A_JID,
+        A_DID,
+        encrypted_sync["iv"],
+        encrypted_sync["keys"][B_JID][B_DID]["data"],
+        encrypted_sync["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    )
+
+    decryptor_async = assertPromiseFulfilledOrRaise(b_sm_async.decryptKeyTransportMessage(
+        A_JID,
+        A_DID,
+        encrypted_async["iv"],
+        encrypted_async["keys"][B_JID][B_DID]["data"],
+        encrypted_async["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    ))
+
+    decryptBigFile(decryptor_sync,  "sync")
+    decryptBigFile(decryptor_async, "async")
+
+def test_ratchetForwardingMessage():
+    _, sm_sync, _, sm_async = createSessionManagers()
+    b_sms_sync, b_sms_async = createOtherSessionManagers(
+        B_JID,
+        [ B_DID ],
+        { A_JID: [ A_DID ] }
+    )
+
+    newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
+    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
+
+    b_sm_sync  = b_sms_sync [B_DID]
+    b_sm_async = b_sms_async[B_DID]
+
+    encrypted_sync = sm_sync.encryptRatchetForwardingMessage(
+        [ B_JID ],
+        { B_JID: { B_DID: b_sm_sync.public_bundle } }
+    )
+
+    encrypted_async = assertPromiseFulfilled(sm_async.encryptRatchetForwardingMessage(
+        [ B_JID ],
+        { B_JID: { B_DID: b_sm_async.public_bundle } }
+    ))
+
+    b_sm_sync.decryptRatchetForwardingMessage(
+        A_JID,
+        A_DID,
+        encrypted_sync["iv"],
+        encrypted_sync["keys"][B_JID][B_DID]["data"],
+        encrypted_sync["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    )
+
+    assertPromiseFulfilledOrRaise(b_sm_async.decryptRatchetForwardingMessage(
+        A_JID,
+        A_DID,
+        encrypted_async["iv"],
+        encrypted_async["keys"][B_JID][B_DID]["data"],
+        encrypted_async["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    ))
 
 def test_messageDecryption_noTrust():
     messageEncryption(trust_alice = False, expect_untrusted_decryption = True)

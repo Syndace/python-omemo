@@ -8,7 +8,8 @@ import os
 import sys
 import time
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from . import promise
 from . import storagewrapper
@@ -122,9 +123,50 @@ class SessionManager(object):
         bundles = None,
         expect_problems = None
     ):
+        # Dirty hack to access ciphertext from _encryptMessage
+        ciphertext = []
+
+        def _encryptMessage(aes_gcm):
+            ciphertext.append(aes_gcm.update(plaintext) + aes_gcm.finalize())
+
+        encrypted = yield self.encryptKeyTransportMessage(
+            bare_jids,
+            _encryptMessage,
+            bundles,
+            expect_problems
+        )
+
+        encrypted["payload"] = ciphertext[0]
+
+        promise.returnValue(encrypted)
+
+    @promise.maybe_coroutine(checkSelf)
+    def encryptRatchetForwardingMessage(
+        self,
+        bare_jids,
+        bundles = None,
+        expect_problems = None
+    ):
+        encrypted = yield self.encryptKeyTransportMessage(
+            bare_jids,
+            lambda aes_gcm: aes_gcm.finalize(),
+            bundles,
+            expect_problems
+        )
+
+        promise.returnValue(encrypted)
+
+    @promise.maybe_coroutine(checkSelf)
+    def encryptKeyTransportMessage(
+        self,
+        bare_jids,
+        encryption_callback,
+        bundles = None,
+        expect_problems = None
+    ):
         """
         bare_jids: iterable<string>
-        plaintext: bytes
+        encryption_callback: A function which is called using an instance of cryptography.hazmat.primitives.ciphers.CipherContext, which you can use to encrypt any sort of data. You don't have to return anything.
         bundles: { [bare_jid: string] => { [device_id: int] => ExtendedPublicBundle } }
         expect_problems: { [bare_jid: string] => iterable<int> }
 
@@ -138,8 +180,7 @@ class SessionManager(object):
                         "pre_key" : boolean
                     }
                 }
-            },
-            payload: bytes
+            }
         }
         """
 
@@ -271,18 +312,22 @@ class SessionManager(object):
         # encryption #
         ##############
 
-        # Prepare the AES-GCM cipher and encrypt the plaintext
-
-        # TODO: Change this to 12 as soon as all other OMEMO libs support that.
+        # Prepare AES-GCM key and IV
         aes_gcm_iv  = os.urandom(16)
-        aes_gcm_key = AESGCM.generate_key(bit_length = 128)
-        aes_gcm     = AESGCM(aes_gcm_key)
+        aes_gcm_key = os.urandom(16)
 
-        ciphertext = aes_gcm.encrypt(aes_gcm_iv, plaintext, None)
+        # Create the AES-GCM instance
+        aes_gcm = Cipher(
+            algorithms.AES(aes_gcm_key),
+            modes.GCM(aes_gcm_iv),
+            backend=default_backend()
+        ).encryptor()
 
-        # Split the tag and the ciphertext
-        aes_gcm_tag = ciphertext[-16:]
-        ciphertext  = ciphertext[:-16]
+        # Encrypt the plain data
+        encryption_callback(aes_gcm)
+
+        # Store the tag
+        aes_gcm_tag = aes_gcm.tag
 
         # {
         #     [bare_jid: string] => {
@@ -348,10 +393,9 @@ class SessionManager(object):
                 }
 
         promise.returnValue({
-            "iv": aes_gcm_iv,
-            "sid": self.__my_device_id,
-            "keys": encrypted_keys,
-            "payload": ciphertext
+            "iv"   : aes_gcm_iv,
+            "sid"  : self.__my_device_id,
+            "keys" : encrypted_keys
         })
 
     ##############
@@ -366,7 +410,53 @@ class SessionManager(object):
         iv,
         message,
         is_pre_key_message,
-        payload,
+        ciphertext,
+        additional_information = None,
+        allow_untrusted = False
+    ):
+        aes_gcm = yield self.decryptKeyTransportMessage(
+            bare_jid,
+            device,
+            iv,
+            message,
+            is_pre_key_message,
+            additional_information,
+            allow_untrusted
+        )
+
+        promise.returnValue(aes_gcm.update(ciphertext) + aes_gcm.finalize())
+
+    @promise.maybe_coroutine(checkSelf)
+    def decryptRatchetForwardingMessage(
+        self,
+        bare_jid,
+        device,
+        iv,
+        message,
+        is_pre_key_message,
+        additional_information = None,
+        allow_untrusted = False
+    ):
+        aes_gcm = yield self.decryptKeyTransportMessage(
+            bare_jid,
+            device,
+            iv,
+            message,
+            is_pre_key_message,
+            additional_information,
+            allow_untrusted
+        )
+
+        aes_gcm.finalize()
+
+    @promise.maybe_coroutine(checkSelf)
+    def decryptKeyTransportMessage(
+        self,
+        bare_jid,
+        device,
+        iv,
+        message,
+        is_pre_key_message,
         additional_information = None,
         allow_untrusted = False
     ):
@@ -449,11 +539,11 @@ class SessionManager(object):
         aes_gcm_key = plaintext[:16]
         aes_gcm_tag = plaintext[16:]
 
-        aes_gcm = AESGCM(aes_gcm_key)
-
-        if not payload == None:
-            # Return the plaintext
-            promise.returnValue(aes_gcm.decrypt(iv, payload + aes_gcm_tag, None))
+        promise.returnValue(Cipher(
+            algorithms.AES(aes_gcm_key),
+            modes.GCM(iv, aes_gcm_tag),
+            backend=default_backend()
+        ).decryptor())
 
     ############################
     # public bundle management #
