@@ -18,6 +18,27 @@ This library uses the [X3DH](https://github.com/Syndace/python-x3dh) and [Double
 
 This library does NOT manage XML/stanzas.
 
+## Installation
+
+### pip
+
+You can install this library and all of its dependencies via pip:
+
+```Bash
+$ pip install OMEMO
+```
+
+### AUR
+
+Ppjet6 kindly maintains AUR packages of both the current master and the latest release:
+
+| Release/Branch | Python Version | Link                                                                         |
+|:-------------- |:--------------:|:----------------------------------------------------------------------------:|
+| current master | 2              | [*\*click\**](https://aur.archlinux.org/packages/python2-omemo-syndace/)     |
+| latest release | 2              | [*\*click\**](https://aur.archlinux.org/packages/python2-omemo-syndace-git/) |
+| current master | 3              | [*\*click\**](https://aur.archlinux.org/packages/python-omemo-syndace/)      |
+| latest release | 3              | [*\*click\**](https://aur.archlinux.org/packages/python-omemo-syndace-git/)  |
+
 ## Usage
 
 ### Choose a backend
