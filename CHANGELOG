@@ -1,0 +1,6 @@
+Version 0.10.1 (released: 27th of December, 2018)
+
+- Added CHANGELOG
+- Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future. Fixes #18
+
+This version does not introduce any changes to public APIs. No further updating should be required.

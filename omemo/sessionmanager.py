@@ -18,7 +18,7 @@ from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet
 
 import x3dh
 
-# This shit makes be sad
+# This makes me sad
 if sys.version_info[0] == 3:
     string_type = str
 else:

@@ -5,6 +5,7 @@ from x3dh.exceptions import KeyExchangeException
 from .exceptions import UnknownKeyException
 from .extendeddoubleratchet import make as make_ExtendedDoubleRatchet
 from .state import make as make_State
+from .version import __version__
 
 import base64
 import copy
@@ -43,11 +44,16 @@ def make(backend):
             return {
                 "super"       : super(X3DHDoubleRatchet, self).serialize(),
                 "bound_otpks" : bound_otpks,
-                "pk_messages" : pk_messages
+                "pk_messages" : pk_messages,
+                "version"     : __version__
             }
 
         @classmethod
         def fromSerialized(cls, serialized, *args, **kwargs):
+            version = serialized["version"]
+
+            # Add code to upgrade the state here
+
             self = super(X3DHDoubleRatchet, cls).fromSerialized(
                 serialized["super"],
                 *args,
