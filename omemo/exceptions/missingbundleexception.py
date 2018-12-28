@@ -1,4 +1,6 @@
-class MissingBundleException(Exception):
+from .sessionmanagerexception import SessionManagerException
+
+class MissingBundleException(SessionManagerException):
     def __init__(self, bare_jid, device):
         self.__bare_jid = bare_jid
         self.__device   = device
@@ -20,3 +22,9 @@ class MissingBundleException(Exception):
 
     def __hash__(self):
         return hash((self.bare_jid, self.device))
+
+    def __str__(self):
+        return (
+            "Missing bundle for {} on device {}."
+            .format(self.__bare_jid, self.__device)
+        )

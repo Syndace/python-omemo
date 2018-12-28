@@ -1,2 +1,4 @@
-class InconsistentInfoException(Exception):
+from .sessionmanagerexception import SessionManagerException
+
+class InconsistentInfoException(SessionManagerException):
     pass

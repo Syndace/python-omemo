@@ -1,9 +1,10 @@
-class KeyExchangeException(Exception):
-    def __init__(self, bare_jid, device, message):
-        super(KeyExchangeException, self).__init__(message)
+from .sessionmanagerexception import SessionManagerException
 
+class KeyExchangeException(SessionManagerException):
+    def __init__(self, bare_jid, device, message):
         self.__bare_jid = bare_jid
-        self.__device = device
+        self.__device   = device
+        self.__message  = message
 
     @property
     def bare_jid(self):
@@ -22,3 +23,9 @@ class KeyExchangeException(Exception):
 
     def __hash__(self):
         return hash((self.bare_jid, self.device))
+
+    def __str__(self):
+        return (
+            "The initial key exchange with {} on device {} failed: {}"
+            .format(self.__bare_jid, self.__device, self.__message)
+        )

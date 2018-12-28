@@ -1,2 +1,4 @@
-class WireFormatException(Exception):
+from .backendexception import BackendException
+
+class WireFormatException(BackendException):
     pass

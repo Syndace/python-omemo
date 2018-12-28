@@ -107,8 +107,8 @@ class SessionManager(object):
             if (not self.__my_bare_jid  == own_data["own_bare_jid"] or
                 not self.__my_device_id == own_data["own_device_id"]):
                 raise InconsistentInfoException(
-                    "Given storage is only usable for jid \"" + own_data["own_bare_jid"] +
-                    "\" on device " + str(own_data["own_device_id"]) + "."
+                    "Given storage is only usable for jid {} on device {}."
+                    .format(own_data["own_bare_jid"], own_data["own_device_id"])
                 )
 
     ##############

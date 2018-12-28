@@ -1,4 +1,4 @@
 from .omemoexception import OMEMOException
 
-class UnknownKeyException(OMEMOException):
+class BackendException(OMEMOException):
     pass

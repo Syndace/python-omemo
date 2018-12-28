@@ -1,4 +1,6 @@
-class UntrustedException(Exception):
+from .sessionmanagerexception import SessionManagerException
+
+class UntrustedException(SessionManagerException):
     def __init__(self, bare_jid, device, ik):
         self.__bare_jid = bare_jid
         self.__device   = device
@@ -26,3 +28,9 @@ class UntrustedException(Exception):
 
     def __hash__(self):
         return hash((self.bare_jid, self.device, self.ik))
+
+    def __str__(self):
+        return (
+            "The key {} of {} on device {} is untrusted."
+            .format(self.__ik, self.__bare_jid, self.__device)
+        )
