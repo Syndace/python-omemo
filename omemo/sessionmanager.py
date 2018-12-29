@@ -641,6 +641,9 @@ class SessionManager(object):
 
         yield self._storage.deleteSession(bare_jid, device)
 
+    def deleteSession(self, bare_jid, device):
+        return self.__deleteSession(bare_jid, device)
+
     #####################
     # device management #
     #####################

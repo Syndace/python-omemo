@@ -1,9 +1,14 @@
-Version 0.10.1 (released: 27th of December, 2018)
+Version 0.10.3 (-- WIP --)
 
-- Added CHANGELOG
-- Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future. Fixes #18
+- Added a method for requesting trust information from the storage at bulk. This can be overridden for better performance.
+- Added a method for requesting sessions from the storage at bulk. This can be overridden for better performance.
+- Added a public method to delete an existing session. This is useful to recover from broken sessions.
+- Turned the changelog upside-down, so that the first entry is the newest.
 
-This version does not introduce any changes to public APIs. No further updating should be required.
+This update does not introduce changes to any of the existing public APIs. There are new additions to the public API though:
+- Storage.loadTrusts
+- Storage.loadSessions
+- SessionManager.deleteSession
 
 Version 0.10.2 (released: 29th of December, 2018)
 
@@ -16,11 +21,9 @@ This update does not introduce changes to any of the existing public APIs. There
 - SessionManager.getTrustForDevice
 - SessionManager.getTrustForJID
 
-Version 0.10.3 (-- WIP --)
+Version 0.10.1 (released: 27th of December, 2018)
 
-- Added a method for requesting trust information from the storage at bulk. This can be overridden for better performance.
-- Added a method for requesting sessions from the storage at bulk. This can be overridden for better performance.
+- Added CHANGELOG
+- Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future. Fixes #18
 
-This update does not introduce changes to any of the existing public APIs. There are new additions to the public API though:
-- Storage.loadTrusts
-- Storage.loadSessions
+This version does not introduce any changes to public APIs. No further updating should be required.
