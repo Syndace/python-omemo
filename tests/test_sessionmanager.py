@@ -274,6 +274,10 @@ def messageEncryption(
 
         for did in expected_successes:
             try:
+                # Check that the pre_key flag is set correctly
+                expect_pre_key = did in bundles_sync
+                assert encrypted_sync["keys"][B_JID][did]["pre_key"] == expect_pre_key
+
                 decrypted_sync = b_sms_sync[did].decryptMessage(
                     A_JID,
                     A_DID,
@@ -290,6 +294,10 @@ def messageEncryption(
                 assert e == UntrustedException(A_JID, A_DID, sm_sync.public_bundle.ik)
 
             try:
+                # Check that the pre_key flag is set correctly
+                expect_pre_key = did in bundles_async
+                assert encrypted_async["keys"][B_JID][did]["pre_key"] == expect_pre_key
+
                 decrypted_async = assertPromiseFulfilledOrRaise(
                     b_sms_async[did].decryptMessage(
                         A_JID,
