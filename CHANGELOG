@@ -1,14 +1,19 @@
-Version 0.10.3 (-- WIP --)
+Version 0.10.3 (released: 29th of December, 2018)
 
 - Added a method for requesting trust information from the storage at bulk. This can be overridden for better performance.
 - Added a method for requesting sessions from the storage at bulk. This can be overridden for better performance.
 - Added a public method to delete an existing session. This is useful to recover from broken sessions.
+- Added a public method to retrieve a list of all managed JIDs.
 - Turned the changelog upside-down, so that the first entry is the newest.
+- Added a stresstest, mostly to test recursion depth.
+- Modified no_coroutine in the promise lib to use a loop instead of recursion.
+- Modified the promise constructor to run promises in threads.
 
 This update does not introduce changes to any of the existing public APIs. There are new additions to the public API though:
 - Storage.loadTrusts
 - Storage.loadSessions
 - SessionManager.deleteSession
+- SessionManager.listJIDs
 
 Version 0.10.2 (released: 29th of December, 2018)
 

@@ -2,6 +2,7 @@ import pytest
 
 import logging
 import os
+import time
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -35,6 +36,9 @@ from example_data import (
 
 def assertPromiseFulfilled(promise):
     assert isinstance(promise, omemo.promise.Promise)
+
+    while not promise.done: time.sleep(.01)
+
     assert promise.fulfilled
 
     return promise.value
@@ -42,7 +46,7 @@ def assertPromiseFulfilled(promise):
 def assertPromiseFulfilledOrRaise(promise):
     assert isinstance(promise, omemo.promise.Promise)
 
-    assert promise.done
+    while not promise.done: time.sleep(.01)
 
     if promise.fulfilled:
         return promise.value
@@ -51,6 +55,9 @@ def assertPromiseFulfilledOrRaise(promise):
 
 def assertPromiseRejected(promise):
     assert isinstance(promise, omemo.promise.Promise)
+
+    while not promise.done: time.sleep(.01)
+
     assert promise.rejected
 
     return promise.reason
@@ -864,6 +871,176 @@ def test_serialization():
         encrypted_async["keys"][B_JID][B_DID]["pre_key"],
         allow_untrusted = True
     ))
+
+def test_stresstest_sync():
+    # Create 100 random JIDs with 10 random devices each
+    devices = {}
+    main_jid = None
+    main_did = None
+
+    while len(devices) < 100:
+        jid = generateRandomJID()
+
+        if main_jid == None:
+            main_jid = jid
+
+        devices[jid] = set()
+
+        while len(devices[jid]) < 10:
+            did = omemo.util.generateDeviceID(devices[jid])
+
+            if main_did == None:
+                main_did = did
+
+            devices[jid].add(did)
+
+    sms = {}
+
+    for jid in devices:
+        sms[jid] = {}
+
+        for did in devices[jid]:
+            # Create a SessionManager for that jid+did
+            sms[jid][did] = SessionManager.create(
+                SyncInMemoryStorage(),
+                DeletingOTPKPolicy,
+                SignalBackend,
+                jid,
+                did
+            )
+
+    bundles = {}
+
+    for jid in devices:
+        bundles[jid] = {}
+
+        for did in devices[jid]:
+            bundles[jid][did] = sms[jid][did].public_bundle
+
+    main = sms[main_jid][main_did]
+
+    # Tell the main SessionManager about all of the other jids and devices
+    for jid in devices:
+        main.newDeviceList(jid, devices[jid])
+
+    # Tell the main SessionManager to trust all other jids and devices
+    for jid in devices:
+        for did in devices[jid]:
+            main.trust(jid, did, sms[jid][did].public_bundle.ik)
+
+    import cProfile
+
+    print("Starting to profile")
+
+    cProfile.runctx("""
+main.encryptMessage(
+    list(devices.keys()),
+    "This is a stresstest!".encode("UTF-8"),
+    bundles = bundles
+)
+    """, {}, {
+        "main": main,
+        "devices": devices,
+        "bundles": bundles
+    })
+
+    # If the code reaches this point, the stress test has passed
+    assert True
+
+def test_stresstest_async():
+    # Create 100 random JIDs with 10 random devices each
+    devices = {}
+    main_jid = None
+    main_did = None
+
+    while len(devices) < 100:
+        jid = generateRandomJID()
+
+        if main_jid == None:
+            main_jid = jid
+
+        devices[jid] = set()
+
+        while len(devices[jid]) < 10:
+            did = omemo.util.generateDeviceID(devices[jid])
+
+            if main_did == None:
+                main_did = did
+
+            devices[jid].add(did)
+
+    sms = {}
+
+    for jid in devices:
+        sms[jid] = {}
+
+        for did in devices[jid]:
+            # Create a SessionManager for that jid+did
+            sms[jid][did] = assertPromiseFulfilled(SessionManager.create(
+                AsyncInMemoryStorage(),
+                DeletingOTPKPolicy,
+                SignalBackend,
+                jid,
+                did
+            ))
+
+    bundles = {}
+
+    for jid in devices:
+        bundles[jid] = {}
+
+        for did in devices[jid]:
+            bundles[jid][did] = sms[jid][did].public_bundle
+
+    main = sms[main_jid][main_did]
+
+    # Tell the main SessionManager about all of the other jids and devices
+    for jid in devices:
+        assertPromiseFulfilled(main.newDeviceList(jid, devices[jid]))
+
+    # Tell the main SessionManager to trust all other jids and devices
+    for jid in devices:
+        for did in devices[jid]:
+            main.trust(jid, did, sms[jid][did].public_bundle.ik)
+
+    import cProfile
+
+    print("Starting to profile")
+
+    cProfile.runctx("""
+assertPromiseFulfilledOrRaise(main.encryptMessage(
+    list(devices.keys()),
+    "This is a stresstest!".encode("UTF-8"),
+    bundles = bundles
+))
+    """, {
+        "assertPromiseFulfilledOrRaise": assertPromiseFulfilledOrRaise
+    }, {
+        "main": main,
+        "devices": devices,
+        "bundles": bundles
+    })
+
+    # If the code reaches this point, the stress test has passed
+    assert True
+
+def charFromByte(c):
+    try:
+        c = ord(c)
+    except TypeError:
+        pass
+
+    c %= 26
+    c += ord('a')
+    return chr(c)
+
+def generateRandomJID():
+    bytes = os.urandom(16)
+
+    return "{}@{}.im".format(
+        "".join(map(charFromByte, bytes[:8])),
+        "".join(map(charFromByte, bytes[8:]))
+    )
 
 # TODO
 # Default OTPKPolicy

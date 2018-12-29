@@ -1009,6 +1009,9 @@ class SessionManager(object):
     # other #
     #########
 
+    def listJIDs(self):
+        return self._storage.listJIDs()
+
     @promise.maybe_coroutine(checkSelf)
     def deleteJID(self, bare_jid):
         """

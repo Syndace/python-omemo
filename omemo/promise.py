@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import functools
+import threading
 import types
 
 class ReturnValueException(Exception):
@@ -58,8 +59,13 @@ class Promise(object):
         self.__onfulfilled = []
         self.__onrejected  = []
 
+        self.__code = code
+
+        threading.Thread(target = self.__run).start()
+
+    def __run(self):
         try:
-            code(self.__resolve, self.__reject)
+            self.__code(self.__resolve, self.__reject)
         except BaseException as e:
             self.__reject(e)
 
@@ -248,7 +254,10 @@ def no_coroutine(f):
         if not isinstance(generator, types.GeneratorType):
             return generator
 
-        def _step(previous, first):
+        previous = None
+        first    = True
+
+        while True:
             element = None
 
             try:
@@ -261,9 +270,8 @@ def no_coroutine(f):
             except ReturnValueException as e:
                 return e.value
             else:
-                return _step(element, False)
-
-        return _step(None, True)
+                previous = element
+                first    = False
 
     return _no_coroutine
 
