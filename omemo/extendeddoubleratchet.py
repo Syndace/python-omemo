@@ -20,6 +20,8 @@ def make(backend):
             self = super(ExtendedDoubleRatchet, cls).fromSerialized(
                 serialized["super"],
                 *args,
+                ad = None, # TODO: This is ugly
+                root_key = None,
                 **kwargs
             )
 

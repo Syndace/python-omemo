@@ -10,5 +10,8 @@ Version 0.10.2 (released: 29th of December, 2018)
 - Most exceptions now implement __str__ to generate human-readable messages. Fixes #19
 - Introduced an exception-hierarchy to allow for more fine-grained exception catching and type-checking. Fixes #20
 - Added methods to retrieve trust information from the SessionManager (getTrustForDevice and getTrustForJID). Fixes #21
+- Fixed a bug that tried to instantiate an object of the wrong class from serialized data.
 
--- WIP --
+This update does not introduce changes to any of the existing public APIs. There are new additions to the public API though:
+- SessionManager.getTrustForDevice
+- SessionManager.getTrustForJID

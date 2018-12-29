@@ -779,6 +779,84 @@ def test_trustRetrieval():
         "inactive": {}
     }
 
+def test_serialization():
+    st_sync, sm_sync, st_async, sm_async = createSessionManagers()
+    b_sms_sync, b_sms_async = createOtherSessionManagers(
+        B_JID,
+        [ B_DID ],
+        { A_JID: [ A_DID ] }
+    )
+
+    newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
+    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
+
+    b_sm_sync  = b_sms_sync [B_DID]
+    b_sm_async = b_sms_async[B_DID]
+
+    encrypted_sync = sm_sync.encryptRatchetForwardingMessage(
+        [ B_JID ],
+        { B_JID: { B_DID: b_sm_sync.public_bundle } }
+    )
+
+    encrypted_async = assertPromiseFulfilled(sm_async.encryptRatchetForwardingMessage(
+        [ B_JID ],
+        { B_JID: { B_DID: b_sm_async.public_bundle } }
+    ))
+
+    b_sm_sync.decryptRatchetForwardingMessage(
+        A_JID,
+        A_DID,
+        encrypted_sync["iv"],
+        encrypted_sync["keys"][B_JID][B_DID]["data"],
+        encrypted_sync["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    )
+
+    assertPromiseFulfilledOrRaise(b_sm_async.decryptRatchetForwardingMessage(
+        A_JID,
+        A_DID,
+        encrypted_async["iv"],
+        encrypted_async["keys"][B_JID][B_DID]["data"],
+        encrypted_async["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    ))
+
+    # After this code is done, there is an updated state and a session in the cache.
+    # Create new SessionManagers using the storage of the old one and check, whether the
+    # state and the session are still usable.
+    _, sm_sync, _, sm_async = createSessionManagers(
+        st_sync  = st_sync,
+        st_async = st_async
+    )
+
+    encrypted_sync = sm_sync.encryptRatchetForwardingMessage(
+        [ B_JID ],
+        { B_JID: { B_DID: b_sm_sync.public_bundle } }
+    )
+
+    encrypted_async = assertPromiseFulfilled(sm_async.encryptRatchetForwardingMessage(
+        [ B_JID ],
+        { B_JID: { B_DID: b_sm_async.public_bundle } }
+    ))
+
+    b_sm_sync.decryptRatchetForwardingMessage(
+        A_JID,
+        A_DID,
+        encrypted_sync["iv"],
+        encrypted_sync["keys"][B_JID][B_DID]["data"],
+        encrypted_sync["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    )
+
+    assertPromiseFulfilledOrRaise(b_sm_async.decryptRatchetForwardingMessage(
+        A_JID,
+        A_DID,
+        encrypted_async["iv"],
+        encrypted_async["keys"][B_JID][B_DID]["data"],
+        encrypted_async["keys"][B_JID][B_DID]["pre_key"],
+        allow_untrusted = True
+    ))
+
 # TODO
 # Default OTPKPolicy
 # KeyExchangeExceptions during encryptMessage

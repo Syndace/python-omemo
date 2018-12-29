@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from . import promise
 from . import storagewrapper
 from .exceptions import *
+from .extendeddoubleratchet import make as make_ExtendedDoubleRatchet
 from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet
 
 import x3dh
@@ -69,6 +70,7 @@ class SessionManager(object):
 
         self.__backend = backend
         self.__X3DHDoubleRatchet = make_X3DHDoubleRatchet(self.__backend)
+        self.__ExtendedDoubleRatchet = make_ExtendedDoubleRatchet(self.__backend)
 
         self.__my_bare_jid  = my_bare_jid
         self.__my_device_id = my_device_id
@@ -586,7 +588,7 @@ class SessionManager(object):
             session = yield self._storage.loadSession(bare_jid, device)
 
             if not session == None:
-                session = self.__backend.DoubleRatchet.fromSerialized(session)
+                session = self.__ExtendedDoubleRatchet.fromSerialized(session, None)
 
             self.__sessions_cache[bare_jid][device] = session
 
