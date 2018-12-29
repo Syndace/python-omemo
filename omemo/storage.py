@@ -85,6 +85,38 @@ class Storage(object):
 
         raise NotImplementedError
 
+    def loadSessions(self, callback, bare_jid, device_ids):
+        """
+        Return a dict containing the session for each device id. By default, this method
+        calls loadSession for each device id.
+        """
+
+        if self.is_async:
+            self.__loadSessionsAsync(callback, bare_jid, device_ids, {})
+        else:
+            return self.__loadSessionsSync(bare_jid, device_ids)
+
+    def __loadSessionsAsync(self, callback, bare_jid, device_ids, result):
+        if len(device_ids) == 0:
+            return callback(True, result)
+
+        device_id = device_ids[0]
+
+        def __loadSessionCallback(success, trust):
+            if success:
+                result[device_id] = trust
+                self.__loadSessionsAsync(callback, bare_jid, device_ids[1:], result)
+            else:
+                callback(False, trust)
+
+        self.loadSession(__loadSessionCallback, bare_jid, device_id)
+
+    def __loadSessionsSync(self, bare_jid, device_ids):
+        return {
+            device: self.loadSession(None, bare_jid, device)
+            for device in device_ids
+        }
+
     def storeSession(self, callback, bare_jid, device_id, session):
         """
         Store a session for given bare_jid and device id, overwriting the previous
@@ -182,6 +214,35 @@ class Storage(object):
         """
 
         raise NotImplementedError
+
+    def loadTrusts(self, callback, bare_jid, device_ids):
+        """
+        Return a dict containing the trust status for each device id. By default, this
+        method calls loadTrust for each device id.
+        """
+
+        if self.is_async:
+            self.__loadTrustsAsync(callback, bare_jid, device_ids, {})
+        else:
+            return self.__loadTrustsSync(bare_jid, device_ids)
+
+    def __loadTrustsAsync(self, callback, bare_jid, device_ids, result):
+        if len(device_ids) == 0:
+            return callback(True, result)
+
+        device_id = device_ids[0]
+
+        def __loadTrustCallback(success, trust):
+            if success:
+                result[device_id] = trust
+                self.__loadTrustsAsync(callback, bare_jid, device_ids[1:], result)
+            else:
+                callback(False, trust)
+
+        self.loadTrust(__loadTrustCallback, bare_jid, device_id)
+
+    def __loadTrustsSync(self, bare_jid, device_ids):
+        return { device: self.loadTrust(None, bare_jid, device) for device in device_ids }
 
     def listJIDs(self, callback):
         """

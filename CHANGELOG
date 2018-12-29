@@ -15,3 +15,12 @@ Version 0.10.2 (released: 29th of December, 2018)
 This update does not introduce changes to any of the existing public APIs. There are new additions to the public API though:
 - SessionManager.getTrustForDevice
 - SessionManager.getTrustForJID
+
+Version 0.10.3 (-- WIP --)
+
+- Added a method for requesting trust information from the storage at bulk. This can be overridden for better performance.
+- Added a method for requesting sessions from the storage at bulk. This can be overridden for better performance.
+
+This update does not introduce changes to any of the existing public APIs. There are new additions to the public API though:
+- Storage.loadTrusts
+- Storage.loadSessions

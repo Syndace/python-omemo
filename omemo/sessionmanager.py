@@ -233,8 +233,11 @@ class SessionManager(object):
         for bare_jid, devices in encrypt_for.items():
             missing_bundles = set()
 
+            # Load all sessions
+            sessions = yield self.__loadSessions(bare_jid, devices)
+
             for device in devices:
-                session = yield self.__loadSession(bare_jid, device)
+                session = sessions[device]
 
                 if session == None:
                     if not device in bundles.get(bare_jid, {}):
@@ -250,9 +253,11 @@ class SessionManager(object):
         for bare_jid, devices in encrypt_for.items():
             key_exchange_problems = {}
 
+            # Load all sessions
+            sessions = yield self.__loadSessions(bare_jid, devices)
+
             for device in devices:
-                # Load the session
-                session = yield self.__loadSession(bare_jid, device)
+                session = sessions[device]
 
                 # If no session exists, create a new session
                 if session == None:
@@ -278,16 +283,22 @@ class SessionManager(object):
 
         # Check the trust for each device
         for bare_jid, devices in encrypt_for.items():
+            # Load all trust
+            trusts = yield self.__loadTrusts(bare_jid, devices)
+
+            # Load all sessions
+            sessions = yield self.__loadSessions(bare_jid, devices)
+
             untrusted = []
 
             for device in devices:
-                # Load the session
-                session = yield self.__loadSession(bare_jid, device)
+                trust   = trusts[device]
+                session = sessions[device]
 
                 # Get the identity key of the recipient
                 other_ik = bundles[bare_jid][device].ik if session == None else session.ik
 
-                if not (yield self.__checkTrust(bare_jid, device, other_ik)):
+                if not (yield self.__checkTrust(bare_jid, device, other_ik, trust)):
                     untrusted.append((device, other_ik))
 
             devices -= set(map(lambda x: x[0], untrusted))
@@ -595,6 +606,27 @@ class SessionManager(object):
         promise.returnValue(self.__sessions_cache[bare_jid][device])
 
     @promise.maybe_coroutine(checkSelf)
+    def __loadSessions(self, bare_jid, devices):
+        self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
+
+        missing_sessions = set(devices) - set(self.__sessions_cache[bare_jid].keys())
+
+        sessions = yield self._storage.loadSessions(bare_jid, list(missing_sessions))
+
+        for device in missing_sessions:
+            session = sessions[device]
+
+            if not session == None:
+                session = self.__ExtendedDoubleRatchet.fromSerialized(session, None)
+
+            self.__sessions_cache[bare_jid][device] = session
+
+        promise.returnValue({
+            device: copy.deepcopy(self.__sessions_cache[bare_jid][device])
+            for device in devices
+        })
+
+    @promise.maybe_coroutine(checkSelf)
     def __storeSession(self, bare_jid, device, session):
         self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
         self.__sessions_cache[bare_jid][device] = session
@@ -863,6 +895,27 @@ class SessionManager(object):
         promise.returnValue(copy.deepcopy(self.__trust_cache[bare_jid][device]))
 
     @promise.maybe_coroutine(checkSelf)
+    def __loadTrusts(self, bare_jid, devices):
+        self.__trust_cache[bare_jid] = self.__trust_cache.get(bare_jid, {})
+
+        missing_trusts = set(devices) - set(self.__trust_cache[bare_jid].keys())
+
+        trusts = yield self._storage.loadTrusts(bare_jid, list(missing_trusts))
+
+        for device in missing_trusts:
+            trust = trusts[device]
+
+            self.__trust_cache[bare_jid][device] = None if trust == None else {
+                "key"     : base64.b64decode(trust["key"].encode("US-ASCII")),
+                "trusted" : trust["trusted"]
+            }
+
+        promise.returnValue({
+            device: copy.deepcopy(self.__trust_cache[bare_jid][device])
+            for device in devices
+        })
+
+    @promise.maybe_coroutine(checkSelf)
     def __storeTrust(self, bare_jid, device, trust):
         self.__trust_cache[bare_jid] = self.__trust_cache.get(bare_jid, {})
         self.__trust_cache[bare_jid][device] = copy.deepcopy(trust)
@@ -877,8 +930,9 @@ class SessionManager(object):
         )
 
     @promise.maybe_coroutine(checkSelf)
-    def __checkTrust(self, bare_jid, device, key):
-        trust = yield self.__loadTrust(bare_jid, device)
+    def __checkTrust(self, bare_jid, device, key, trust = False):
+        if trust == False:
+            trust = yield self.__loadTrust(bare_jid, device)
 
         if trust == None:
             promise.returnValue(False)
