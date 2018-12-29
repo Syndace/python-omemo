@@ -900,6 +900,52 @@ class SessionManager(object):
             "trusted" : False
         })
 
+    def getTrustForDevice(self, bare_jid, device):
+        """
+        Get trust information for a single device.
+        The result is structured like this:
+
+        {
+            "key"     : a bytes-like object encoding the public key,
+            "trusted" : boolean
+        }
+
+        or None, if no trust was stored for that device.
+        """
+
+        return self.__loadTrust(bare_jid, device)
+
+    @promise.maybe_coroutine(checkSelf)
+    def getTrustForJID(self, bare_jid):
+        """
+        All-in-one trust information for all devices of a bare jid.
+        The result is structured like this:
+
+        {
+            "active"   : { device: int => trust_info }
+            "inactive" : { device: int => trust_info }
+        }
+
+        where trust_info is the structure returned by getTrustForDevice.
+        """
+
+        result = {
+            "active"   : {},
+            "inactive" : {}
+        }
+
+        devices = yield self.__loadActiveDevices(bare_jid)
+
+        for device in devices:
+            result["active"][device] = yield self.getTrustForDevice(bare_jid, device)
+
+        devices = yield self.__loadInactiveDevices(bare_jid)
+
+        for device in devices:
+            result["inactive"][device] = yield self.getTrustForDevice(bare_jid, device)
+
+        promise.returnValue(result)
+
     #########
     # other #
     #########

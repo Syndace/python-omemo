@@ -167,6 +167,25 @@ def trust(sm_sync, sm_async, sms_sync, sms_async, jid_to_trust, devices_to_trust
         sm_sync.trust(jid_to_trust, devices_to_trust, ik_sync)
         assertPromiseFulfilled(sm_async.trust(jid_to_trust, devices_to_trust, ik_async))
 
+def distrust(sm_sync, sm_async, sms_sync, sms_async, jid_to_trust, devices_to_trust):
+    try:
+        for device in devices_to_trust:
+            ik_sync  = sms_sync [device].public_bundle.ik
+            ik_async = sms_async[device].public_bundle.ik
+
+            sm_sync.distrust(jid_to_trust, device, ik_sync)
+            assertPromiseFulfilled(sm_async.distrust(jid_to_trust, device, ik_async))
+    except TypeError:
+        ik_sync  = sms_sync .public_bundle.ik
+        ik_async = sms_async.public_bundle.ik
+
+        sm_sync.distrust(jid_to_trust, devices_to_trust, ik_sync)
+        assertPromiseFulfilled(sm_async.distrust(
+            jid_to_trust,   
+            devices_to_trust,
+            ik_async
+        ))
+
 def messageEncryption(
     pass_bundles      = None,
     trust_devices     = None,
@@ -702,6 +721,63 @@ def test_otpkPolicy_deleting():
 
 def test_otpkPolicy_keeping():
     otpkPolicyTest(KeepingOTPKPolicy, False)
+
+def test_trustRetrieval():
+    _, sm_sync, _, sm_async = createSessionManagers()
+    b_sms_sync, b_sms_async = createOtherSessionManagers(
+        B_JID,
+        [ B_DID ],
+        { A_JID: [ A_DID ] }
+    )
+
+    newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
+
+    assert sm_sync.getTrustForDevice(B_JID, B_DID) == None
+    assert assertPromiseFulfilled(sm_async.getTrustForDevice(B_JID, B_DID)) == None
+
+    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
+
+    assert sm_sync.getTrustForDevice(B_JID, B_DID) == {
+        "key": b_sms_sync[B_DID].public_bundle.ik,
+        "trusted": True
+    }
+
+    assert assertPromiseFulfilled(sm_async.getTrustForDevice(B_JID, B_DID)) == {
+        "key": b_sms_async[B_DID].public_bundle.ik,
+        "trusted": True
+    }
+
+    distrust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
+
+    assert sm_sync.getTrustForDevice(B_JID, B_DID) == {
+        "key": b_sms_sync[B_DID].public_bundle.ik,
+        "trusted": False
+    }
+
+    assert assertPromiseFulfilled(sm_async.getTrustForDevice(B_JID, B_DID)) == {
+        "key": b_sms_async[B_DID].public_bundle.ik,
+        "trusted": False
+    }
+
+    assert sm_sync.getTrustForJID(B_JID) == {
+        "active": {
+            B_DID: {
+                "key": b_sms_sync[B_DID].public_bundle.ik,
+                "trusted": False
+            }
+        },
+        "inactive": {}
+    }
+
+    assert assertPromiseFulfilled(sm_async.getTrustForJID(B_JID)) == {
+        "active": {
+            B_DID: {
+                "key": b_sms_async[B_DID].public_bundle.ik,
+                "trusted": False
+            }
+        },
+        "inactive": {}
+    }
 
 # TODO
 # Default OTPKPolicy

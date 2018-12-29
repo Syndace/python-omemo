@@ -5,9 +5,10 @@ Version 0.10.1 (released: 27th of December, 2018)
 
 This version does not introduce any changes to public APIs. No further updating should be required.
 
-Version 0.10.2 (released: 28th of December, 2018)
+Version 0.10.2 (released: 29th of December, 2018)
 
 - Most exceptions now implement __str__ to generate human-readable messages. Fixes #19
 - Introduced an exception-hierarchy to allow for more fine-grained exception catching and type-checking. Fixes #20
+- Added methods to retrieve trust information from the SessionManager (getTrustForDevice and getTrustForJID). Fixes #21
 
 -- WIP --
