@@ -15,3 +15,4 @@ omemo
 
     Package: backends <backends/package>
     Package: exceptions <exceptions/package>
+    Package: implementations <implementations/package>

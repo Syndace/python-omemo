@@ -1,3 +1,11 @@
+Version 0.10.4 (--WIP--)
+
+- Added an implementation of the storage using a simple directory structure and JSON files.
+
+This version does not introduce any changes to public APIs. No further updating should be required.
+
+--WIP--
+
 Version 0.10.3 (released: 29th of December, 2018)
 
 - Added a method for requesting trust information from the storage at bulk. This can be overridden for better performance.

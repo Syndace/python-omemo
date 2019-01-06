@@ -5,6 +5,7 @@ from .version import __version__
 import sys
 
 from . import backends
+from . import implementations
 from . import promise
 from . import util
 from .defaultotpkpolicy import DefaultOTPKPolicy

@@ -196,19 +196,6 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def storeTrust(self, callback, bare_jid, device_id, trust):
-        """
-        bare_jid: string
-        device_id: int
-
-        trust: {
-            "key"     : string (Base64 encoded bytes),
-            "trusted" : bool
-        }
-        """
-
-        raise NotImplementedError
-
     def loadTrust(self, callback, bare_jid, device_id):
         """
         """
@@ -243,6 +230,19 @@ class Storage(object):
 
     def __loadTrustsSync(self, bare_jid, device_ids):
         return { device: self.loadTrust(None, bare_jid, device) for device in device_ids }
+
+    def storeTrust(self, callback, bare_jid, device_id, trust):
+        """
+        bare_jid: string
+        device_id: int
+
+        trust: {
+            "key"     : string (Base64 encoded bytes),
+            "trusted" : bool
+        }
+        """
+
+        raise NotImplementedError
 
     def listJIDs(self, callback):
         """
