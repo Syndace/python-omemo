@@ -1,5 +1,6 @@
 import pytest
 
+import cProfile
 import logging
 import os
 import time
@@ -562,7 +563,8 @@ def test_ratchetForwardingMessage():
     )
 
     newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
-    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
+    # This should not require trusting the devices.
+    #trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
 
     b_sm_sync  = b_sms_sync [B_DID]
     b_sm_async = b_sms_async[B_DID]
@@ -928,10 +930,6 @@ def test_stresstest_sync():
         for did in devices[jid]:
             main.trust(jid, did, sms[jid][did].public_bundle.ik)
 
-    import cProfile
-
-    print("Starting to profile")
-
     cProfile.runctx("""
 main.encryptMessage(
     list(devices.keys()),
@@ -1002,10 +1000,6 @@ def test_stresstest_async():
     for jid in devices:
         for did in devices[jid]:
             main.trust(jid, did, sms[jid][did].public_bundle.ik)
-
-    import cProfile
-
-    print("Starting to profile")
 
     cProfile.runctx("""
 assertPromiseFulfilledOrRaise(main.encryptMessage(

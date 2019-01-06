@@ -131,7 +131,7 @@ class SessionManager(object):
         def _encryptMessage(aes_gcm):
             ciphertext.append(aes_gcm.update(plaintext) + aes_gcm.finalize())
 
-        encrypted = yield self.encryptKeyTransportMessage(
+        encrypted = yield self.__encryptKeyTransportMessage(
             bare_jids,
             _encryptMessage,
             bundles,
@@ -149,22 +149,38 @@ class SessionManager(object):
         bundles = None,
         expect_problems = None
     ):
-        encrypted = yield self.encryptKeyTransportMessage(
+        encrypted = yield self.__encryptKeyTransportMessage(
             bare_jids,
             lambda aes_gcm: aes_gcm.finalize(),
             bundles,
-            expect_problems
+            expect_problems,
+            ignore_trust = True
         )
 
         promise.returnValue(encrypted)
 
-    @promise.maybe_coroutine(checkSelf)
     def encryptKeyTransportMessage(
         self,
         bare_jids,
         encryption_callback,
         bundles = None,
         expect_problems = None
+    ):
+        return self.__encryptKeyTransportMessage(
+            bare_jids,
+            encryption_callback,
+            bundles,
+            expect_problems
+        )
+
+    @promise.maybe_coroutine(checkSelf)
+    def __encryptKeyTransportMessage(
+        self,
+        bare_jids,
+        encryption_callback,
+        bundles = None,
+        expect_problems = None,
+        ignore_trust = False
     ):
         """
         bare_jids: iterable<string>
@@ -281,31 +297,32 @@ class SessionManager(object):
                         message
                     ))
 
-        # Check the trust for each device
-        for bare_jid, devices in encrypt_for.items():
-            # Load all trust
-            trusts = yield self.__loadTrusts(bare_jid, devices)
+        if not ignore_trust:
+            # Check the trust for each device
+            for bare_jid, devices in encrypt_for.items():
+                # Load all trust
+                trusts = yield self.__loadTrusts(bare_jid, devices)
 
-            # Load all sessions
-            sessions = yield self.__loadSessions(bare_jid, devices)
+                # Load all sessions
+                sessions = yield self.__loadSessions(bare_jid, devices)
 
-            untrusted = []
+                untrusted = []
 
-            for device in devices:
-                trust   = trusts[device]
-                session = sessions[device]
+                for device in devices:
+                    trust   = trusts[device]
+                    session = sessions[device]
 
-                # Get the identity key of the recipient
-                other_ik = bundles[bare_jid][device].ik if session == None else session.ik
+                    # Get the identity key of the recipient
+                    other_ik = bundles[bare_jid][device].ik if session == None else session.ik
 
-                if not (yield self.__checkTrust(bare_jid, device, other_ik, trust)):
-                    untrusted.append((device, other_ik))
+                    if not (yield self.__checkTrust(bare_jid, device, other_ik, trust)):
+                        untrusted.append((device, other_ik))
 
-            devices -= set(map(lambda x: x[0], untrusted))
+                devices -= set(map(lambda x: x[0], untrusted))
 
-            for device, other_ik in untrusted:
-                if not device in expect_problems.get(bare_jid, set()):
-                    problems.append(UntrustedException(bare_jid, device, other_ik))
+                for device, other_ik in untrusted:
+                    if not device in expect_problems.get(bare_jid, set()):
+                        problems.append(UntrustedException(bare_jid, device, other_ik))
 
         # Check for jids with no eligible devices
         for bare_jid, devices in list(encrypt_for.items()):
