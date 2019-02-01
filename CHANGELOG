@@ -1,11 +1,13 @@
-Version 0.10.4 (--WIP--)
+Version 0.10.4 (released: 1st of February, 2019)
 
 - Added an implementation of the storage using a simple directory structure and JSON files.
 - RatchetForwardingMessages do not require the recipient to be trusted any more, as they contain no user-generated content. See #22 for information. Fixes #22
+- Cleared up the confusion about the UntrustedException. Renamed the exception to TrustException and added a fourth field "problem" to get the type of problem (untrusted vs. undecided). Fixes #25
 
-This version does not introduce any changes to public APIs. No further updating should be required.
+This version does introduce a minor change to the existing public APIs:
 
---WIP--
+- Renamed UntrustedException to TrustException
+- Added a new parameter "problem" of type string to the TrustException, including a getter for it. Valid values: "untrusted" and "undecided".
 
 Version 0.10.3 (released: 29th of December, 2018)
 

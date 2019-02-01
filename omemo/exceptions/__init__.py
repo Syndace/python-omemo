@@ -10,6 +10,6 @@ from .noeligibledevicesexception import NoEligibleDevicesException
 from .nosessionexception import NoSessionException
 from .omemoexception import OMEMOException
 from .sessionmanagerexception import SessionManagerException
+from .trustexception import TrustException
 from .unknownkeyexception import UnknownKeyException
-from .untrustedexception import UntrustedException
 from .wireformatexception import WireFormatException

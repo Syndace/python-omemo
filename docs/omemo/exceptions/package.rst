@@ -12,6 +12,6 @@ exceptions
     Module: nosessionexception <nosessionexception>
     Module: omemoexception <omemoexception>
     Module: sessionmanagerexception <sessionmanagerexception>
+    Module: trustexception <trustexception>
     Module: unknownkeyexception <unknownkeyexception>
-    Module: untrustedexception <untrustedexception>
     Module: wireformatexception <wireformatexception>

@@ -202,7 +202,7 @@ def messageEncryption(
     expected_problems = None,
     trust_alice       = True,
     allow_untrusted_decryption = False,
-    expect_untrusted_decryption = False
+    expect_untrusted_decryption = None
 ):
     if pass_bundles == None:
         pass_bundles = set(B_DIDS)
@@ -296,10 +296,14 @@ def messageEncryption(
                     allow_untrusted = allow_untrusted_decryption
                 )
 
-                assert not expect_untrusted_decryption
-            except UntrustedException as e:
-                assert expect_untrusted_decryption
-                assert e == UntrustedException(A_JID, A_DID, sm_sync.public_bundle.ik)
+                assert expect_untrusted_decryption == None
+            except TrustException as e:
+                assert e == TrustException(
+                    A_JID,
+                    A_DID,
+                    sm_sync.public_bundle.ik,
+                    expect_untrusted_decryption
+                )
 
             try:
                 # Check that the pre_key flag is set correctly
@@ -318,12 +322,17 @@ def messageEncryption(
                     )
                 )
 
-                assert not expect_untrusted_decryption
-            except UntrustedException as e:
+                assert expect_untrusted_decryption == None
+            except TrustException as e:
                 assert expect_untrusted_decryption
-                assert e == UntrustedException(A_JID, A_DID, sm_async.public_bundle.ik)
+                assert e == TrustException(
+                    A_JID,
+                    A_DID,
+                    sm_async.public_bundle.ik,
+                    expect_untrusted_decryption
+                )
 
-            if not expect_untrusted_decryption:
+            if expect_untrusted_decryption == None:
                 assert decrypted_sync == decrypted_async == msg
     else:
         assert len(problems_sync) == len(problems_async) == len(expected_problems)
@@ -331,21 +340,23 @@ def messageEncryption(
         zipped = zip(problems_sync, problems_async, expected_problems)
 
         for problem_sync, problem_async, problem_expected in zipped:
-            if isinstance(problem_expected, UntrustedException):
-                problem_expected_sync = UntrustedException(
+            if isinstance(problem_expected, TrustException):
+                problem_expected_sync = TrustException(
                     problem_expected.bare_jid,
                     problem_expected.device,
                     sm_sync.public_bundle.ik
                     if problem_expected.bare_jid == A_JID else
-                    b_sms_sync[problem_expected.device].public_bundle.ik
+                    b_sms_sync[problem_expected.device].public_bundle.ik,
+                    problem_expected.problem
                 )
 
-                problem_expected_async = UntrustedException(
+                problem_expected_async = TrustException(
                     problem_expected.bare_jid,
                     problem_expected.device,
                     sm_async.public_bundle.ik
                     if problem_expected.bare_jid == A_JID else
-                    b_sms_async[problem_expected.device].public_bundle.ik
+                    b_sms_async[problem_expected.device].public_bundle.ik,
+                    problem_expected.problem
                 )
 
                 assert problem_sync  == problem_expected_sync
@@ -428,14 +439,14 @@ def test_messageEncryption_allBundlesMissing():
 
 def test_messageEncryption_untrustedDevice():
     messageEncryption(trust_devices = B_DIDS[:2], expected_problems = [
-        UntrustedException(B_JID, B_DIDS[2], "placeholder")
+        TrustException(B_JID, B_DIDS[2], "placeholder", "undecided") # TODO
     ])
 
 def test_messageEncryption_noTrustedDevices():
     messageEncryption(trust_devices = [], expected_problems = [
-        UntrustedException(B_JID, B_DIDS[0], "placeholder"),
-        UntrustedException(B_JID, B_DIDS[1], "placeholder"),
-        UntrustedException(B_JID, B_DIDS[2], "placeholder"),
+        TrustException(B_JID, B_DIDS[0], "placeholder", "undecided"), # TODO
+        TrustException(B_JID, B_DIDS[1], "placeholder", "undecided"), # TODO
+        TrustException(B_JID, B_DIDS[2], "placeholder", "undecided"), # TODO
         NoEligibleDevicesException(B_JID)
     ])
 
@@ -450,7 +461,7 @@ def test_messageEncryption_expectProblems():
         trust_devices = B_DIDS[1:],
         expected_problems = [
             MissingBundleException(B_JID, B_DIDS[2]),
-            UntrustedException(B_JID, B_DIDS[0], "placeholder")
+            TrustException(B_JID, B_DIDS[0], "placeholder", "undecided") # TODO
         ]
     )
 
@@ -598,7 +609,7 @@ def test_ratchetForwardingMessage():
     ))
 
 def test_messageDecryption_noTrust():
-    messageEncryption(trust_alice = False, expect_untrusted_decryption = True)
+    messageEncryption(trust_alice = False, expect_untrusted_decryption = "undecided")
 
 def test_messageDecryption_noTrust_allowUntrusted():
     messageEncryption(trust_alice = False, allow_untrusted_decryption = True)

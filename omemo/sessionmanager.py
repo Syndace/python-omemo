@@ -306,23 +306,31 @@ class SessionManager(object):
                 # Load all sessions
                 sessions = yield self.__loadSessions(bare_jid, devices)
 
-                untrusted = []
+                trust_problems = []
 
                 for device in devices:
                     trust   = trusts[device]
                     session = sessions[device]
 
                     # Get the identity key of the recipient
-                    other_ik = bundles[bare_jid][device].ik if session == None else session.ik
+                    other_ik = (
+                        bundles[bare_jid][device].ik
+                        if session == None else
+                        session.ik
+                    )
 
-                    if not (yield self.__checkTrust(bare_jid, device, other_ik, trust)):
-                        untrusted.append((device, other_ik))
+                    if trust == None:
+                        trust_problems.append((device, other_ik, "undecided"))
+                    elif not (trust["key"] == other_ik and trust["trusted"]):
+                        trust_problems.append((device, other_ik, "untrusted"))
 
-                devices -= set(map(lambda x: x[0], untrusted))
+                devices -= set(map(lambda x: x[0], trust_problems))
 
-                for device, other_ik in untrusted:
+                for device, other_ik, problem_type in trust_problems:
                     if not device in expect_problems.get(bare_jid, set()):
-                        problems.append(UntrustedException(bare_jid, device, other_ik))
+                        problems.append(
+                            TrustException(bare_jid, device, other_ik, problem_type)
+                        )
 
         # Check for jids with no eligible devices
         for bare_jid, devices in list(encrypt_for.items()):
@@ -502,8 +510,7 @@ class SessionManager(object):
 
             # Before doing anything else, check the trust
             if not allow_untrusted:
-                if not (yield self.__checkTrust(bare_jid, device, other_ik)):
-                    raise UntrustedException(bare_jid, device, other_ik)
+                yield self.__assertTrust(bare_jid, device, other_ik)
 
             # Prepare the DoubleRatchet
             try:
@@ -533,8 +540,7 @@ class SessionManager(object):
 
         # Before doing anything else, check the trust
         if not allow_untrusted:
-            if not (yield self.__checkTrust(bare_jid, device, session.ik)):
-                raise UntrustedException(bare_jid, device, session.ik)
+            yield self.__assertTrust(bare_jid, device, session.ik)
 
         # Now that the trust was checked, go on with normal processing
         if not is_pre_key_message:
@@ -950,17 +956,14 @@ class SessionManager(object):
         )
 
     @promise.maybe_coroutine(checkSelf)
-    def __checkTrust(self, bare_jid, device, key, trust = False):
-        if trust == False:
-            trust = yield self.__loadTrust(bare_jid, device)
+    def __assertTrust(self, bare_jid, device, key):
+        trust = yield self.__loadTrust(bare_jid, device)
 
         if trust == None:
-            promise.returnValue(False)
+            raise TrustException(bare_jid, device, key, "undecided")
 
-        if not trust["key"] == key:
-            promise.returnValue(False)
-
-        promise.returnValue(trust["trusted"])
+        if not (trust["key"] == key and trust["trusted"]):
+            raise TrustException(bare_jid, device, key, "untrusted")
 
     @promise.maybe_coroutine(checkSelf)
     def trust(self, bare_jid, device, key):

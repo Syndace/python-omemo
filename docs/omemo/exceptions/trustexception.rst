@@ -1,7 +1,7 @@
-untrustedexception
-==================
+trustexception
+==============
 
-.. autoclass:: omemo.exceptions.UntrustedException
+.. autoclass:: omemo.exceptions.TrustException
     :members:
     :special-members:
     :member-order: bysource
