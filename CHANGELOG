@@ -1,3 +1,9 @@
+Version 0.10.5 (WIP)
+
+- Fixed two bugs in the JSONFileStorage implementation
+
+This version does not introduce any changes to public APIs. No further updating should be required.
+
 Version 0.10.4 (released: 1st of February, 2019)
 
 - Added an implementation of the storage using a simple directory structure and JSON files.

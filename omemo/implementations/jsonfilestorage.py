@@ -44,7 +44,7 @@ class JSONFileStorage(Storage):
         # Dump the JSON.
         # Any exception raised here is not fixable, thus passed to the user.
         with open(path, "wt") as f:
-            json.dump(value, f, allow_nan = False, indent = 4, sort_keys = True)
+            json.dump(value, f, allow_nan = False, indent = 4)
 
     def __remove(self, path_segments):
         try:
@@ -87,7 +87,9 @@ class JSONFileStorage(Storage):
         return set(self.__load([ bare_jid, "active_devices" ], []))
 
     def loadInactiveDevices(self, _, bare_jid):
-        return self.__load([ bare_jid, "inactive_devices" ], {})
+        result = self.__load([ bare_jid, "inactive_devices" ], {})
+
+        return { int(device): timestamp for device, timestamp in result.items() }
 
     def storeActiveDevices(self, _, bare_jid, devices):
         return self.__dump([ bare_jid, "active_devices" ], list(devices))
