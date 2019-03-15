@@ -1,4 +1,5 @@
 from .sessionmanagerexception import SessionManagerException
+import binascii
 
 class TrustException(SessionManagerException):
     def __init__(self, bare_jid, device, ik, problem):
@@ -37,7 +38,8 @@ class TrustException(SessionManagerException):
         return hash((self.bare_jid, self.device, self.ik, self.problem))
 
     def __str__(self):
+        hex_ik = binascii.hexlify(self.__ik).decode('utf-8').upper()
         return (
             "The key {} of {} on device {} is {}."
-            .format(self.__ik, self.__bare_jid, self.__device, self.__problem)
+            .format(hex_ik, self.__bare_jid, self.__device, self.__problem)
         )
