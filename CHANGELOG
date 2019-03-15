@@ -1,6 +1,7 @@
 Version 0.10.5 (WIP)
 
 - Fixed two bugs in the JSONFileStorage implementation
+- Fixed a type-issue in the __str__ of the TrustException
 
 This version does not introduce any changes to public APIs. No further updating should be required.
 
