@@ -31,11 +31,11 @@ setup(
     long_description_content_type = "text/markdown",
     url = "https://github.com/Syndace/python-omemo",
     author = "Tim Henkes",
-    author_email = "tim@cifg.io",
+    author_email = "me@syndace.dev",
     license = "GPLv3",
     packages = find_packages(),
     install_requires = [
-        "X3DH>=0.5.6,<0.6",
+        "X3DH>=0.5.9,<0.6",
         "cryptography>=2"
     ],
     python_requires = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, <4",
