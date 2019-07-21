@@ -500,6 +500,8 @@ class SessionManager(object):
     ):
         yield self.runInactiveDeviceCleanup()
 
+        session = None
+
         if is_pre_key_message:
             # Unpack the pre key message data
             message_and_init_data = self.__backend.WireFormat.preKeyMessageFromWire(
@@ -527,14 +529,13 @@ class SessionManager(object):
             # Store the changed state
             yield self._storage.storeState(self.__state.serialize())
 
-            # Store the new session
-            yield self.__storeSession(bare_jid, device, session)
-
             # Unpack the "normal" message that was wrapped into the PreKeyMessage
             message = message_and_init_data["message"]
 
-        # Load the session
-        session = yield self.__loadSession(bare_jid, device)
+        # Load the session, if no new session was created from the potential PreKeyMessage
+        if session == None:
+            session = yield self.__loadSession(bare_jid, device)
+
         if session == None:
             raise NoSessionException(bare_jid, device)
 
@@ -567,7 +568,7 @@ class SessionManager(object):
             }
         )
 
-        # Store the changed session
+        # Store the new/changed session, now that the message was successfully decrypted.
         yield self.__storeSession(bare_jid, device, session)
 
         plaintext = plaintext["plaintext"]
@@ -624,6 +625,14 @@ class SessionManager(object):
             if not session == None:
                 session = self.__ExtendedDoubleRatchet.fromSerialized(session, None)
 
+                # Due to a bug in 0.10.4 and earlier, there was a chance for sessions to
+                # get stored that don't have a sending chain (yet). This lead to errors
+                # when trying to send messages using these sessions. This check treats
+                # such sessions as non-existent, which leads to the creation of a new
+                # session instead of using the broken one.
+                if not session.canSend():
+                    session = None
+
             self.__sessions_cache[bare_jid][device] = session
 
         promise.returnValue(self.__sessions_cache[bare_jid][device])
@@ -641,6 +650,10 @@ class SessionManager(object):
 
             if not session == None:
                 session = self.__ExtendedDoubleRatchet.fromSerialized(session, None)
+
+                # See __loadSession for an explanation.
+                if not session.canSend():
+                    session = None
 
             self.__sessions_cache[bare_jid][device] = session
 
