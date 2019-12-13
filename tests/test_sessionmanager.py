@@ -166,14 +166,24 @@ def trust(sm_sync, sm_async, sms_sync, sms_async, jid_to_trust, devices_to_trust
             ik_sync  = sms_sync [device].public_bundle.ik
             ik_async = sms_async[device].public_bundle.ik
 
-            sm_sync.trust(jid_to_trust, device, ik_sync)
-            assertPromiseFulfilled(sm_async.trust(jid_to_trust, device, ik_async))
+            sm_sync.setTrust(jid_to_trust, device, ik_sync, True)
+            assertPromiseFulfilled(sm_async.setTrust(
+                jid_to_trust,
+                device,
+                ik_async,
+                True
+            ))
     except TypeError:
         ik_sync  = sms_sync .public_bundle.ik
         ik_async = sms_async.public_bundle.ik
 
-        sm_sync.trust(jid_to_trust, devices_to_trust, ik_sync)
-        assertPromiseFulfilled(sm_async.trust(jid_to_trust, devices_to_trust, ik_async))
+        sm_sync.setTrust(jid_to_trust, devices_to_trust, ik_sync, True)
+        assertPromiseFulfilled(sm_async.setTrust(
+            jid_to_trust,
+            devices_to_trust,
+            ik_async,
+            True
+        ))
 
 def distrust(sm_sync, sm_async, sms_sync, sms_async, jid_to_trust, devices_to_trust):
     try:
@@ -181,17 +191,23 @@ def distrust(sm_sync, sm_async, sms_sync, sms_async, jid_to_trust, devices_to_tr
             ik_sync  = sms_sync [device].public_bundle.ik
             ik_async = sms_async[device].public_bundle.ik
 
-            sm_sync.distrust(jid_to_trust, device, ik_sync)
-            assertPromiseFulfilled(sm_async.distrust(jid_to_trust, device, ik_async))
+            sm_sync.setTrust(jid_to_trust, device, ik_sync, False)
+            assertPromiseFulfilled(sm_async.setTrust(
+                jid_to_trust,
+                device,
+                ik_async,
+                False
+            ))
     except TypeError:
         ik_sync  = sms_sync .public_bundle.ik
         ik_async = sms_async.public_bundle.ik
 
-        sm_sync.distrust(jid_to_trust, devices_to_trust, ik_sync)
-        assertPromiseFulfilled(sm_async.distrust(
+        sm_sync.setTrust(jid_to_trust, devices_to_trust, ik_sync, False)
+        assertPromiseFulfilled(sm_async.setTrust(
             jid_to_trust,   
             devices_to_trust,
-            ik_async
+            ik_async,
+            False
         ))
 
 def messageEncryption(
@@ -939,7 +955,7 @@ def test_stresstest_sync():
     # Tell the main SessionManager to trust all other jids and devices
     for jid in devices:
         for did in devices[jid]:
-            main.trust(jid, did, sms[jid][did].public_bundle.ik)
+            main.setTrust(jid, did, sms[jid][did].public_bundle.ik, True)
 
     cProfile.runctx("""
 main.encryptMessage(
@@ -1010,7 +1026,7 @@ def test_stresstest_async():
     # Tell the main SessionManager to trust all other jids and devices
     for jid in devices:
         for did in devices[jid]:
-            main.trust(jid, did, sms[jid][did].public_bundle.ik)
+            main.setTrust(jid, did, sms[jid][did].public_bundle.ik, True)
 
     cProfile.runctx("""
 assertPromiseFulfilledOrRaise(main.encryptMessage(
@@ -1052,3 +1068,4 @@ def generateRandomJID():
 # KeyExchangeExceptions during encryptMessage
 # Inactive device cleanup
 # Whole JID deletion
+# resetTrust method

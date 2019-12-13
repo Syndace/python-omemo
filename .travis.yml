@@ -4,6 +4,8 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
+  - "3.7"
+  - "3.8"
 
 env:
   - CRYPTOGRAPHY_VERSION=2.2.2 # Most recent versions on pip

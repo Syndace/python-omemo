@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+import copy
+
 from .exceptions import UnknownKeyException
 
 class ExtendedPublicBundle(object):
@@ -30,9 +32,9 @@ class ExtendedPublicBundle(object):
 
     def __init__(self, ik, spk, spk_signature, otpks):
         self.__ik = ik
-        self.__spk = spk
+        self.__spk = copy.deepcopy(spk)
         self.__spk_signature = spk_signature
-        self.__otpks = otpks
+        self.__otpks = copy.deepcopy(otpks)
 
     @classmethod
     def parse(cls, backend, ik, spk, spk_signature, otpks):
@@ -44,7 +46,10 @@ class ExtendedPublicBundle(object):
 
         ik = backend.decodePublicKey(ik)[0]
 
-        spk["key"] = backend.decodePublicKey(spk["key"])[0]
+        spk = {
+            "key" : backend.decodePublicKey(spk["key"])[0],
+            "id"  : spk["id"]
+        }
 
         otpks = list(map(lambda otpk: {
             "key" : backend.decodePublicKey(otpk["key"])[0],

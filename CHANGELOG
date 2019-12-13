@@ -1,3 +1,20 @@
+Version 0.11.0 (released: 13th of December, 2019)
+
+- Fixed a bug in the SessionManager, where the contents of a parameter (passed by reference) were modified.
+- Merged the "trust" and "distrust" methods into "setTrust".
+- Added a new method "resetTrust", which allows going back to the trust level "undecided".
+- Removed the SessionManagerAsyncIO, in preparation for the big Python 3 update coming soon.
+
+This version introduces changes to the existing public APIs:
+
+- SessionManager.trust and SessionManager.distrust were merged into SessionManager.setTrust
+- Storage.storeTrust must now be able to handle the value "None" for the "trust" parameter
+- SessionManagerAsyncIO completely removed
+
+There are additions to the public API:
+
+- SessionManager.resetTrust can now be used to go back from trusted/untrusted to undecided.
+
 Version 0.10.5 (released: 21st of July, 2019)
 
 - Fixed two bugs in the JSONFileStorage implementation

@@ -236,7 +236,7 @@ class Storage(object):
         bare_jid: string
         device_id: int
 
-        trust: {
+        trust: None or {
             "key"     : string (Base64 encoded bytes),
             "trusted" : bool
         }

@@ -219,8 +219,9 @@ class SessionManager(object):
         if expect_problems == None:
             expect_problems = {}
         else:
-            for bare_jid in expect_problems:
-                expect_problems[bare_jid] = set(expect_problems[bare_jid])
+            expect_problems = {
+                bare_jid: set(expect_problems[bare_jid]) for bare_jid in expect_problems
+            }
 
         # Add the own bare jid to the set of jids
         bare_jids.add(self.__my_bare_jid)
@@ -962,7 +963,7 @@ class SessionManager(object):
         yield self._storage.storeTrust(
             bare_jid,
             device,
-            {
+            None if trust == None else {
                 "key"     : base64.b64encode(trust["key"]).decode("US-ASCII"),
                 "trusted" : trust["trusted"]
             }
@@ -979,18 +980,26 @@ class SessionManager(object):
             raise TrustException(bare_jid, device, key, "untrusted")
 
     @promise.maybe_coroutine(checkSelf)
-    def trust(self, bare_jid, device, key):
+    def setTrust(self, bare_jid, device, key, trusted):
+        """
+        Sets the trust level for a public key of a device. This sets the trust level
+        either to trusted (True) or untrusted (False). Use resetTrust to go back to
+        undecided (None)
+        """
+
         yield self.__storeTrust(bare_jid, device, {
             "key"     : key,
-            "trusted" : True
+            "trusted" : trusted
         })
 
     @promise.maybe_coroutine(checkSelf)
-    def distrust(self, bare_jid, device, key):
-        yield self.__storeTrust(bare_jid, device, {
-            "key"     : key,
-            "trusted" : False
-        })
+    def resetTrust(self, bare_jid, device):
+        """
+        Resets the trust for that device back to undecided (None). Use setTrust to set the
+        trust level to trusted (True) or untrusted (False).
+        """
+
+        yield self.__storeTrust(bare_jid, device, None)
 
     def getTrustForDevice(self, bare_jid, device):
         """
