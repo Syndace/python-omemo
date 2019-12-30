@@ -129,12 +129,8 @@ ik_pub = some_bundle.ik
 showQRCode(ik_pub)
 
 # ...or create a hex byte representation
-# Wanted format: 01:23:45:67:89:AB:CD:EF
-# This is surprisingly tricky:
-import codecs
-import re
-ik_pub_hex = codecs.getencoder("hex")(ik_pub)[0].decode("US-ASCII").upper()
-ik_pub_hex = ":".join(re.findall("..?", ik_pub_hex))
+# Wanted format: 01:23:45:67:89:ab:cd:ef
+ik_pub_hex = ":".join("{:02x}".format(octet) for octet in ik_pub)
 ```
 
 ### 7. A note about asynchronism
