@@ -440,6 +440,55 @@ def test_deviceList():
 def test_messageEncryption():
     messageEncryption()
 
+# This test was added due to a report that the SessionManager behaves incorrectly when
+# passing an empty string in the list of recipients while encrypting. This behaviour could
+# not be reproduced.
+def test_messageEncryption_emptyStringRecipient():
+    # Create multiple SessionManagers for the same JID and make their device lists known
+    sms_sync, sms_async = createOtherSessionManagers(
+        A_JID,
+        A_DIDS,
+        { A_JID: A_DIDS }
+    )
+
+    # Use the first SessionManager for the active part of the test
+    sm_sync  = sms_sync[A_DIDS[0]]
+    sm_async = sms_async[A_DIDS[0]]
+
+    # Make the SM trust all other devices
+    for a_did in A_DIDS[1:]:
+        trust(sm_sync, sm_async, sms_sync[a_did], sms_async[a_did], A_JID, a_did)
+
+    # Get the bundles of all devices
+    bundles_sync  = { did: sms_sync[did].public_bundle  for did in A_DIDS }
+    bundles_async = { did: sms_async[did].public_bundle for did in A_DIDS }
+
+    msg = "single message".encode("UTF-8")
+
+    # Encrypt the message, passing an array containing an empty string as the list of
+    # recipients. Make sure that a NoDevicesException is thrown for the empty string.
+    try:
+        encrypted_sync = sm_sync.encryptMessage(
+            [ "" ],
+            msg,
+            { A_JID: bundles_sync }
+        )
+    except EncryptionProblemsException as e:
+        assert len(e.problems) == 1
+        assert isinstance(e.problems[0], NoDevicesException)
+        assert e.problems[0].bare_jid == ""
+
+    try:
+        encrypted_async = assertPromiseFulfilledOrRaise(sm_async.encryptMessage(
+            [ "" ],
+            msg,
+            { A_JID: bundles_async }
+        ))
+    except EncryptionProblemsException as e:
+        assert len(e.problems) == 1
+        assert isinstance(e.problems[0], NoDevicesException)
+        assert e.problems[0].bare_jid == ""
+
 def test_messageEncryption_missingBundle():
     messageEncryption(pass_bundles = B_DIDS[:2], expected_problems = [
         MissingBundleException(B_JID, B_DIDS[2])
