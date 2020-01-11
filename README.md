@@ -130,7 +130,7 @@ showQRCode(ik_pub)
 
 # ...or create a hex byte representation
 # Wanted format: 01:23:45:67:89:ab:cd:ef
-ik_pub_hex = ":".join("{:02x}".format(octet) for octet in ik_pub)
+ik_pub_hex = ":".join("{:02X}".format(octet) for octet in ik_pub)
 ```
 
 ### 7. A note about asynchronism
