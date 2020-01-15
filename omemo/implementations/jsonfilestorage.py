@@ -2,6 +2,8 @@ from __future__ import absolute_import
 
 from ..storage import Storage
 
+import base64
+import hashlib
 import json
 import os
 import shutil
@@ -55,6 +57,12 @@ class JSONFileStorage(Storage):
     def __rmdir(self, path_segments):
         shutil.rmtree(self.__makePath(path_segments), ignore_errors = True)
 
+    @staticmethod
+    def getHashForBareJID(bare_jid):
+        digest = hashlib.sha256(bare_jid.encode("US-ASCII")).digest()
+
+        return base64.base32encode(digest).decode("US-ASCII")
+
     ###################################
     # Implementation of the interface #
     ###################################
@@ -75,32 +83,50 @@ class JSONFileStorage(Storage):
         return self.__dump([ "state" ], state)
 
     def loadSession(self, _, bare_jid, device_id):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__load([ bare_jid, "session_{}".format(device_id) ])
 
     def storeSession(self, _, bare_jid, device_id, session):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__dump([ bare_jid, "session_{}".format(device_id) ], session)
 
     def deleteSession(self, _, bare_jid, device_id):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__remove([ bare_jid, "session_{}".format(device_id) ])
 
     def loadActiveDevices(self, _, bare_jid):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return set(self.__load([ bare_jid, "active_devices" ], []))
 
     def loadInactiveDevices(self, _, bare_jid):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         result = self.__load([ bare_jid, "inactive_devices" ], {})
 
         return { int(device): timestamp for device, timestamp in result.items() }
 
     def storeActiveDevices(self, _, bare_jid, devices):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__dump([ bare_jid, "active_devices" ], list(devices))
 
     def storeInactiveDevices(self, _, bare_jid, devices):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__dump([ bare_jid, "inactive_devices" ], devices)
 
     def loadTrust(self, _, bare_jid, device_id):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__load([ bare_jid, "trust_{}".format(device_id) ])
 
     def storeTrust(self, _, bare_jid, device_id, trust):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__dump([ bare_jid, "trust_{}".format(device_id) ], trust)
 
     def listJIDs(self, _):
@@ -113,6 +139,8 @@ class JSONFileStorage(Storage):
         return result
 
     def deleteJID(self, _, bare_jid):
+        bare_jid = self.__class__.getHashForBareJID(bare_jid)
+
         return self.__rmdir([ bare_jid ])
 
     @property

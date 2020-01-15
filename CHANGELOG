@@ -1,3 +1,9 @@
+Version 0.11.1 (WIP)
+
+- The JSONFileStorage now encodes JIDs using hashes, to avoid various issues regarding the file system.
+
+
+
 Version 0.11.0 (released: 13th of December, 2019)
 
 - Fixed a bug in the SessionManager, where the contents of a parameter (passed by reference) were modified.
