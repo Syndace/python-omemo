@@ -59,7 +59,7 @@ class JSONFileStorage(Storage):
 
     @staticmethod
     def getHashForBareJID(bare_jid):
-        digest = hashlib.sha256(bare_jid.encode("US-ASCII")).digest()
+        digest = hashlib.sha256(bare_jid.encode("UTF-8")).digest()
 
         return base64.b32encode(digest).decode("US-ASCII")
 
