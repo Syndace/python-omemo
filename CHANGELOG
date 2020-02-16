@@ -1,7 +1,7 @@
 Version 0.11.1 (WIP)
 
 - The JSONFileStorage now encodes JIDs using hashes, to avoid various issues regarding the file system.
-
+- Sending 12 byte IV's instead of 16 now
 
 
 Version 0.11.0 (released: 13th of December, 2019)
