@@ -352,7 +352,7 @@ class SessionManager(object):
         ##############
 
         # Prepare AES-GCM key and IV
-        aes_gcm_iv  = os.urandom(16)
+        aes_gcm_iv  = os.urandom(12)
         aes_gcm_key = os.urandom(16)
 
         # Create the AES-GCM instance
