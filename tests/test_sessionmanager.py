@@ -536,53 +536,6 @@ def test_messageEncryption_expectProblems():
         expect_problems = [ B_DIDS[0], B_DIDS[2] ]
     )
 
-def encryptBigFile(encryptor, name):
-    location = os.path.dirname(os.path.abspath(__file__))
-
-    plaintext_path = os.path.join(location, "confidential.txt")
-    encrypted_path = os.path.join(location, "confidential_encrypted_" + name + ".txt")
-
-    with open(plaintext_path, "rb") as src, open(encrypted_path, "wb") as dest:
-        while True:
-            block = src.read(1024)
-
-            if len(block) == 0:
-                dest.write(encryptor.finalize())
-                break
-
-            dest.write(encryptor.update(block))
-
-def decryptBigFile(decryptor, name):
-    location = os.path.dirname(os.path.abspath(__file__))
-
-    plaintext_path = os.path.join(location, "confidential.txt")
-    encrypted_path = os.path.join(location, "confidential_encrypted_" + name + ".txt")
-    decrypted_path = os.path.join(location, "confidential_decrypted_" + name + ".txt")
-
-    with open(encrypted_path, "rb") as src, open(decrypted_path, "wb") as dest:
-        while True:
-            block = src.read(1024)
-
-            if len(block) == 0:
-                dest.write(decryptor.finalize())
-                break
-
-            dest.write(decryptor.update(block))
-
-    os.remove(encrypted_path)
-
-    with open(plaintext_path, "rb") as src, open(decrypted_path, "rb") as dest:
-        while True:
-            plaintext_block = src.read(1024)
-            decrypted_block = dest.read(1024)
-
-            assert plaintext_block == decrypted_block
-
-            if len(plaintext_block) == len(decrypted_block) == 0:
-                break
-
-    os.remove(decrypted_path)
-
 def test_ratchetForwardingMessage():
     _, sm_sync, _, sm_async = createSessionManagers()
     b_sms_sync, b_sms_async = createOtherSessionManagers(

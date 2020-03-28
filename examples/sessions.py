@@ -108,22 +108,25 @@ def main():
 
     # Make everybody trust each other. In a client you would somehow make the user compare
     # fingerprints, using a QR code for example.
-    alice_session_manager.trust(
+    alice_session_manager.setTrust(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
-        bob_session_manager.public_bundle.ik
+        bob_session_manager.public_bundle.ik,
+        True
     )
 
-    alice_session_manager.trust(
+    alice_session_manager.setTrust(
         CHARLIE_BARE_JID,
         CHARLIE_DEVICE_ID,
-        charlie_session_manager.public_bundle.ik
+        charlie_session_manager.public_bundle.ik,
+        True
     )
 
-    bob_session_manager.trust(
+    bob_session_manager.setTrust(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
-        alice_session_manager.public_bundle.ik
+        alice_session_manager.public_bundle.ik,
+        True
     )
 
     # In OMEMO the device lists are handled using a pep node.
@@ -275,6 +278,79 @@ def main():
 
     assert(plaintext.decode("UTF-8") == "Hey Bob and Charlie!")
 
+    # In case something goes badly wrong, you can reset a broken session and replace it
+    # with a new one. Assume Alice can't decrypt messages coming from Bob any more. She
+    # proceeds to replace her session with Bob with a new one and tells him by sending
+    # a RatchetForwardingMessage.
+    yield alice_session_manager.deleteSession(BOB_BARE_JID, BOB_DEVICE_ID)
+
+    message = yield alice_session_manager.encryptRatchetForwardingMessage(
+        BOB_BARE_JID,
+        {
+            BOB_BARE_JID: {
+                BOB_DEVICE_ID: bob_session_manager.public_bundle
+            }
+        }
+    )
+
+    # Get the message specified for Bob on his only device
+    bob_message = message["keys"][BOB_BARE_JID][BOB_DEVICE_ID]
+
+    # This message is a pre key message, because it initiates a completely new session
+    assert(bob_message["pre_key"])
+
+    yield bob_session_manager.decryptRatchetForwardingMessage(
+        ALICE_BARE_JID,
+        ALICE_DEVICE_ID,
+        message["iv"],
+        bob_message["data"],
+        bob_message["pre_key"]
+    )
+
+    # Now both parties can send each other messages again!
+    # Bob to Alice:
+    message = yield bob_session_manager.encryptMessage(
+        ALICE_BARE_JID,
+        "Encrypting via the new session!".encode("UTF-8")
+    )
+
+    # Get the message specified for Alice on her only device
+    alice_message = message["keys"][ALICE_BARE_JID][ALICE_DEVICE_ID]
+
+    assert(not alice_message["pre_key"])
+
+    plaintext = yield alice_session_manager.decryptMessage(
+        BOB_BARE_JID,
+        BOB_DEVICE_ID,
+        message["iv"],
+        alice_message["data"],
+        alice_message["pre_key"],
+        message["payload"]
+    )
+
+    assert(plaintext.decode("UTF-8") == "Encrypting via the new session!")
+
+    # ...and Alice to Bob.
+    message = yield alice_session_manager.encryptMessage(
+        BOB_BARE_JID,
+        "Hey Bob!".encode("UTF-8")
+    )
+
+    bob_message = message["keys"][BOB_BARE_JID][BOB_DEVICE_ID]
+
+    assert(not alice_message["pre_key"])
+
+    plaintext = yield bob_session_manager.decryptMessage(
+        ALICE_BARE_JID,
+        ALICE_DEVICE_ID,
+        message["iv"],
+        bob_message["data"],
+        bob_message["pre_key"],
+        message["payload"]
+    )
+
+    assert(plaintext.decode("UTF-8") == "Hey Bob!")
+
     #################
     # OTPK handling #
     #################
@@ -318,16 +394,18 @@ def main():
 
     yield dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
-    alice_session_manager.trust(
+    alice_session_manager.setTrust(
         DAVE_BARE_JID,
         DAVE_DEVICE_ID,
-        dave_session_manager.public_bundle.ik
+        dave_session_manager.public_bundle.ik,
+        True
     )
 
-    dave_session_manager.trust(
+    dave_session_manager.setTrust(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
-        alice_session_manager.public_bundle.ik
+        alice_session_manager.public_bundle.ik,
+        True
     )
 
     # Create an initial message from Alice to Dave
@@ -394,16 +472,18 @@ def main():
 
     yield dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
-    bob_session_manager.trust(
+    bob_session_manager.setTrust(
         DAVE_BARE_JID,
         DAVE_DEVICE_ID,
-        dave_session_manager.public_bundle.ik
+        dave_session_manager.public_bundle.ik,
+        True
     )
 
-    dave_session_manager.trust(
+    dave_session_manager.setTrust(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
-        bob_session_manager.public_bundle.ik
+        bob_session_manager.public_bundle.ik,
+        True
     )
 
     # Create an initial message from Bob to Dave
