@@ -583,53 +583,6 @@ def decryptBigFile(decryptor, name):
 
     os.remove(decrypted_path)
 
-def test_keyTransportMessage():
-    _, sm_sync, _, sm_async = createSessionManagers()
-    b_sms_sync, b_sms_async = createOtherSessionManagers(
-        B_JID,
-        [ B_DID ],
-        { A_JID: [ A_DID ] }
-    )
-
-    newDeviceList(sm_sync, sm_async, B_JID, [ B_DID ])
-    trust(sm_sync, sm_async, b_sms_sync, b_sms_async, B_JID, [ B_DID ])
-
-    b_sm_sync  = b_sms_sync [B_DID]
-    b_sm_async = b_sms_async[B_DID]
-
-    encrypted_sync = sm_sync.encryptKeyTransportMessage(
-        [ B_JID ],
-        lambda encryptor: encryptBigFile(encryptor, "sync"),
-        { B_JID: { B_DID: b_sm_sync.public_bundle } }
-    )
-
-    encrypted_async = assertPromiseFulfilled(sm_async.encryptKeyTransportMessage(
-        [ B_JID ],
-        lambda encryptor: encryptBigFile(encryptor, "async"),
-        { B_JID: { B_DID: b_sm_async.public_bundle } }
-    ))
-
-    decryptor_sync = b_sm_sync.decryptKeyTransportMessage(
-        A_JID,
-        A_DID,
-        encrypted_sync["iv"],
-        encrypted_sync["keys"][B_JID][B_DID]["data"],
-        encrypted_sync["keys"][B_JID][B_DID]["pre_key"],
-        allow_untrusted = True
-    )
-
-    decryptor_async = assertPromiseFulfilledOrRaise(b_sm_async.decryptKeyTransportMessage(
-        A_JID,
-        A_DID,
-        encrypted_async["iv"],
-        encrypted_async["keys"][B_JID][B_DID]["data"],
-        encrypted_async["keys"][B_JID][B_DID]["pre_key"],
-        allow_untrusted = True
-    ))
-
-    decryptBigFile(decryptor_sync,  "sync")
-    decryptBigFile(decryptor_async, "async")
-
 def test_ratchetForwardingMessage():
     _, sm_sync, _, sm_async = createSessionManagers()
     b_sms_sync, b_sms_async = createOtherSessionManagers(
@@ -1118,3 +1071,4 @@ def generateRandomJID():
 # Inactive device cleanup
 # Whole JID deletion
 # resetTrust method
+# encryptKeyTransportMessage

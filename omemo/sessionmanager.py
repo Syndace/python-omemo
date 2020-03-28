@@ -117,7 +117,6 @@ class SessionManager(object):
     # encryption #
     ##############
 
-    @promise.maybe_coroutine(checkSelf)
     def encryptMessage(
         self,
         bare_jids,
@@ -125,50 +124,36 @@ class SessionManager(object):
         bundles = None,
         expect_problems = None
     ):
-        # Dirty hack to access ciphertext from _encryptMessage
-        ciphertext = []
-
-        def _encryptMessage(aes_gcm):
-            ciphertext.append(aes_gcm.update(plaintext) + aes_gcm.finalize())
-
-        encrypted = yield self.__encryptKeyTransportMessage(
+        return self.__encryptKeyTransportMessage(
             bare_jids,
-            _encryptMessage,
+            plaintext,
             bundles,
             expect_problems
         )
 
-        encrypted["payload"] = ciphertext[0]
-
-        promise.returnValue(encrypted)
-
-    @promise.maybe_coroutine(checkSelf)
     def encryptRatchetForwardingMessage(
         self,
         bare_jids,
         bundles = None,
         expect_problems = None
     ):
-        encrypted = yield self.__encryptKeyTransportMessage(
+        return self.__encryptKeyTransportMessage(
             bare_jids,
-            lambda aes_gcm: aes_gcm.finalize(),
+            None,
             bundles,
             expect_problems,
             ignore_trust = True
         )
 
-        promise.returnValue(encrypted)
-
     def encryptKeyTransportMessage(
         self,
         bare_jids,
-        encryption_callback,
         bundles = None,
         expect_problems = None
     ):
         return self.__encryptKeyTransportMessage(
             bare_jids,
-            encryption_callback,
+            None,
             bundles,
             expect_problems
         )
@@ -177,14 +162,14 @@ class SessionManager(object):
     def __encryptKeyTransportMessage(
         self,
         bare_jids,
-        encryption_callback,
+        plaintext = None,
         bundles = None,
         expect_problems = None,
         ignore_trust = False
     ):
         """
         bare_jids: iterable<string>
-        encryption_callback: A function which is called using an instance of cryptography.hazmat.primitives.ciphers.CipherContext, which you can use to encrypt any sort of data. You don't have to return anything.
+        plaintext: bytes or None
         bundles: { [bare_jid: string] => { [device_id: int] => ExtendedPublicBundle } }
         expect_problems: { [bare_jid: string] => iterable<int> }
 
@@ -355,18 +340,18 @@ class SessionManager(object):
         aes_gcm_iv  = os.urandom(12)
         aes_gcm_key = os.urandom(16)
 
-        # Create the AES-GCM instance
-        aes_gcm = Cipher(
-            algorithms.AES(aes_gcm_key),
-            modes.GCM(aes_gcm_iv),
-            backend=default_backend()
-        ).encryptor()
+        aes_secret_data = aes_gcm_key
 
-        # Encrypt the plain data
-        encryption_callback(aes_gcm)
+        if plaintext is not None:
+            # Create the AES-GCM instance
+            aes_gcm = Cipher(
+                algorithms.AES(aes_gcm_key),
+                modes.GCM(aes_gcm_iv),
+                backend=default_backend()
+            ).encryptor()
 
-        # Store the tag
-        aes_gcm_tag = aes_gcm.tag
+            payload = aes_gcm.update(plaintext) + aes_gcm.finalize()
+            aes_secret_data += aes_gcm.tag
 
         # {
         #     [bare_jid: string] => {
@@ -405,7 +390,7 @@ class SessionManager(object):
                     session_init_data = session_and_init_data["to_other"]
 
                 # Encrypt the AES GCM key and tag
-                encrypted_data = session.encryptMessage(aes_gcm_key + aes_gcm_tag)
+                encrypted_data = session.encryptMessage(aes_secret_data)
 
                 # Store the new/changed session
                 yield self.__storeSession(bare_jid, device, session)
@@ -431,11 +416,18 @@ class SessionManager(object):
                     "pre_key" : pre_key
                 }
 
-        promise.returnValue({
+        result = {
             "iv"   : aes_gcm_iv,
             "sid"  : self.__my_device_id,
             "keys" : encrypted_keys
-        })
+        }
+
+        if plaintext is None:
+            result["shared_secret"] = aes_gcm_key
+        else:
+            result["payload"] = payload
+
+        promise.returnValue(result)
 
     ##############
     # decryption #
@@ -476,7 +468,7 @@ class SessionManager(object):
         additional_information = None,
         allow_untrusted = False
     ):
-        aes_gcm = yield self.decryptKeyTransportMessage(
+        yield self.decryptKeyTransportMessage(
             bare_jid,
             device,
             iv,
@@ -485,8 +477,6 @@ class SessionManager(object):
             additional_information,
             allow_untrusted
         )
-
-        aes_gcm.finalize()
 
     @promise.maybe_coroutine(checkSelf)
     def decryptKeyTransportMessage(
@@ -577,11 +567,19 @@ class SessionManager(object):
         aes_gcm_key = plaintext[:16]
         aes_gcm_tag = plaintext[16:]
 
-        promise.returnValue(Cipher(
-            algorithms.AES(aes_gcm_key),
-            modes.GCM(iv, aes_gcm_tag),
-            backend=default_backend()
-        ).decryptor())
+        if len(aes_gcm_tag) == 0:
+            # If no authentication tag was supplied, this is a KeyTransportMessage. Return
+            # the key for usage external to this library.
+            result = aes_gcm_key
+        else:
+            # If an authentication tag was provided, construct an AES object and return it.
+            result = Cipher(
+                algorithms.AES(aes_gcm_key),
+                modes.GCM(iv, aes_gcm_tag),
+                backend=default_backend()
+            ).decryptor()
+
+        promise.returnValue(result)
 
     ############################
     # public bundle management #
@@ -659,8 +657,7 @@ class SessionManager(object):
             self.__sessions_cache[bare_jid][device] = session
 
         promise.returnValue({
-            device: copy.deepcopy(self.__sessions_cache[bare_jid][device])
-            for device in devices
+            device: self.__sessions_cache[bare_jid][device] for device in devices
         })
 
     @promise.maybe_coroutine(checkSelf)
@@ -673,7 +670,6 @@ class SessionManager(object):
     @promise.maybe_coroutine(checkSelf)
     def __deleteSession(self, bare_jid, device):
         self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
-
         self.__sessions_cache[bare_jid].pop(device, None)
 
         yield self._storage.deleteSession(bare_jid, device)

@@ -9,7 +9,7 @@ This python library offers an open implementation of the OMEMO Multi-End Message
 
 Goals of this implementation are:
 - Do not depend on libsignal but offer a solid alternative to it
-- Stay away from GPL (this repo will soon switch to MIT)
+- Stay away from GPL
 - Be flexible to changes that might happen to the OMEMO protocol
 - Keep the structure close to the spec
 - Provide the parts of the protocol (X3DH, Double Ratchet) as own projects
