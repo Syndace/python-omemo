@@ -1,10 +1,7 @@
-from __future__ import absolute_import
-
 from .version import __version__
 
 from . import backends
 from . import implementations
-from . import promise
 from . import util
 from .defaultotpkpolicy import DefaultOTPKPolicy
 from .extendeddoubleratchet import make as make_ExtendedDoubleRatchet

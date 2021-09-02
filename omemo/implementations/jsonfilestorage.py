@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from ..storage import Storage
 
 import base64
@@ -67,69 +65,69 @@ class JSONFileStorage(Storage):
     # Implementation of the interface #
     ###################################
 
-    def loadOwnData(self, _):
+    async def loadOwnData(self):
         return self.__load([ "own_data" ])
 
-    def storeOwnData(self, _, own_bare_jid, own_device_id):
+    async def storeOwnData(self, own_bare_jid, own_device_id):
         return self.__dump([ "own_data" ], {
             "own_bare_jid"  : own_bare_jid,
             "own_device_id" : own_device_id
         })
 
-    def loadState(self, _):
+    async def loadState(self):
         return self.__load([ "state" ])
 
-    def storeState(self, _, state):
+    async def storeState(self, state):
         return self.__dump([ "state" ], state)
 
-    def loadSession(self, _, bare_jid, device_id):
+    async def loadSession(self, bare_jid, device_id):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__load([ bare_jid, "session_{}".format(device_id) ])
 
-    def storeSession(self, _, bare_jid, device_id, session):
+    async def storeSession(self, bare_jid, device_id, session):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__dump([ bare_jid, "session_{}".format(device_id) ], session)
 
-    def deleteSession(self, _, bare_jid, device_id):
+    async def deleteSession(self, bare_jid, device_id):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__remove([ bare_jid, "session_{}".format(device_id) ])
 
-    def loadActiveDevices(self, _, bare_jid):
+    async def loadActiveDevices(self, bare_jid):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return set(self.__load([ bare_jid, "active_devices" ], []))
 
-    def loadInactiveDevices(self, _, bare_jid):
+    async def loadInactiveDevices(self, bare_jid):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         result = self.__load([ bare_jid, "inactive_devices" ], {})
 
         return { int(device): timestamp for device, timestamp in result.items() }
 
-    def storeActiveDevices(self, _, bare_jid, devices):
+    async def storeActiveDevices(self, bare_jid, devices):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__dump([ bare_jid, "active_devices" ], list(devices))
 
-    def storeInactiveDevices(self, _, bare_jid, devices):
+    async def storeInactiveDevices(self, bare_jid, devices):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__dump([ bare_jid, "inactive_devices" ], devices)
 
-    def loadTrust(self, _, bare_jid, device_id):
+    async def loadTrust(self, bare_jid, device_id):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__load([ bare_jid, "trust_{}".format(device_id) ])
 
-    def storeTrust(self, _, bare_jid, device_id, trust):
+    async def storeTrust(self, bare_jid, device_id, trust):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__dump([ bare_jid, "trust_{}".format(device_id) ], trust)
 
-    def listJIDs(self, _):
+    async def listJIDs(self):
         result = []
 
         for entry in os.listdir(self.__path):
@@ -138,11 +136,7 @@ class JSONFileStorage(Storage):
 
         return result
 
-    def deleteJID(self, _, bare_jid):
+    async def deleteJID(self, bare_jid):
         bare_jid = self.__class__.getHashForBareJID(bare_jid)
 
         return self.__rmdir([ bare_jid ])
-
-    @property
-    def is_async(self):
-        return False

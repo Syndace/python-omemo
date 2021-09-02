@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from x3dh.exceptions import KeyExchangeException
 
 from .exceptions import UnknownKeyException
@@ -14,7 +12,7 @@ import time
 def make(backend):
     class X3DHDoubleRatchet(make_State(backend)):
         def __init__(self):
-            super(X3DHDoubleRatchet, self).__init__()
+            super().__init__()
 
             self.__bound_otpks = {}
             self.__pre_key_messages = {}
@@ -42,7 +40,7 @@ def make(backend):
                 pk_messages[otpk] = copy.deepcopy(value)
 
             return {
-                "super"       : super(X3DHDoubleRatchet, self).serialize(),
+                "super"       : super().serialize(),
                 "bound_otpks" : bound_otpks,
                 "pk_messages" : pk_messages,
                 "version"     : __version__
@@ -54,11 +52,7 @@ def make(backend):
 
             # Add code to upgrade the state here
 
-            self = super(X3DHDoubleRatchet, cls).fromSerialized(
-                serialized["super"],
-                *args,
-                **kwargs
-            )
+            self = super().fromSerialized(serialized["super"], *args, **kwargs)
 
             bound_otpks = {}
 
@@ -90,7 +84,7 @@ def make(backend):
             *args,
             **kwargs
         ):
-            session_init_data = super(X3DHDoubleRatchet, self).getSharedSecretActive(
+            session_init_data = super().getSharedSecretActive(
                 other_public_bundle,
                 *args,
                 **kwargs
@@ -132,7 +126,7 @@ def make(backend):
                 additional_information
             )
 
-            session_data = super(X3DHDoubleRatchet, self).getSharedSecretPassive(
+            session_data = super().getSharedSecretPassive(
                 session_init_data,
                 keep_otpk = True
             )

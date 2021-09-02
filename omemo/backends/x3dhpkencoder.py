@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import x3dh
 
 class X3DHPKEncoder(x3dh.PublicKeyEncoder):

@@ -1,4 +1,4 @@
-class Backend(object):
+class Backend:
     def __init__(self, WireFormat, X3DHState, X3DHPKEncoder, DoubleRatchet):
         self.__WireFormat    = WireFormat
         self.__X3DHState     = X3DHState

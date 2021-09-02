@@ -1,3 +1,14 @@
+Version 0.13.0 (WIP)
+
+- Dropped Python 2 support and removed a bit of Python 2 compatibility clutter
+- Removed synchronous APIs
+- Removed thread-based promise implementation in favor of asyncio futures and coroutines
+
+This version introduces changes to the existing public APIs:
+
+- The storage interface has been modified to use asyncio coroutines instead of callbacks.
+- All methods of the session manager that returned promises previously have been replaced with equivalent asyncio coroutines. Support for the synchronous API has been removed.
+
 Version 0.12.0 (released: 28th of March, 2020)
 
 - The JSONFileStorage now encodes JIDs using hashes, to avoid various issues regarding the file system. <- WARNING, THERE ARE KNOWN ISSUES WITH THIS STORAGE IMPLEMENTATION.

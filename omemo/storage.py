@@ -1,19 +1,8 @@
-class Storage(object):
+import asyncio
+
+class Storage:
     """
     The interface used by the SessionManager to persist data between runs.
-
-    There are two possible ways to implement the Storage class: synchronous or
-    asynchronous.
-
-    The mode is determined by the result of the is_async method.
-
-    If the implementation is synchronous, the callback parameter is None.
-
-    If the implementation is asynchronous, the callback parameter is a function that takes
-    two arguments:
-    - success: True or False
-    - result: The result of the operation if success is True or the error if success is
-        False
 
     Note:
     The SessionManager does caching to reduce the number of calls to a minimum. There
@@ -21,7 +10,7 @@ class Storage(object):
     loading.
     """
 
-    def loadOwnData(self, callback):
+    async def loadOwnData(self):
         """
         Load the own data.
 
@@ -36,14 +25,14 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def storeOwnData(self, callback, own_bare_jid, own_device_id):
+    async def storeOwnData(self, own_bare_jid, own_device_id):
         """
         Store given own data, overwriting previously stored data.
         """
 
         raise NotImplementedError
 
-    def loadState(self, callback):
+    async def loadState(self):
         """
         Load the state.
 
@@ -52,7 +41,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def storeState(self, callback, state):
+    async def storeState(self, state):
         """
         Store the state, overwriting the old state, if it exists.
 
@@ -74,7 +63,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadSession(self, callback, bare_jid, device_id):
+    async def loadSession(self, bare_jid, device_id):
         """
         Load a session with given bare_jid and device id.
 
@@ -85,39 +74,17 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadSessions(self, callback, bare_jid, device_ids):
+    async def loadSessions(self, bare_jid, device_ids):
         """
         Return a dict containing the session for each device id. By default, this method
         calls loadSession for each device id.
         """
 
-        if self.is_async:
-            self.__loadSessionsAsync(callback, bare_jid, device_ids, {})
-        else:
-            return self.__loadSessionsSync(bare_jid, device_ids)
+        return dict(zip(device_ids, await asyncio.gather(*[
+            self.loadSession(bare_jid, device_id) for device_id in device_ids
+        ])))
 
-    def __loadSessionsAsync(self, callback, bare_jid, device_ids, result):
-        if len(device_ids) == 0:
-            return callback(True, result)
-
-        device_id = device_ids[0]
-
-        def __loadSessionCallback(success, trust):
-            if success:
-                result[device_id] = trust
-                self.__loadSessionsAsync(callback, bare_jid, device_ids[1:], result)
-            else:
-                callback(False, trust)
-
-        self.loadSession(__loadSessionCallback, bare_jid, device_id)
-
-    def __loadSessionsSync(self, bare_jid, device_ids):
-        return {
-            device: self.loadSession(None, bare_jid, device)
-            for device in device_ids
-        }
-
-    def storeSession(self, callback, bare_jid, device_id, session):
+    async def storeSession(self, bare_jid, device_id, session):
         """
         Store a session for given bare_jid and device id, overwriting the previous
         session, if it exists.
@@ -139,7 +106,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def deleteSession(self, callback, bare_jid, device_id):
+    async def deleteSession(self, bare_jid, device_id):
         """
         Completely wipe the session associated with given bare_jid and device_id from the
         storage.
@@ -149,7 +116,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadActiveDevices(self, callback, bare_jid):
+    async def loadActiveDevices(self, bare_jid):
         """
         Load the list of active devices for a given bare_jid.
 
@@ -161,7 +128,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadInactiveDevices(self, callback, bare_jid):
+    async def loadInactiveDevices(self, bare_jid):
         """
         Load the list of inactive devices for a given bare_jid.
 
@@ -175,7 +142,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def storeActiveDevices(self, callback, bare_jid, devices):
+    async def storeActiveDevices(self, bare_jid, devices):
         """
         Store the active devices for given bare_jid, overwriting the old stored list,
         if it exists.
@@ -185,7 +152,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def storeInactiveDevices(self, callback, bare_jid, devices):
+    async def storeInactiveDevices(self, bare_jid, devices):
         """
         Store the inactive devices for given bare_jid, overwriting the old stored list,
         if it exists.
@@ -196,42 +163,23 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def loadTrust(self, callback, bare_jid, device_id):
+    async def loadTrust(self, bare_jid, device_id):
         """
         """
 
         raise NotImplementedError
 
-    def loadTrusts(self, callback, bare_jid, device_ids):
+    async def loadTrusts(self, bare_jid, device_ids):
         """
         Return a dict containing the trust status for each device id. By default, this
         method calls loadTrust for each device id.
         """
 
-        if self.is_async:
-            self.__loadTrustsAsync(callback, bare_jid, device_ids, {})
-        else:
-            return self.__loadTrustsSync(bare_jid, device_ids)
+        return dict(zip(device_ids, await asyncio.gather(*[
+            self.loadTrust(bare_jid, device_id) for device_id in device_ids
+        ])))
 
-    def __loadTrustsAsync(self, callback, bare_jid, device_ids, result):
-        if len(device_ids) == 0:
-            return callback(True, result)
-
-        device_id = device_ids[0]
-
-        def __loadTrustCallback(success, trust):
-            if success:
-                result[device_id] = trust
-                self.__loadTrustsAsync(callback, bare_jid, device_ids[1:], result)
-            else:
-                callback(False, trust)
-
-        self.loadTrust(__loadTrustCallback, bare_jid, device_id)
-
-    def __loadTrustsSync(self, bare_jid, device_ids):
-        return { device: self.loadTrust(None, bare_jid, device) for device in device_ids }
-
-    def storeTrust(self, callback, bare_jid, device_id, trust):
+    async def storeTrust(self, bare_jid, device_id, trust):
         """
         bare_jid: string
         device_id: int
@@ -244,7 +192,7 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def listJIDs(self, callback):
+    async def listJIDs(self):
         """
         List all bare jids that have associated device lists stored in the storage.
         It doesn't matter if the lists are empty or not.
@@ -254,21 +202,11 @@ class Storage(object):
 
         raise NotImplementedError
 
-    def deleteJID(self, callback, bare_jid):
+    async def deleteJID(self, bare_jid):
         """
         Delete all data associated with given bare_jid. This includes the active and
         inactive devices, all sessions stored for that jid and all information about
         trusted keys.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def is_async(self):
-        """
-        Return, whether this implementation is asynchronous.
-
-        Read the introduction to this module above for details on what this value changes.
         """
 
         raise NotImplementedError

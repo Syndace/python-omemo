@@ -1,12 +1,10 @@
-from __future__ import print_function
-
 import base64
 
 import omemo
 
 import xml.etree.ElementTree as ET
 
-# TODO: Import a backend of your choice as BACKEND
+from omemo_backend_signal import BACKEND
 
 def b64enc(data):
     return base64.b64encode(data).decode("US-ASCII")
@@ -81,9 +79,7 @@ def encodeOMEMOPublicBundle(bundle):
 
     return payload
 
-if __name__ == "__main__":
-    from omemo_backend_signal import BACKEND
-    
+async def main():
     import os
     import sys
 
@@ -95,10 +91,10 @@ if __name__ == "__main__":
 
     from deletingotpkpolicy import DeletingOTPKPolicy
     from example_data import ALICE_BARE_JID, ALICE_DEVICE_ID
-    from syncinmemorystorage import SyncInMemoryStorage
+    from inmemorystorage import InMemoryStorage
 
-    sm = omemo.SessionManager.create(
-        SyncInMemoryStorage(),
+    sm = await omemo.SessionManager.create(
+        InMemoryStorage(),
         DeletingOTPKPolicy,
         BACKEND,
         ALICE_BARE_JID,
@@ -111,3 +107,8 @@ if __name__ == "__main__":
         print("Success!")
     else:
         print("Failure :(")
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())

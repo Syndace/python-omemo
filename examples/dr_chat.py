@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import omemo
 
 from omemo_backend_signal import BACKEND as SignalBackend
@@ -10,11 +8,6 @@ import time
 import traceback
 
 from util import nonThrowingMakedirs
-
-try:
-    input = raw_input
-except NameError:
-    pass
 
 deferred = {
     "a": [],

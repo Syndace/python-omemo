@@ -1,4 +1,4 @@
-class WireFormat(object):
+class WireFormat:
     @staticmethod
     def messageFromWire(obj):
         raise NotImplementedError

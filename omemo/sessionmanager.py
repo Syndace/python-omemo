@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-
 import base64
 import copy
 import logging
@@ -11,19 +8,11 @@ import time
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from . import promise
-from . import storagewrapper
 from .exceptions import *
 from .extendeddoubleratchet import make as make_ExtendedDoubleRatchet
 from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet
 
 import x3dh
-
-# This makes me sad
-if sys.version_info[0] == 3:
-    string_type = str
-else:
-    string_type = basestring
 
 def d(*args, **kwargs):
     logging.getLogger("omemo.SessionManager").debug(*args, **kwargs)
@@ -34,23 +23,13 @@ def w(*args, **kwargs):
 def e(*args, **kwargs):
     logging.getLogger("omemo.SessionManager").error(*args, **kwargs)
 
-def checkSelf(self, *args, **kwargs):
-    return self._storage.is_async
-
-def checkPositionalArgument(position):
-    def _checkPositionalArgument(*args, **kwargs):
-        return args[position].is_async
-
-    return _checkPositionalArgument
-
-class SessionManager(object):
+class SessionManager:
     ################################
     # construction and preparation #
     ################################
 
     @classmethod
-    @promise.maybe_coroutine(checkPositionalArgument(1))
-    def create(
+    async def create(
         cls,
         storage,
         otpk_policy,
@@ -64,7 +43,7 @@ class SessionManager(object):
         self = cls()
 
         # Store the parameters
-        self._storage = storagewrapper.StorageWrapper(storage)
+        self._storage = storage
 
         self.__otpk_policy = otpk_policy
 
@@ -86,25 +65,24 @@ class SessionManager(object):
         self.__devices_cache  = {}
         self.__trust_cache    = {}
 
-        yield self.__prepare()
+        await self.__prepare()
 
-        promise.returnValue(self)
+        return self
 
-    @promise.maybe_coroutine(checkSelf)
-    def __prepare(self):
-        state = yield self._storage.loadState()
+    async def __prepare(self):
+        state = await self._storage.loadState()
         if state == None:
             self.__state = self.__X3DHDoubleRatchet()
 
-            yield self._storage.storeState(self.__state.serialize())
+            await self._storage.storeState(self.__state.serialize())
 
-            yield self.__storeActiveDevices(self.__my_bare_jid, [ self.__my_device_id ])
+            await self.__storeActiveDevices(self.__my_bare_jid, [ self.__my_device_id ])
         else:
             self.__state = self.__X3DHDoubleRatchet.fromSerialized(state)
 
-        own_data = yield self._storage.loadOwnData()
+        own_data = await self._storage.loadOwnData()
         if own_data == None:
-            yield self._storage.storeOwnData(self.__my_bare_jid, self.__my_device_id)
+            await self._storage.storeOwnData(self.__my_bare_jid, self.__my_device_id)
         else:
             if (not self.__my_bare_jid  == own_data["own_bare_jid"] or
                 not self.__my_device_id == own_data["own_device_id"]):
@@ -117,27 +95,27 @@ class SessionManager(object):
     # encryption #
     ##############
 
-    def encryptMessage(
+    async def encryptMessage(
         self,
         bare_jids,
         plaintext,
         bundles = None,
         expect_problems = None
     ):
-        return self.__encryptKeyTransportMessage(
+        return await self.__encryptKeyTransportMessage(
             bare_jids,
             plaintext,
             bundles,
             expect_problems
         )
 
-    def encryptRatchetForwardingMessage(
+    async def encryptRatchetForwardingMessage(
         self,
         bare_jids,
         bundles = None,
         expect_problems = None
     ):
-        return self.__encryptKeyTransportMessage(
+        return await self.__encryptKeyTransportMessage(
             bare_jids,
             None,
             bundles,
@@ -145,21 +123,20 @@ class SessionManager(object):
             ignore_trust = True
         )
 
-    def encryptKeyTransportMessage(
+    async def encryptKeyTransportMessage(
         self,
         bare_jids,
         bundles = None,
         expect_problems = None
     ):
-        return self.__encryptKeyTransportMessage(
+        return await self.__encryptKeyTransportMessage(
             bare_jids,
             None,
             bundles,
             expect_problems
         )
 
-    @promise.maybe_coroutine(checkSelf)
-    def __encryptKeyTransportMessage(
+    async def __encryptKeyTransportMessage(
         self,
         bare_jids,
         plaintext = None,
@@ -187,13 +164,13 @@ class SessionManager(object):
         }
         """
 
-        yield self.runInactiveDeviceCleanup()
+        await self.runInactiveDeviceCleanup()
 
         #########################
         # parameter preparation #
         #########################
 
-        if isinstance(bare_jids, string_type):
+        if isinstance(bare_jids, str):
             bare_jids = set([ bare_jids ])
         else:
             bare_jids = set(bare_jids)
@@ -221,7 +198,7 @@ class SessionManager(object):
         encrypt_for = {}
 
         for bare_jid in bare_jids:
-            devices = yield self.__loadActiveDevices(bare_jid)
+            devices = await self.__loadActiveDevices(bare_jid)
 
             if len(devices) == 0:
                 problems.append(NoDevicesException(bare_jid))
@@ -236,7 +213,7 @@ class SessionManager(object):
             missing_bundles = set()
 
             # Load all sessions
-            sessions = yield self.__loadSessions(bare_jid, devices)
+            sessions = await self.__loadSessions(bare_jid, devices)
 
             for device in devices:
                 session = sessions[device]
@@ -256,7 +233,7 @@ class SessionManager(object):
             key_exchange_problems = {}
 
             # Load all sessions
-            sessions = yield self.__loadSessions(bare_jid, devices)
+            sessions = await self.__loadSessions(bare_jid, devices)
 
             for device in devices:
                 session = sessions[device]
@@ -287,10 +264,10 @@ class SessionManager(object):
             # Check the trust for each device
             for bare_jid, devices in encrypt_for.items():
                 # Load all trust
-                trusts = yield self.__loadTrusts(bare_jid, devices)
+                trusts = await self.__loadTrusts(bare_jid, devices)
 
                 # Load all sessions
-                sessions = yield self.__loadSessions(bare_jid, devices)
+                sessions = await self.__loadSessions(bare_jid, devices)
 
                 trust_problems = []
 
@@ -370,10 +347,10 @@ class SessionManager(object):
                 # Note whether this is a response to a PreKeyMessage
                 if self.__state.hasBoundOTPK(bare_jid, device):
                     self.__state.respondedTo(bare_jid, device)
-                    yield self._storage.storeState(self.__state.serialize())
+                    await self._storage.storeState(self.__state.serialize())
 
                 # Load the session
-                session = yield self.__loadSession(bare_jid, device)
+                session = await self.__loadSession(bare_jid, device)
 
                 # If no session exists, this will be a PreKeyMessage
                 pre_key = session == None
@@ -393,7 +370,7 @@ class SessionManager(object):
                 encrypted_data = session.encryptMessage(aes_secret_data)
 
                 # Store the new/changed session
-                yield self.__storeSession(bare_jid, device, session)
+                await self.__storeSession(bare_jid, device, session)
 
                 # Serialize the data into a simple message format
                 serialized = self.__backend.WireFormat.messageToWire(
@@ -427,14 +404,13 @@ class SessionManager(object):
         else:
             result["payload"] = payload
 
-        promise.returnValue(result)
+        return result
 
     ##############
     # decryption #
     ##############
 
-    @promise.maybe_coroutine(checkSelf)
-    def decryptMessage(
+    async def decryptMessage(
         self,
         bare_jid,
         device,
@@ -445,7 +421,7 @@ class SessionManager(object):
         additional_information = None,
         allow_untrusted = False
     ):
-        aes_gcm = yield self.decryptKeyTransportMessage(
+        aes_gcm = await self.decryptKeyTransportMessage(
             bare_jid,
             device,
             iv,
@@ -455,10 +431,9 @@ class SessionManager(object):
             allow_untrusted
         )
 
-        promise.returnValue(aes_gcm.update(ciphertext) + aes_gcm.finalize())
+        return aes_gcm.update(ciphertext) + aes_gcm.finalize()
 
-    @promise.maybe_coroutine(checkSelf)
-    def decryptRatchetForwardingMessage(
+    async def decryptRatchetForwardingMessage(
         self,
         bare_jid,
         device,
@@ -468,7 +443,7 @@ class SessionManager(object):
         additional_information = None,
         allow_untrusted = False
     ):
-        yield self.decryptKeyTransportMessage(
+        await self.decryptKeyTransportMessage(
             bare_jid,
             device,
             iv,
@@ -478,8 +453,7 @@ class SessionManager(object):
             allow_untrusted
         )
 
-    @promise.maybe_coroutine(checkSelf)
-    def decryptKeyTransportMessage(
+    async def decryptKeyTransportMessage(
         self,
         bare_jid,
         device,
@@ -489,7 +463,7 @@ class SessionManager(object):
         additional_information = None,
         allow_untrusted = False
     ):
-        yield self.runInactiveDeviceCleanup()
+        await self.runInactiveDeviceCleanup()
 
         session = None
 
@@ -503,7 +477,7 @@ class SessionManager(object):
 
             # Before doing anything else, check the trust
             if not allow_untrusted:
-                yield self.__assertTrust(bare_jid, device, other_ik)
+                await self.__assertTrust(bare_jid, device, other_ik)
 
             # Prepare the DoubleRatchet
             try:
@@ -518,28 +492,28 @@ class SessionManager(object):
                 raise KeyExchangeException(bare_jid, device, str(e))
 
             # Store the changed state
-            yield self._storage.storeState(self.__state.serialize())
+            await self._storage.storeState(self.__state.serialize())
 
             # Unpack the "normal" message that was wrapped into the PreKeyMessage
             message = message_and_init_data["message"]
 
         # Load the session, if no new session was created from the potential PreKeyMessage
         if session == None:
-            session = yield self.__loadSession(bare_jid, device)
+            session = await self.__loadSession(bare_jid, device)
 
         if session == None:
             raise NoSessionException(bare_jid, device)
 
         # Before doing anything else, check the trust
         if not allow_untrusted:
-            yield self.__assertTrust(bare_jid, device, session.ik)
+            await self.__assertTrust(bare_jid, device, session.ik)
 
         # Now that the trust was checked, go on with normal processing
         if not is_pre_key_message:
             # If this is not part of a PreKeyMessage, we received a normal Message and can
             # safely delete the OTPK bound to this bare_jid+device.
             self.__state.deleteBoundOTPK(bare_jid, device)
-            yield self._storage.storeState(self.__state.serialize())
+            await self._storage.storeState(self.__state.serialize())
 
         # Unpack the message data
         message_data = self.__backend.WireFormat.messageFromWire(message)
@@ -560,7 +534,7 @@ class SessionManager(object):
         )
 
         # Store the new/changed session, now that the message was successfully decrypted.
-        yield self.__storeSession(bare_jid, device, session)
+        await self.__storeSession(bare_jid, device, session)
 
         plaintext = plaintext["plaintext"]
 
@@ -579,7 +553,7 @@ class SessionManager(object):
                 backend=default_backend()
             ).decryptor()
 
-        promise.returnValue(result)
+        return result
 
     ############################
     # public bundle management #
@@ -614,12 +588,11 @@ class SessionManager(object):
     # session management #
     ######################
 
-    @promise.maybe_coroutine(checkSelf)
-    def __loadSession(self, bare_jid, device):
+    async def __loadSession(self, bare_jid, device):
         self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
 
         if not (device in self.__sessions_cache[bare_jid]):
-            session = yield self._storage.loadSession(bare_jid, device)
+            session = await self._storage.loadSession(bare_jid, device)
 
             if not session == None:
                 session = self.__ExtendedDoubleRatchet.fromSerialized(session, None)
@@ -634,15 +607,14 @@ class SessionManager(object):
 
             self.__sessions_cache[bare_jid][device] = session
 
-        promise.returnValue(self.__sessions_cache[bare_jid][device])
+        return self.__sessions_cache[bare_jid][device]
 
-    @promise.maybe_coroutine(checkSelf)
-    def __loadSessions(self, bare_jid, devices):
+    async def __loadSessions(self, bare_jid, devices):
         self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
 
         missing_sessions = set(devices) - set(self.__sessions_cache[bare_jid].keys())
 
-        sessions = yield self._storage.loadSessions(bare_jid, list(missing_sessions))
+        sessions = await self._storage.loadSessions(bare_jid, list(missing_sessions))
 
         for device in missing_sessions:
             session = sessions[device]
@@ -656,78 +628,69 @@ class SessionManager(object):
 
             self.__sessions_cache[bare_jid][device] = session
 
-        promise.returnValue({
-            device: self.__sessions_cache[bare_jid][device] for device in devices
-        })
+        return { device: self.__sessions_cache[bare_jid][device] for device in devices }
 
-    @promise.maybe_coroutine(checkSelf)
-    def __storeSession(self, bare_jid, device, session):
+    async def __storeSession(self, bare_jid, device, session):
         self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
         self.__sessions_cache[bare_jid][device] = session
 
-        yield self._storage.storeSession(bare_jid, device, session.serialize())
+        await self._storage.storeSession(bare_jid, device, session.serialize())
 
-    @promise.maybe_coroutine(checkSelf)
-    def __deleteSession(self, bare_jid, device):
+    async def __deleteSession(self, bare_jid, device):
         self.__sessions_cache[bare_jid] = self.__sessions_cache.get(bare_jid, {})
         self.__sessions_cache[bare_jid].pop(device, None)
 
-        yield self._storage.deleteSession(bare_jid, device)
+        await self._storage.deleteSession(bare_jid, device)
 
-    def deleteSession(self, bare_jid, device):
-        return self.__deleteSession(bare_jid, device)
+    async def deleteSession(self, bare_jid, device):
+        return await self.__deleteSession(bare_jid, device)
 
     #####################
     # device management #
     #####################
 
-    @promise.maybe_coroutine(checkSelf)
-    def __loadActiveDevices(self, bare_jid):
+    async def __loadActiveDevices(self, bare_jid):
         self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
 
         if not "active" in self.__devices_cache[bare_jid]:
-            devices = yield self._storage.loadActiveDevices(bare_jid)
+            devices = await self._storage.loadActiveDevices(bare_jid)
 
             self.__devices_cache[bare_jid]["active"] = set(devices)
 
-        promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]["active"]))
+        return copy.deepcopy(self.__devices_cache[bare_jid]["active"])
 
-    @promise.maybe_coroutine(checkSelf)
-    def __loadInactiveDevices(self, bare_jid):
+    async def __loadInactiveDevices(self, bare_jid):
         self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
 
         if not "inactive" in self.__devices_cache[bare_jid]:
-            devices = yield self._storage.loadInactiveDevices(bare_jid)
+            devices = await self._storage.loadInactiveDevices(bare_jid)
             devices = copy.deepcopy(devices)
 
             self.__devices_cache[bare_jid]["inactive"] = devices
 
-        promise.returnValue(copy.deepcopy(self.__devices_cache[bare_jid]["inactive"]))
+        return copy.deepcopy(self.__devices_cache[bare_jid]["inactive"])
 
-    @promise.maybe_coroutine(checkSelf)
-    def __storeActiveDevices(self, bare_jid, devices):
+    async def __storeActiveDevices(self, bare_jid, devices):
         self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
         self.__devices_cache[bare_jid]["active"] = set(devices)
 
-        yield self._storage.storeActiveDevices(bare_jid, devices)
+        await self._storage.storeActiveDevices(bare_jid, devices)
 
-    @promise.maybe_coroutine(checkSelf)
-    def __storeInactiveDevices(self, bare_jid, devices):
+    async def __storeInactiveDevices(self, bare_jid, devices):
         self.__devices_cache[bare_jid] = self.__devices_cache.get(bare_jid, {})
         self.__devices_cache[bare_jid]["inactive"] = copy.deepcopy(devices)
         
-        yield self._storage.storeInactiveDevices(bare_jid, devices)
+        await self._storage.storeInactiveDevices(bare_jid, devices)
 
-    @promise.maybe_coroutine(checkSelf)
-    def newDeviceList(self, bare_jid, active_new):
+    async def newDeviceList(self, bare_jid, active_new):
         active_new = set(active_new)
 
         if bare_jid == self.__my_bare_jid:
             # The own device can never become inactive
             active_new |= set([ self.__my_device_id ])
 
-        active_old   = yield self.__loadActiveDevices(bare_jid)
-        inactive_old = yield self.__loadInactiveDevices(bare_jid)
+        active_old   = await self.__loadActiveDevices(bare_jid)
+        inactive_old = await self.__loadInactiveDevices(bare_jid)
 
         devices_old = active_old | set(inactive_old.keys())
 
@@ -740,40 +703,34 @@ class SessionManager(object):
             for device in inactive_new
         }
 
-        yield self.__storeActiveDevices(bare_jid, active_new)
-        yield self.__storeInactiveDevices(bare_jid, inactive_new)
+        await self.__storeActiveDevices(bare_jid, active_new)
+        await self.__storeInactiveDevices(bare_jid, inactive_new)
 
-        yield self.runInactiveDeviceCleanup()
+        await self.runInactiveDeviceCleanup()
 
-    @promise.maybe_coroutine(checkSelf)
-    def getDevices(self, bare_jid = None):
-        yield self.runInactiveDeviceCleanup()
+    async def getDevices(self, bare_jid = None):
+        await self.runInactiveDeviceCleanup()
 
         if bare_jid == None:
             bare_jid = self.__my_bare_jid
 
-        active   = yield self.__loadActiveDevices(bare_jid)
-        inactive = yield self.__loadInactiveDevices(bare_jid)
+        active   = await self.__loadActiveDevices(bare_jid)
+        inactive = await self.__loadInactiveDevices(bare_jid)
 
-        promise.returnValue({
-            "active"   : active,
-            "inactive" : inactive
-        })
+        return { "active": active, "inactive": inactive }
 
-    @promise.maybe_coroutine(checkSelf)
-    def __deleteInactiveDevices(self, bare_jid, delete_devices):
+    async def __deleteInactiveDevices(self, bare_jid, delete_devices):
         for device in delete_devices:
-            yield self.__deleteSession(bare_jid, device)
+            await self.__deleteSession(bare_jid, device)
 
-        inactive_devices = yield self.__loadInactiveDevices(bare_jid)
+        inactive_devices = await self.__loadInactiveDevices(bare_jid)
         
         for device in delete_devices:
             inactive_devices.pop(device, None)
 
-        yield self.__storeInactiveDevices(bare_jid, inactive_devices)
+        await self.__storeInactiveDevices(bare_jid, inactive_devices)
 
-    @promise.maybe_coroutine(checkSelf)
-    def deleteInactiveDevicesByQuota(self, per_jid_max = 15, global_max = 0):
+    async def deleteInactiveDevicesByQuota(self, per_jid_max = 15, global_max = 0):
         """
         Delete inactive devices by setting a quota. With per_jid_max you can define the
         amount of inactive devices that are kept for each jid, with global_max you can
@@ -804,11 +761,11 @@ class SessionManager(object):
         if global_max < 1:
             global_max = None
 
-        bare_jids = yield self._storage.listJIDs()
+        bare_jids = await self._storage.listJIDs()
 
         if not per_jid_max == None:
             for bare_jid in bare_jids:
-                devices = yield self.__loadInactiveDevices(bare_jid)
+                devices = await self.__loadInactiveDevices(bare_jid)
 
                 if len(devices) > per_jid_max:
                     # This sorts the devices from smaller to bigger timestamp, which means
@@ -822,13 +779,13 @@ class SessionManager(object):
                     # Get the device ids and discard the timestamps.
                     devices = list(map(lambda device: device[0], devices))
 
-                    yield self.__deleteInactiveDevices(bare_jid, devices)
+                    await self.__deleteInactiveDevices(bare_jid, devices)
         
         if not global_max == None:
             all_inactive_devices = []
 
             for bare_jid in bare_jids:
-                devices = yield self.__loadInactiveDevices(bare_jid)
+                devices = await self.__loadInactiveDevices(bare_jid)
 
                 all_inactive_devices.extend(map(
                     lambda device: (bare_jid, device[0], device[1]),
@@ -856,10 +813,9 @@ class SessionManager(object):
 
                 # Now, delete the devices
                 for bare_jid, devices in delete_devices.items():
-                    yield self.__deleteInactiveDevices(bare_jid, devices)
+                    await self.__deleteInactiveDevices(bare_jid, devices)
 
-    @promise.maybe_coroutine(checkSelf)
-    def deleteInactiveDevicesByAge(self, age_days):
+    async def deleteInactiveDevicesByAge(self, age_days):
         """
         Delete all inactive devices from the device list storage and cache that are older
         then a given number of days. This also deletes the corresponding sessions, so if
@@ -880,10 +836,10 @@ class SessionManager(object):
 
         now = time.time()
 
-        bare_jids = yield self._storage.listJIDs()
+        bare_jids = await self._storage.listJIDs()
 
         for bare_jid in bare_jids:
-            devices = yield self.__loadInactiveDevices(bare_jid)
+            devices = await self.__loadInactiveDevices(bare_jid)
 
             delete_devices = []
             for device, timestamp in list(devices.items()):
@@ -896,47 +852,44 @@ class SessionManager(object):
                     delete_devices.append(device)
 
             if len(delete_devices) > 0:
-                yield self.__deleteInactiveDevices(bare_jid, delete_devices)
+                await self.__deleteInactiveDevices(bare_jid, delete_devices)
 
-    @promise.maybe_coroutine(checkSelf)
-    def runInactiveDeviceCleanup(self):
+    async def runInactiveDeviceCleanup(self):
         """
         Runs both the deleteInactiveDevicesByAge and the deleteInactiveDevicesByQuota
         methods with the configuration that was set when calling create.
         """
 
-        yield self.deleteInactiveDevicesByQuota(
+        await self.deleteInactiveDevicesByQuota(
             self.__inactive_per_jid_max,
             self.__inactive_global_max
         )
 
-        yield self.deleteInactiveDevicesByAge(self.__inactive_max_age)
+        await self.deleteInactiveDevicesByAge(self.__inactive_max_age)
 
     ####################
     # trust management #
     ####################
 
-    @promise.maybe_coroutine(checkSelf)
-    def __loadTrust(self, bare_jid, device):
+    async def __loadTrust(self, bare_jid, device):
         self.__trust_cache[bare_jid] = self.__trust_cache.get(bare_jid, {})
 
         if not device in self.__trust_cache[bare_jid]:
-            trust = yield self._storage.loadTrust(bare_jid, device)
+            trust = await self._storage.loadTrust(bare_jid, device)
 
             self.__trust_cache[bare_jid][device] = None if trust == None else {
                 "key"     : base64.b64decode(trust["key"].encode("US-ASCII")),
                 "trusted" : trust["trusted"]
             }
 
-        promise.returnValue(copy.deepcopy(self.__trust_cache[bare_jid][device]))
+        return copy.deepcopy(self.__trust_cache[bare_jid][device])
 
-    @promise.maybe_coroutine(checkSelf)
-    def __loadTrusts(self, bare_jid, devices):
+    async def __loadTrusts(self, bare_jid, devices):
         self.__trust_cache[bare_jid] = self.__trust_cache.get(bare_jid, {})
 
         missing_trusts = set(devices) - set(self.__trust_cache[bare_jid].keys())
 
-        trusts = yield self._storage.loadTrusts(bare_jid, list(missing_trusts))
+        trusts = await self._storage.loadTrusts(bare_jid, list(missing_trusts))
 
         for device in missing_trusts:
             trust = trusts[device]
@@ -946,17 +899,16 @@ class SessionManager(object):
                 "trusted" : trust["trusted"]
             }
 
-        promise.returnValue({
+        return {
             device: copy.deepcopy(self.__trust_cache[bare_jid][device])
             for device in devices
-        })
+        }
 
-    @promise.maybe_coroutine(checkSelf)
-    def __storeTrust(self, bare_jid, device, trust):
+    async def __storeTrust(self, bare_jid, device, trust):
         self.__trust_cache[bare_jid] = self.__trust_cache.get(bare_jid, {})
         self.__trust_cache[bare_jid][device] = copy.deepcopy(trust)
 
-        yield self._storage.storeTrust(
+        await self._storage.storeTrust(
             bare_jid,
             device,
             None if trust == None else {
@@ -965,9 +917,8 @@ class SessionManager(object):
             }
         )
 
-    @promise.maybe_coroutine(checkSelf)
-    def __assertTrust(self, bare_jid, device, key):
-        trust = yield self.__loadTrust(bare_jid, device)
+    async def __assertTrust(self, bare_jid, device, key):
+        trust = await self.__loadTrust(bare_jid, device)
 
         if trust == None:
             raise TrustException(bare_jid, device, key, "undecided")
@@ -975,27 +926,25 @@ class SessionManager(object):
         if not (trust["key"] == key and trust["trusted"]):
             raise TrustException(bare_jid, device, key, "untrusted")
 
-    @promise.maybe_coroutine(checkSelf)
-    def setTrust(self, bare_jid, device, key, trusted):
+    async def setTrust(self, bare_jid, device, key, trusted):
         """
         Sets the trust level for a public key of a device. This sets the trust level
         either to trusted (True) or untrusted (False). Use resetTrust to go back to
         undecided (None)
         """
 
-        yield self.__storeTrust(bare_jid, device, {
+        await self.__storeTrust(bare_jid, device, {
             "key"     : key,
             "trusted" : trusted
         })
 
-    @promise.maybe_coroutine(checkSelf)
-    def resetTrust(self, bare_jid, device):
+    async def resetTrust(self, bare_jid, device):
         """
         Resets the trust for that device back to undecided (None). Use setTrust to set the
         trust level to trusted (True) or untrusted (False).
         """
 
-        yield self.__storeTrust(bare_jid, device, None)
+        await self.__storeTrust(bare_jid, device, None)
 
     def getTrustForDevice(self, bare_jid, device):
         """
@@ -1012,8 +961,7 @@ class SessionManager(object):
 
         return self.__loadTrust(bare_jid, device)
 
-    @promise.maybe_coroutine(checkSelf)
-    def getTrustForJID(self, bare_jid):
+    async def getTrustForJID(self, bare_jid):
         """
         All-in-one trust information for all devices of a bare jid.
         The result is structured like this:
@@ -1031,17 +979,17 @@ class SessionManager(object):
             "inactive" : {}
         }
 
-        devices = yield self.__loadActiveDevices(bare_jid)
+        devices = await self.__loadActiveDevices(bare_jid)
 
         for device in devices:
-            result["active"][device] = yield self.getTrustForDevice(bare_jid, device)
+            result["active"][device] = await self.getTrustForDevice(bare_jid, device)
 
-        devices = yield self.__loadInactiveDevices(bare_jid)
+        devices = await self.__loadInactiveDevices(bare_jid)
 
         for device in devices:
-            result["inactive"][device] = yield self.getTrustForDevice(bare_jid, device)
+            result["inactive"][device] = await self.getTrustForDevice(bare_jid, device)
 
-        promise.returnValue(result)
+        return result
 
     #########
     # other #
@@ -1050,17 +998,16 @@ class SessionManager(object):
     def listJIDs(self):
         return self._storage.listJIDs()
 
-    @promise.maybe_coroutine(checkSelf)
-    def deleteJID(self, bare_jid):
+    async def deleteJID(self, bare_jid):
         """
         Delete all data associated with a JID. This includes the list of active/inactive
         devices, all sessions with that JID and all information about trusted keys.
         """
 
-        yield self.runInactiveDeviceCleanup()
+        await self.runInactiveDeviceCleanup()
 
         self.__sessions_cache.pop(bare_jid, None)
         self.__devices_cache.pop(bare_jid, None)
         self.__trust_cache.pop(bare_jid, None)
 
-        yield self._storage.deleteJID(bare_jid)
+        await self._storage.deleteJID(bare_jid)

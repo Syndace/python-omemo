@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import base64
 
 import x3dh
@@ -28,7 +26,7 @@ def make(backend):
                 otpk_ids[base64.b64encode(key).decode("US-ASCII")] = value
 
             return {
-                "super": super(State, self).serialize(),
+                "super": super().serialize(),
                 "spk_id": self.__spk_id,
                 "spk_pub": spk,
                 "otpk_id_counter": self.__otpk_id_counter,
@@ -37,11 +35,7 @@ def make(backend):
 
         @classmethod
         def fromSerialized(cls, serialized, *args, **kwargs):
-            self = super(State, cls).fromSerialized(
-                serialized["super"],
-                *args,
-                **kwargs
-            )
+            self = super().fromSerialized(serialized["super"], *args, **kwargs)
 
             spk = serialized["spk_pub"]
             spk = None if spk == None else base64.b64decode(spk.encode("US-ASCII"))
@@ -67,7 +61,7 @@ def make(backend):
             to get public data and is the perfect spot to update ids.
             """
 
-            bundle = super(State, self).getPublicBundle()
+            bundle = super().getPublicBundle()
 
             self.__updateIDs()
 
@@ -174,10 +168,6 @@ def make(backend):
         def getSharedSecretActive(self, other_public_bundle, *args, **kwargs):
             other_public_bundle = self.__reduceBundle(other_public_bundle)
 
-            return super(State, self).getSharedSecretActive(
-                other_public_bundle,
-                *args,
-                **kwargs
-            )
+            return super().getSharedSecretActive(other_public_bundle, *args, **kwargs)
 
     return State

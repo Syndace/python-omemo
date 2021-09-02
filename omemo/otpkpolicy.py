@@ -1,4 +1,4 @@
-class OTPKPolicy(object):
+class OTPKPolicy:
     @staticmethod
     def decideOTPK(preKeyMessages):
         """

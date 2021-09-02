@@ -10,11 +10,6 @@ from deletingotpkpolicy import DeletingOTPKPolicy
 from dr_chat import mainLoop
 import example_data
 
-try:
-    input = raw_input
-except NameError:
-    pass
-
 X3DHDoubleRatchet = omemo.make_X3DHDoubleRatchet(SignalBackend)
 
 def main(who, use_wireformat = False):

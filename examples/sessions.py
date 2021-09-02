@@ -1,5 +1,4 @@
-from __future__ import print_function
-
+import asyncio
 import logging
 
 import omemo
@@ -14,8 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "t
 from deletingotpkpolicy import DeletingOTPKPolicy
 from keepingotpkpolicy  import KeepingOTPKPolicy
 
-from asyncinmemorystorage import AsyncInMemoryStorage
-from syncinmemorystorage  import SyncInMemoryStorage
+from inmemorystorage import InMemoryStorage
 
 # The example data file contains bare jids and device ids for four people: Alice, Bob,
 # Charlie and Dave.
@@ -29,60 +27,12 @@ from example_data import *
 
 logging.basicConfig(level = logging.INFO)
 
-try:
-    input = raw_input
-except NameError:
-    pass
-
-use_async_storage = ""
-while not use_async_storage in [ "y", "n" ]:
-    use_async_storage = input(
-        "Use an asynchronous implementation of the storage class? (y/n): "
-    )
-use_async_storage = use_async_storage == "y"
-
-InMemoryStorage = AsyncInMemoryStorage if use_async_storage else SyncInMemoryStorage
-
-# This part requires a bit of an explanation.
-# The SessionManager has to persist certain information between runs. The way this data is
-# saved is not fixed, but the user can implement the Storage interface to reflect his own
-# preferences. This introduces a problem: One user may want to use synchronous technology
-# to store the data, another user might want to use asynchonous technologies.
-# This strongly influences the structure of the whole SessionManager class. All methods of
-# the SessionManager should be synchronous if the storage is synchronous and vice versa.
-# ...and this is what actually happens!
-# If you pass a synchronous implementation of the Storage class to the
-# SessionManager.create method, all of the SessionManagers methods are synchronous aswell.
-# If you pass an asynchronous implementation instead, each method returns a
-# omemo.promise.Promise object.
-# Detailed information about the Promise implementation and coroutine decorators like
-# promise.maybe_coroutine can be found directly in the promise.py file.
-# For now, take this short summary:
-"""
-someSyncStorage  = SomeSyncStorage()
-someAsyncStorage = SomeAsyncStorage()
-
-# If you use a synchronous storage implementation, you can just use the return values as
-# usual.
-syncManager = omemo.SessionManager.create(someSyncStorage, ...)
-
-# If you use an asynchronous storage implementation, the return value is a promise
-asyncManagerPromise = omemo.SessionManager.create(someAsyncStorage, ...)
-
-# You can use the then method of the Promise object to wait for the Promise to resolve and
-# to get the result from it:
-asyncManagerPromise.then(
-    lambda asyncManager: print("This is the actual asyncManager:", asyncManager),
-    lambda error: print("An error occured:", error)
-)
-"""
-@omemo.promise.maybe_coroutine(lambda *args, **kwargs: use_async_storage)
-def main():
+async def main():
     # Each device using OMEMO has to create exactly one SessionManager which handles the
     # whole OMEMO for this device.
     # In this example, imagine Alice, Bob and Charlie are all on different devices and
     # only have access to their own SessionManagers.
-    alice_session_manager = yield omemo.SessionManager.create(
+    alice_session_manager = await omemo.SessionManager.create(
         InMemoryStorage(),
         omemo.DefaultOTPKPolicy(),
         SignalBackend,
@@ -90,7 +40,7 @@ def main():
         ALICE_DEVICE_ID
     )
 
-    bob_session_manager = yield omemo.SessionManager.create(
+    bob_session_manager = await omemo.SessionManager.create(
         InMemoryStorage(),
         omemo.DefaultOTPKPolicy(),
         SignalBackend,
@@ -98,7 +48,7 @@ def main():
         BOB_DEVICE_ID
     )
 
-    charlie_session_manager = yield omemo.SessionManager.create(
+    charlie_session_manager = await omemo.SessionManager.create(
         InMemoryStorage(),
         omemo.DefaultOTPKPolicy(),
         SignalBackend,
@@ -108,21 +58,21 @@ def main():
 
     # Make everybody trust each other. In a client you would somehow make the user compare
     # fingerprints, using a QR code for example.
-    alice_session_manager.setTrust(
+    await alice_session_manager.setTrust(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         bob_session_manager.public_bundle.ik,
         True
     )
 
-    alice_session_manager.setTrust(
+    await alice_session_manager.setTrust(
         CHARLIE_BARE_JID,
         CHARLIE_DEVICE_ID,
         charlie_session_manager.public_bundle.ik,
         True
     )
 
-    bob_session_manager.setTrust(
+    await bob_session_manager.setTrust(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         alice_session_manager.public_bundle.ik,
@@ -132,22 +82,22 @@ def main():
     # In OMEMO the device lists are handled using a pep node.
     # This next part simulates getting the device list from the pep node and telling the
     # session manager about the device lists.
-    yield alice_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
-    yield bob_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
-    yield charlie_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
+    await alice_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
+    await bob_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
+    await charlie_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
-    yield alice_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
-    yield bob_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
-    yield charlie_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
+    await alice_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
+    await bob_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
+    await charlie_session_manager.newDeviceList(BOB_BARE_JID, [ BOB_DEVICE_ID ])
 
-    yield alice_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
-    yield bob_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
-    yield charlie_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
+    await alice_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
+    await bob_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
+    await charlie_session_manager.newDeviceList(CHARLIE_BARE_JID, [ CHARLIE_DEVICE_ID ])
 
     # You can get the list of (in)active devices for each jid from the session manager.
     # If you don't pass a bare jid, the method assumes your own bare jid.
-    aliceDevices        = yield alice_session_manager.getDevices()
-    aliceBareJIDDevices = yield alice_session_manager.getDevices(ALICE_BARE_JID)
+    aliceDevices        = await alice_session_manager.getDevices()
+    aliceBareJIDDevices = await alice_session_manager.getDevices(ALICE_BARE_JID)
 
     assert(aliceDevices["active"]          == set([ ALICE_DEVICE_ID ]))
     assert(aliceBareJIDDevices["active"]   == set([ ALICE_DEVICE_ID ]))
@@ -171,7 +121,7 @@ def main():
     # In a real XMPP scenario, Bobs device has published its public bundle to a pep node
     # and you have to download his bundle from the node first.
     # The bundle_xml file shows how to (de)serialize a public bundle to/from xml.
-    initial_message = yield alice_session_manager.encryptMessage(
+    initial_message = await alice_session_manager.encryptMessage(
         BOB_BARE_JID,
         "Hey Bob!".encode("UTF-8"),
         {
@@ -195,7 +145,7 @@ def main():
     assert(bob_message["pre_key"])
 
     # Decrypt the initial message.
-    plaintext = yield bob_session_manager.decryptMessage(
+    plaintext = await bob_session_manager.decryptMessage(
         ALICE_BARE_JID, # The jid and device id of the user who sent you this message
         ALICE_DEVICE_ID,
         initial_message["iv"],
@@ -208,7 +158,7 @@ def main():
 
     # Now, any party can send follow-up messages.
     # If the session was established before, you don't have to pass any public bundles.
-    message = yield bob_session_manager.encryptMessage(
+    message = await bob_session_manager.encryptMessage(
         ALICE_BARE_JID,
         "Yo Alice!".encode("UTF-8")
     )
@@ -218,7 +168,7 @@ def main():
 
     assert(not alice_message["pre_key"])
 
-    plaintext = yield alice_session_manager.decryptMessage(
+    plaintext = await alice_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         message["iv"],
@@ -233,7 +183,7 @@ def main():
     # encryptMessage, just pass a list of bare jids instead of a single bare jid.
     # Alice already has a session with Bob but she doesn't have a session with Charlie,
     # that's why we have to pass Charlies public bundle.
-    muc_message = yield alice_session_manager.encryptMessage(
+    muc_message = await alice_session_manager.encryptMessage(
         [ BOB_BARE_JID, CHARLIE_BARE_JID ],
         "Hey Bob and Charlie!".encode("UTF-8"),
         {
@@ -253,7 +203,7 @@ def main():
 
     assert(charlie_message["pre_key"])
 
-    plaintext = yield bob_session_manager.decryptMessage(
+    plaintext = await bob_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         muc_message["iv"],
@@ -264,7 +214,7 @@ def main():
 
     assert(plaintext.decode("UTF-8") == "Hey Bob and Charlie!")
 
-    plaintext = yield charlie_session_manager.decryptMessage(
+    plaintext = await charlie_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         muc_message["iv"],
@@ -282,9 +232,9 @@ def main():
     # with a new one. Assume Alice can't decrypt messages coming from Bob any more. She
     # proceeds to replace her session with Bob with a new one and tells him by sending
     # a RatchetForwardingMessage.
-    yield alice_session_manager.deleteSession(BOB_BARE_JID, BOB_DEVICE_ID)
+    await alice_session_manager.deleteSession(BOB_BARE_JID, BOB_DEVICE_ID)
 
-    message = yield alice_session_manager.encryptRatchetForwardingMessage(
+    message = await alice_session_manager.encryptRatchetForwardingMessage(
         BOB_BARE_JID,
         {
             BOB_BARE_JID: {
@@ -299,7 +249,7 @@ def main():
     # This message is a pre key message, because it initiates a completely new session
     assert(bob_message["pre_key"])
 
-    yield bob_session_manager.decryptRatchetForwardingMessage(
+    await bob_session_manager.decryptRatchetForwardingMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         message["iv"],
@@ -309,7 +259,7 @@ def main():
 
     # Now both parties can send each other messages again!
     # Bob to Alice:
-    message = yield bob_session_manager.encryptMessage(
+    message = await bob_session_manager.encryptMessage(
         ALICE_BARE_JID,
         "Encrypting via the new session!".encode("UTF-8")
     )
@@ -319,7 +269,7 @@ def main():
 
     assert(not alice_message["pre_key"])
 
-    plaintext = yield alice_session_manager.decryptMessage(
+    plaintext = await alice_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         message["iv"],
@@ -331,7 +281,7 @@ def main():
     assert(plaintext.decode("UTF-8") == "Encrypting via the new session!")
 
     # ...and Alice to Bob.
-    message = yield alice_session_manager.encryptMessage(
+    message = await alice_session_manager.encryptMessage(
         BOB_BARE_JID,
         "Hey Bob!".encode("UTF-8")
     )
@@ -340,7 +290,7 @@ def main():
 
     assert(not alice_message["pre_key"])
 
-    plaintext = yield bob_session_manager.decryptMessage(
+    plaintext = await bob_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         message["iv"],
@@ -380,11 +330,11 @@ def main():
     # deleted the key after its first use.
 
     # Tell Alice' and Bobs session managers about Dave and his device
-    yield alice_session_manager.newDeviceList(DAVE_BARE_JID, [ DAVE_DEVICE_ID ])
-    yield bob_session_manager.newDeviceList(DAVE_BARE_JID, [ DAVE_DEVICE_ID ])
+    await alice_session_manager.newDeviceList(DAVE_BARE_JID, [ DAVE_DEVICE_ID ])
+    await bob_session_manager.newDeviceList(DAVE_BARE_JID, [ DAVE_DEVICE_ID ])
 
     # Create a session manager for Dave that uses the DeletingOTPKPolicy class
-    dave_session_manager = yield omemo.SessionManager.create(
+    dave_session_manager = await omemo.SessionManager.create(
         InMemoryStorage(),
         DeletingOTPKPolicy,
         SignalBackend,
@@ -392,16 +342,16 @@ def main():
         DAVE_DEVICE_ID
     )
 
-    yield dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
+    await dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
-    alice_session_manager.setTrust(
+    await alice_session_manager.setTrust(
         DAVE_BARE_JID,
         DAVE_DEVICE_ID,
         dave_session_manager.public_bundle.ik,
         True
     )
 
-    dave_session_manager.setTrust(
+    await dave_session_manager.setTrust(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         alice_session_manager.public_bundle.ik,
@@ -409,7 +359,7 @@ def main():
     )
 
     # Create an initial message from Alice to Dave
-    initial_message = yield alice_session_manager.encryptMessage(
+    initial_message = await alice_session_manager.encryptMessage(
         DAVE_BARE_JID,
         "DeletingOTPKPolicy example".encode("UTF-8"),
         {
@@ -425,7 +375,7 @@ def main():
     assert(dave_message["pre_key"])
 
     # Let Dave initialize the session for the first time, this should work fine
-    plaintext = yield dave_session_manager.decryptMessage(
+    plaintext = await dave_session_manager.decryptMessage(
         ALICE_BARE_JID,
         ALICE_DEVICE_ID,
         initial_message["iv"],
@@ -445,7 +395,7 @@ def main():
 
     # Now, try the same thing a second time. This sould raise an exception
     try:
-        plaintext = yield dave_session_manager.decryptMessage(
+        plaintext = await dave_session_manager.decryptMessage(
             ALICE_BARE_JID,
             ALICE_DEVICE_ID,
             initial_message["iv"],
@@ -462,7 +412,7 @@ def main():
     # of always.
 
     # Create a session manager for Dave that uses the KeepingOTPKPolicy class
-    dave_session_manager = yield omemo.SessionManager.create(
+    dave_session_manager = await omemo.SessionManager.create(
         InMemoryStorage(),
         KeepingOTPKPolicy,
         SignalBackend,
@@ -470,16 +420,16 @@ def main():
         DAVE_DEVICE_ID
     )
 
-    yield dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
+    await dave_session_manager.newDeviceList(ALICE_BARE_JID, [ ALICE_DEVICE_ID ])
 
-    bob_session_manager.setTrust(
+    await bob_session_manager.setTrust(
         DAVE_BARE_JID,
         DAVE_DEVICE_ID,
         dave_session_manager.public_bundle.ik,
         True
     )
 
-    dave_session_manager.setTrust(
+    await dave_session_manager.setTrust(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         bob_session_manager.public_bundle.ik,
@@ -487,7 +437,7 @@ def main():
     )
 
     # Create an initial message from Bob to Dave
-    initial_message = yield bob_session_manager.encryptMessage(
+    initial_message = await bob_session_manager.encryptMessage(
         DAVE_BARE_JID,
         "DeletingOTPKPolicy example".encode("UTF-8"),
         {
@@ -503,7 +453,7 @@ def main():
     assert(dave_message["pre_key"])
 
     # Let Dave initialize the session for the first time, this should work fine
-    plaintext = yield dave_session_manager.decryptMessage(
+    plaintext = await dave_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         initial_message["iv"],
@@ -520,7 +470,7 @@ def main():
     assert(len(dave_session_manager.public_bundle.otpks) == 99)
 
     # Now, the second try should work aswell, because the policy decided to keep the OTPK
-    plaintext = yield dave_session_manager.decryptMessage(
+    plaintext = await dave_session_manager.decryptMessage(
         BOB_BARE_JID,
         BOB_DEVICE_ID,
         initial_message["iv"],
@@ -531,7 +481,7 @@ def main():
 
     assert(plaintext.decode("UTF-8") == "DeletingOTPKPolicy example")
 
-    omemo.promise.returnValue("Done!")
+    return "Done!"
 
 if __name__ == "__main__":
-    print(main())
+    print(asyncio.run(main()))

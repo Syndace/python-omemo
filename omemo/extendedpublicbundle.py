@@ -1,10 +1,8 @@
-from __future__ import absolute_import
-
 import copy
 
 from .exceptions import UnknownKeyException
 
-class ExtendedPublicBundle(object):
+class ExtendedPublicBundle:
     """
     This class looks exactly the same as the PublicBundle class, but the types of the
     fields are a bit different:

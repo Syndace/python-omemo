@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from .backendexception import BackendException
 from .encryptionproblemsexception import EncryptionProblemsException
 from .inconsistentinfoexception import InconsistentInfoException
