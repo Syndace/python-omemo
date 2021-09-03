@@ -31,4 +31,8 @@ def make(backend):
         def ik(self):
             return self.__other_ik
 
+        @property
+        def receiving_chain_length(self):
+            return self._DoubleRatchet__skr.receiving_chain_length
+
     return ExtendedDoubleRatchet

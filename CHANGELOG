@@ -3,11 +3,16 @@ Version 0.13.0 (WIP)
 - Dropped Python 2 support and removed a bit of Python 2 compatibility clutter
 - Removed synchronous APIs
 - Removed thread-based promise implementation in favor of asyncio futures and coroutines
+- Added a method to retrieve the receiving chain length of a single session form the sessionmanager
 
 This version introduces changes to the existing public APIs:
 
 - The storage interface has been modified to use asyncio coroutines instead of callbacks.
 - All methods of the session manager that returned promises previously have been replaced with equivalent asyncio coroutines. Support for the synchronous API has been removed.
+
+There are additions to the public API:
+
+- SessionManager.receiving_chain_length can now be used to query the receiving chain length of a single session.
 
 Version 0.12.0 (released: 28th of March, 2020)
 

@@ -185,6 +185,10 @@ async def messageEncryption(
                 expect_pre_key = did in bundles
                 assert encrypted["keys"][B_JID][did]["pre_key"] == expect_pre_key
 
+                # Check that the receiving chain length is None (because the session
+                # doesn't exist yet)
+                assert await b_sms[did].receiving_chain_length(A_JID, A_DID) is None
+
                 decrypted = await b_sms[did].decryptMessage(
                     A_JID,
                     A_DID,
@@ -196,6 +200,10 @@ async def messageEncryption(
                 )
 
                 assert expect_untrusted_decryption == None
+
+                # Check that the receiving chain length is at 1 after successful
+                # decryption
+                assert await b_sms[did].receiving_chain_length(A_JID, A_DID) == 1
             except TrustException as e:
                 assert e == TrustException(
                     A_JID,
@@ -203,6 +211,10 @@ async def messageEncryption(
                     sm.public_bundle.ik,
                     expect_untrusted_decryption
                 )
+
+                # Check that the receiving chain length remains None (because the session
+                # wasn't created)
+                assert await b_sms[did].receiving_chain_length(A_JID, A_DID) is None
 
             if expect_untrusted_decryption == None:
                 assert decrypted == msg

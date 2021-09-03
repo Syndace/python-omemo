@@ -995,6 +995,15 @@ class SessionManager:
     # other #
     #########
 
+    async def receiving_chain_length(self, bare_jid, device):
+        """
+        Get the length of the receiving chain of a single session. Returns None if the
+        session doesn't exist and the length as an integer otherwise.
+        """
+
+        session = await self.__loadSession(bare_jid, device)
+        return None if session is None else session.receiving_chain_length
+
     def listJIDs(self):
         return self._storage.listJIDs()
 
