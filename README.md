@@ -32,12 +32,10 @@ $ pip install OMEMO
 
 Ppjet6 kindly maintains AUR packages of both the current master and the latest release:
 
-| Release/Branch | Python Version | Link                                                                         |
-|:-------------- |:--------------:|:----------------------------------------------------------------------------:|
-| current master | 2              | [*\*click\**](https://aur.archlinux.org/packages/python2-omemo-syndace/)     |
-| latest release | 2              | [*\*click\**](https://aur.archlinux.org/packages/python2-omemo-syndace-git/) |
-| current master | 3              | [*\*click\**](https://aur.archlinux.org/packages/python-omemo-syndace/)      |
-| latest release | 3              | [*\*click\**](https://aur.archlinux.org/packages/python-omemo-syndace-git/)  |
+| Release/Branch | Link                                                                         |
+|:-------------- |:----------------------------------------------------------------------------:|
+| current master | [*\*click\**](https://aur.archlinux.org/packages/python-omemo-syndace/)      |
+| latest release | [*\*click\**](https://aur.archlinux.org/packages/python-omemo-syndace-git/)  |
 
 ## Usage
 

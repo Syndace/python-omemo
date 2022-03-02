@@ -25,7 +25,7 @@ import version
 # -- Project information -----------------------------------------------------
 
 project = 'OMEMO'
-copyright = '2019, Tim Henkes'
+copyright = '2022, Tim Henkes'
 author = 'Tim Henkes'
 
 # The short X.Y version

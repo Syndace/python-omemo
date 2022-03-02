@@ -391,10 +391,7 @@ async def test_ratchetForwardingMessage():
 
     b_sm = b_sms[B_DID]
 
-    encrypted = await sm.encryptRatchetForwardingMessage(
-        [ B_JID ],
-        { B_JID: { B_DID: b_sm.public_bundle } }
-    )
+    encrypted = await sm.encryptRatchetForwardingMessage(B_JID, B_DID, b_sm.public_bundle)
 
     await b_sm.decryptRatchetForwardingMessage(
         A_JID,
@@ -548,10 +545,7 @@ async def test_serialization():
 
     b_sm = b_sms[B_DID]
 
-    encrypted = await sm.encryptRatchetForwardingMessage(
-        [ B_JID ],
-        { B_JID: { B_DID: b_sm.public_bundle } }
-    )
+    encrypted = await sm.encryptRatchetForwardingMessage(B_JID, B_DID, b_sm.public_bundle)
 
     await b_sm.decryptRatchetForwardingMessage(
         A_JID,
@@ -567,10 +561,7 @@ async def test_serialization():
     # state and the session are still usable.
     _, sm = await createSessionManagers(st=st)
 
-    encrypted = await sm.encryptRatchetForwardingMessage(
-        [ B_JID ],
-        { B_JID: { B_DID: b_sm.public_bundle } }
-    )
+    encrypted = await sm.encryptRatchetForwardingMessage(B_JID, B_DID, b_sm.public_bundle)
 
     await b_sm.decryptRatchetForwardingMessage(
         A_JID,

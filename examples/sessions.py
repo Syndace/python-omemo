@@ -236,11 +236,8 @@ async def main():
 
     message = await alice_session_manager.encryptRatchetForwardingMessage(
         BOB_BARE_JID,
-        {
-            BOB_BARE_JID: {
-                BOB_DEVICE_ID: bob_session_manager.public_bundle
-            }
-        }
+        BOB_DEVICE_ID,
+        bob_session_manager.public_bundle
     )
 
     # Get the message specified for Bob on his only device

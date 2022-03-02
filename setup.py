@@ -29,7 +29,7 @@ setup(
     url = "https://github.com/Syndace/python-omemo",
     author = "Tim Henkes",
     author_email = "me@syndace.dev",
-    license = "GPLv3",
+    license = "MIT",
     packages = find_packages(),
     install_requires = [
         "X3DH>=0.5.9,<0.6",
@@ -45,10 +45,9 @@ setup(
         "Topic :: Communications :: Chat",
         "Topic :: Security :: Cryptography",
 
-        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+        "License :: OSI Approved :: MIT License",
 
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.4",
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",

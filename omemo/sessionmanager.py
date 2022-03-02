@@ -4,12 +4,14 @@ import logging
 import os
 import sys
 import time
+from typing import Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .exceptions import *
 from .extendeddoubleratchet import make as make_ExtendedDoubleRatchet
+from .extendedpublicbundle import ExtendedPublicBundle
 from .x3dhdoubleratchet import make as make_X3DHDoubleRatchet
 
 import x3dh
@@ -111,16 +113,17 @@ class SessionManager:
 
     async def encryptRatchetForwardingMessage(
         self,
-        bare_jids,
-        bundles = None,
-        expect_problems = None
+        bare_jid: str,
+        device_id: int,
+        bundle: Optional[ExtendedPublicBundle] = None
     ):
         return await self.__encryptKeyTransportMessage(
-            bare_jids,
-            None,
-            bundles,
-            expect_problems,
-            ignore_trust = True
+            bare_jids = bare_jid,
+            plaintext = None,
+            bundles = None if bundle is None else { bare_jid: { device_id: bundle } },
+            expect_problems = None,
+            ignore_trust = True,
+            encrypt_for = { bare_jid: set([ device_id ]) }
         )
 
     async def encryptKeyTransportMessage(
@@ -142,13 +145,16 @@ class SessionManager:
         plaintext = None,
         bundles = None,
         expect_problems = None,
-        ignore_trust = False
+        ignore_trust = False,
+        encrypt_for = None
     ):
         """
         bare_jids: iterable<string>
         plaintext: bytes or None
         bundles: { [bare_jid: string] => { [device_id: int] => ExtendedPublicBundle } }
         expect_problems: { [bare_jid: string] => iterable<int> }
+        ignore_trust: boolean
+        encrypt_for: { [bare_jid: string] => set<int> } or None
 
         returns: {
             iv: bytes,
@@ -185,8 +191,9 @@ class SessionManager:
                 bare_jid: set(expect_problems[bare_jid]) for bare_jid in expect_problems
             }
 
-        # Add the own bare jid to the set of jids
-        bare_jids.add(self.__my_bare_jid)
+        # Add the own bare jid to the set of jids, but only if the recipient devices are not given explicitly:
+        if encrypt_for is None:
+            bare_jids.add(self.__my_bare_jid)
 
         ########################################################
         # check all preconditions and prepare missing sessions #
@@ -194,19 +201,20 @@ class SessionManager:
 
         problems = []
 
-        # Prepare the lists of devices to encrypt for
-        encrypt_for = {}
+        # Prepare the lists of devices to encrypt for. Default to all active devices of all recipients.
+        if encrypt_for is None:
+            encrypt_for = {}
 
-        for bare_jid in bare_jids:
-            devices = await self.__loadActiveDevices(bare_jid)
+            for bare_jid in bare_jids:
+                devices = await self.__loadActiveDevices(bare_jid)
 
-            if len(devices) == 0:
-                problems.append(NoDevicesException(bare_jid))
-            else:
-                encrypt_for[bare_jid] = devices
+                if len(devices) == 0:
+                    problems.append(NoDevicesException(bare_jid))
+                else:
+                    encrypt_for[bare_jid] = devices
 
-        # Remove the sending devices from the list
-        encrypt_for[self.__my_bare_jid].remove(self.__my_device_id)
+            # Remove the sending devices from the list
+            encrypt_for[self.__my_bare_jid].remove(self.__my_device_id)
 
         # Check whether all required bundles are available
         for bare_jid, devices in encrypt_for.items():
