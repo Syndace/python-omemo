@@ -1,6 +1,6 @@
 ## Backend API ##
 
-python-omemo only ships the core functionality common to all versions of [XEP-0384]() and relies on backends to implement the details of each version. Each backend is uniquely identified by the namespace it implements. The core of python-omemo does not contain any code specific to any of the backends, the core is truly independent of the backends.
+python-omemo only ships the core functionality common to all versions of [XEP-0384]() and relies on backends to implement the details of each version. Each backend is uniquely identified by the namespace it implements. The core of python-omemo does not contain any code specific to any of the backends.
 
 ## Compatibility Between the Backends ##
 
@@ -17,11 +17,11 @@ When loading an identity key pair from serialized data, the key pair must be con
 - If the loaded identity key pair is `Mont`, the X3DH states of the backend are loaded as follows:
     - If the backend requires `Mont` or is `Flexible`, the key pair is passed in as-is.
     - If the backend requires `Ed`, this requirement can't be fulfilled and compatibility between the backends can't be retained using that identity key pair. There are a few options how to handle that case:
-        1. Discard the old identity key pair and generate a new `Ed` key pair, then proceed as described above. This solves the problem at the cost of a new identity key pair and related trust decisions. The code must check whether this is the case _before_ loading any X3DH states with the old key pair.
+        1. Discard the old identity key pair and generate a new `Ed` key pair, then proceed as described above. This solves the problem at the cost of a new identity key pair and related trust decisions.
         2. Disable usage of the incompatible backend, which solves the immediate problem at the cost of backend compatibility.
         3. Use different identity key pairs with the different backends, which also solves the immediate problem at the cost of backend compatibility.
 
-The goal of python-omemo is to provide seamless compatibility between all backends, thus option 1 is the only solution implemented in python-omemo.
+The goal of python-omemo is to provide seamless compatibility between all backends, thus option 1 is the only solution viable for python-omemo.
 
 ## Public APIs and Backends ##
 

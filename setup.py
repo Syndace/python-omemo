@@ -60,8 +60,8 @@ setup(
     install_requires = [
         "X3DH>=1.0.0,<2",
         "DoubleRatchet>=1.0.0,<2",
-        "cryptography>=2.6.1,<3",
-        "packaging>=19,<21"
+        "cryptography>=3.3.2,<37",
+        "packaging>=20.9,<22"
     ],
     python_requires = ">=3.6,<4",
     include_package_data = True,

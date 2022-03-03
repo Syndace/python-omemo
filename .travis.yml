@@ -1,11 +1,13 @@
 os: linux
-dist: bionic
+dist: focal
 
 language: python
 python:
 - "3.6"
 - "3.7"
 - "3.8"
+- "3.9"
+- "3.10"
 - "pypy3"
 
 env:
@@ -17,7 +19,7 @@ install:
 - python -m pip --version
 - python -m pip install --upgrade pytest pytest-asyncio pylint
 - if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade mypy; fi
-- if [   $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography==2.6.1 packaging==19.0; fi
+- if [   $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography==3.3.2 packaging==20.9; fi
 - if [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography        packaging; fi
 - python -m pip install .
 

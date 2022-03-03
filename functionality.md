@@ -150,16 +150,15 @@
     - [x] the protocol version a backend implements is identified by its namespace
 
 - [ ] data storage has to be provided by the application
-    - [ ] an asyncio-based storage interface has to be implemented
+    - [x] an asyncio-based storage interface has to be implemented
+        - [x] this interface transparently handles caching
+        - [x] the interface represents generic key-value storage with opaque keys and values
     - [ ] automatic migrations between storage format versions are provided
         - [ ] a legacy python-omemo to modern python-omemo migration tool is provided
-        - [ ] a libsignal to python-omemo migration tool (for the legacy backend (?)) will be provided in the future
+        - [ ] a libsignal to python-omemo migration tool will be provided in the future(, as part of the legacy backend?)
     - [ ] a default implementation using json files and directories on the file system is provided
-    - [ ] a default implementation using sqlite is provided
-    - [ ] a storage implementation wrapper providing in-memory caching is provided for storage implementations that aren't fast and don't cache on their own
-    - [ ] an abstract implementation is provided that reduces all storage operations to simple key/value read/write operations
     - [ ] storage consistency is guaranteed
-        - [ ] write operations MUST NOT cache but perform the writing operation right away
+        - [x] write operations MUST NOT cache but perform the writing operation right away
         - [ ] when decrypting, changes to the state are only saved on success
         - [ ] when encrypting, changes to the state are saved before they are used for any further operation
 
