@@ -1,15 +1,11 @@
+.eggs/
 build/
 dist/
 OMEMO.egg-info/
-*.pyc
 
+*.pyc
 .pytest_cache/
+.mypy_cache/
 
 docs/_build/
-
-examples/*/*
-
-install.sh
-Makefile
-
-tests/confidential_*.txt
+examples/*/

@@ -1,20 +1,33 @@
+os: linux
+dist: bionic
+
 language: python
 python:
-  - "2.7"
-  - "3.4"
-  - "3.5"
-  - "3.6"
-  - "3.7"
-  - "3.8"
+- "3.6"
+- "3.7"
+- "3.8"
+- "pypy3"
 
 env:
-  - CRYPTOGRAPHY_VERSION=2.2.2 # Most recent versions on pip
-  - CRYPTOGRAPHY_VERSION=2     # The first version supporting AESGCM
+- DEBIAN_DEPS=true
+- DEBIAN_DEPS=
 
 install:
-  - pip install cryptography==$CRYPTOGRAPHY_VERSION
-  - pip install pytest
-  - python setup.py install
-  - pip install omemo-backend-signal
+- python -m pip install --upgrade pip setuptools wheel
+- python -m pip --version
+- python -m pip install --upgrade pytest pytest-asyncio pylint
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade mypy; fi
+- if [   $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography==2.6.1 packaging==19.0; fi
+- if [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography        packaging; fi
+- python -m pip install .
 
-script: py.test
+script:
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict omemo/; fi
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict tests/; fi
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict examples/; fi
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict setup.py; fi
+- python -m pylint omemo/
+- python -m pylint tests/*.py
+- python -m pylint examples/*.py
+- python -m pylint setup.py
+- python -m pytest

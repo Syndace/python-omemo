@@ -1,2 +1,4 @@
-X3DH>=0.5.9,<0.6
-cryptography>=2
+X3DH>=1.0.0,<2
+DoubleRatchet>=1.0.0,<2
+cryptography>=2.6.1,<3
+packaging>=19,<21

@@ -1,2 +1,0 @@
-class OMEMOException(Exception):
-    pass

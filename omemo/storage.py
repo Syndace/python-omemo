@@ -1,212 +1,398 @@
-import asyncio
+from abc import ABCMeta, abstractmethod
+from typing import NamedTuple, Optional, Set, Tuple, Dict, Any, TypeVar, Type, Generic
 
-class Storage:
+from .types import JSONType, OMEMOException
+
+StateSerialized # TODO
+SessionSerialized # TODO
+
+class Device(NamedTuple):
+    bare_jid: str
+    device_id: int
+
+class DeviceInformation(NamedTuple):
+    identity_key: bytes
+    active: bool
+    last_used: int
+    label: Optional[str]
+
+class IdentityPublicKey(NamedTuple):
+    bare_jid: str
+    identity_public_key: bytes
+
+class StorageException(OMEMOException):
+    pass
+
+# typing's Optional[A] is just an alias for Union[None, A], which means if A is a union itself that allows
+# None, the Optional[A] doesn't add anything. E.g. Optional[Optional[X]] = Optional[X] is true for any type X.
+# This Maybe class actually makes a difference between whether a value is set or not.
+V = TypeVar("V")
+M = TypeVar("M", bound="Maybe")
+
+class Nothing(Exception):
+    pass
+
+class Maybe(Generic[V]):
+    def __init__(self):
+        # Just the type definitions here
+        self.__value: V
+        self.__value_set: bool
+
+    @classmethod
+    def just(cls: Type[M], value: V) -> M:
+        # pylint: disable=protected-access
+        self = cls()
+        self.__value = value
+        self.__value_set = True
+        return self
+
+    @classmethod
+    def nothing(cls: Type[M]) -> M:
+        # pylint: disable=protected-access
+        self = cls()
+        self.__value_set = False
+        return self
+
+    def from_just(self) -> V:
+        if self.__value_set:
+            return self.__value
+
+        raise Nothing # yuck (❤️ Haskell)
+
+class Storage(metaclass=ABCMeta): # TODO: Add Raises StorageException everywhere
     """
-    The interface used by the SessionManager to persist data between runs.
-
-    Note:
-    The SessionManager does caching to reduce the number of calls to a minimum. There
-    should be no need to add caching or any other logic in here, just plain storing and
-    loading.
+    # TODO
     """
 
-    async def loadOwnData(self):
+    def __init__(self, disable_cache: bool = False):
         """
-        Load the own data.
-
-        Return a dictionary of following structure:
-        {
-            "own_bare_jid"  : string,
-            "own_device_id" : int
-        }
-
-        or None, if no own data was stored previously.
+        # TODO
         """
 
+        self.__disable_cache = disable_cache
+
+        self.__own_device: Optional[Maybe[Device]] = None
+        self.__state: Dict[str, Maybe[JSONType]] = None
+        self.__sessions: Dict[Device, Dict[str, JSONType]] = {}
+        self.__devices: Dict[str, Dict[int, DeviceInformation]] = {}
+        self.__trusts: Dict[IdentityPublicKey, Optional[str]] = {}
+
+    async def load_own_device(self) -> Maybe[Device]:
+        """
+        Returns:
+            
+        """
+
+        if not self.__disable_cache and self.__own_device is not None:
+            return self.__own_device
+
+        device = await self._load_own_device()
+        self.__own_device = device
+        return device
+
+    @abstractmethod
+    async def _load_own_device(self) -> Maybe[Device]:
         raise NotImplementedError
 
-    async def storeOwnData(self, own_bare_jid, own_device_id):
+    async def store_own_device(self, device: Device) -> Any:
         """
-        Store given own data, overwriting previously stored data.
+        # TODO
         """
 
+        result = await self._store_own_device(device)
+        self.__own_device = Maybe.just(device)
+        return result
+
+    @abstractmethod
+    async def _store_own_device(self, device: Device) -> Any:
         raise NotImplementedError
 
-    async def loadState(self):
+    async def load_state(self, namespace: str) -> Maybe[JSONType]:
         """
-        Load the state.
-
-        Return the stored structure or None, if no state was stored previously.
+        # TODO
         """
 
+        if not self.__disable_cache:
+            try:
+                return self.__state[namespace]
+            except KeyError:
+                pass
+
+        state = await self._load_state(namespace)
+        self.__state[namespace] = state
+        return state
+
+    @abstractmethod
+    async def _load_state(self, namespace: str) -> Maybe[JSONType]:
         raise NotImplementedError
 
-    async def storeState(self, state):
+    async def store_state(self, namespace: str, state: StateSerialized) -> Any:
         """
-        Store the state, overwriting the old state, if it exists.
-
-        state is passed as a serializable object, that means it consist of a combination
-        of the following types:
-        - dictionaries
-        - lists
-        - strings
-        - integers
-        - floats
-        - booleans
-        - None
-
-        You can dump this object using for example the json module.
-
-        For more information on how the state object is structured, look at the
-        omemo.X3DHDoubleRatchet.serialize method.
+        # TODO
         """
 
+        result = await self._store_state(state)
+        self.__state[namespace] = Maybe.just(state)
+        return result
+
+    @abstractmethod
+    async def _store_state(self, state: StateSerialized) -> Any:
         raise NotImplementedError
 
-    async def loadSession(self, bare_jid, device_id):
+    async def purge_state(self, namespace: str) -> Any:
         """
-        Load a session with given bare_jid and device id.
-
-        bare_jid is passed as a string, device_id as an integer.
-
-        Return either the structure previously stored or None.
+        # TODO
         """
 
+        # Invalidate the cache entries corresponding to the state namespace. Invalidating is safe even in case
+        # `_purge_state` fails halfway through the deletion.
+
+        # Invalidate the state itself
+        self.__state.pop(namespace, None)
+
+        # Invalidate all sessions that belong to the state
+        for device, sessions in list(self.__sessions.items()):
+            if namespace in sessions:
+                self.__sessions.pop(device, None)
+
+        return await self._purge_state(namespace)
+
+    @abstractmethod
+    async def _purge_state(self, namespace: str) -> Any: # TODO: Delete the state itself and all sessions that belong to the state
         raise NotImplementedError
 
-    async def loadSessions(self, bare_jid, device_ids):
+    async def load_session(self, device: Device) -> Dict[str, JSONType]:
         """
-        Return a dict containing the session for each device id. By default, this method
-        calls loadSession for each device id.
-        """
-
-        return dict(zip(device_ids, await asyncio.gather(*[
-            self.loadSession(bare_jid, device_id) for device_id in device_ids
-        ])))
-
-    async def storeSession(self, bare_jid, device_id, session):
-        """
-        Store a session for given bare_jid and device id, overwriting the previous
-        session, if it exists.
-
-        bare_jid is passed as string, device_id as an integer.
-
-        session is passed as a serializable object, that means it consist of a combination
-        of the following types:
-        - dictionaries
-        - lists
-        - strings
-        - integers
-        - floats
-        - booleans
-        - None
-
-        You can dump this object using for example the json module.
+        # TODO
         """
 
+        if not self.__disable_cache:
+            try:
+                return self.__sessions[device]
+            except KeyError:
+                pass
+
+        session = await self._load_session(device)
+        self.__sessions[device] = session
+        return session
+
+    @abstractmethod
+    async def _load_session(self, device: Device) -> Dict[str, JSONType]:
         raise NotImplementedError
 
-    async def deleteSession(self, bare_jid, device_id):
+    async def load_sessions(self, devices: Set[Device]) -> Dict[Device, Dict[str, JSONType]]:
         """
-        Completely wipe the session associated with given bare_jid and device_id from the
-        storage.
-
-        bare_jid is passed as string, device_id as an integer.
+        # TODO
         """
 
+        sessions: Dict[Device, Dict[str, JSONType]] = {}
+        missing_devices: Set[Device] = set()
+
+        if not self.__disable_cache:
+            for device in devices:
+                try:
+                    sessions[device] = self.__sessions[device]
+                except KeyError:
+                    missing_devices.add(device)
+
+        missing_sessions: Dict[Device, Dict[str, JSONType]] = {}
+        if len(missing_devices) == 1:
+            missing_device = next(iter(missing_devices))
+            missing_sessions[missing_device] = await self._load_session(missing_device)
+        else:
+            missing_sessions.update(await self._load_sessions(missing_devices))
+
+        self.__sessions.update(missing_sessions)
+
+        sessions.update(missing_sessions)
+
+        return sessions
+
+    async def _load_sessions(self, devices: Set[Device]) -> Dict[Device, Dict[str, JSONType]]:
+        return { device: await self._load_session(device) for device in devices }
+
+    async def store_session(self, device: Device, namespace: str, session: SessionSerialized) -> Any:
+        """
+        # TODO
+        """
+
+        result = await self._store_session(device, namespace, session)
+        self.__sessions[device] = self.__sessions.get(device, {})
+        self.__sessions[device][namespace] = session
+        return result
+
+    @abstractmethod
+    async def _store_session(self, device: Device, namespace: str, session: SessionSerialized) -> Any:
         raise NotImplementedError
 
-    async def loadActiveDevices(self, bare_jid):
+    async def delete_session(self, device: Device, namespace: str) -> Any: # TODO: Don't throw if non-existent
         """
-        Load the list of active devices for a given bare_jid.
-
-        An "active device" is a device, which is listed in the most recent version of
-        the device list pep node.
-
-        bare_jid is passed as a string, the result is expected to be a list of integers.
+        # TODO
         """
 
+        result = await self._delete_session(device, namespace)
+        self.__sessions.get(device, {}).pop(namespace, None)
+        return result
+
+    @abstractmethod
+    async def _delete_session(self, device: Device, namespace: str) -> Any:
         raise NotImplementedError
 
-    async def loadInactiveDevices(self, bare_jid):
+    async def delete_sessions(self, bare_jid: str) -> Any:
         """
-        Load the list of inactive devices for a given bare_jid.
-
-        An "inactive device" is a device, which was listed in an older version of
-        the device list pep node, but is NOT listed in the most recent version.
-
-        bare_jid is passed as a string, the result is expected to be a dict mapping from
-        int to int, where the keys are device ids and the values are timestamps (seconds
-        since epoch).
+        # TODO
         """
 
+        if device_ids is None:
+            device_ids = set(await self.load_devices(bare_jid))
+
+        # Invalidate the cache entries corresponding to the sessions. Invalidating is safe even in case
+        # `_delete_sessions` fails halfway through the deletion.
+        for device_id in device_ids:
+            self.__sessions.pop(Device(bare_jid=bare_jid, device_id=device_id), None)
+
+        return await self._delete_sessions(bare_jid, devices)
+
+    async def _delete_sessions(self, bare_jid: str, device_ids: Set[int]) -> Any: # TODO: It's fine if this crashes halfway through
+        for device_id in device_ids:
+            await self._delete_session(Device(bare_jid=bare_jid, device_id=device_id))
+
+    async def load_devices(self, bare_jid: str) -> Dict[int, DeviceInformation]:
+        """
+        # TODO
+        """
+
+        if not self.__disable_cache:
+            try:
+                return self.__devices[bare_jid]
+            except KeyError:
+                pass
+
+        devices = await self._load_devices(bare_jid)
+        self.__devices[bare_jid] = devices
+        return devices
+
+    @abstractmethod
+    async def _load_devices(self, bare_jid: str) -> Dict[int, DeviceInformation]:
         raise NotImplementedError
 
-    async def storeActiveDevices(self, bare_jid, devices):
+    async def store_devices(self, bare_jid: str, devices: Dict[int, DeviceInformation]) -> Any:
         """
-        Store the active devices for given bare_jid, overwriting the old stored list,
-        if it exists.
-
-        bare_jid is passed as a string, devices as a list of integers.
+        # TODO
         """
 
+        result = await self._store_devices(bare_jid, devices)
+        self.__devices[bare_jid] = devices
+        return result
+
+    @abstractmethod
+    async def _store_devices(self, bare_jid: str, devices: Dict[int, DeviceInformation]) -> Any:
         raise NotImplementedError
 
-    async def storeInactiveDevices(self, bare_jid, devices):
+    async def load_trust(self, identity_public_key: IdentityPublicKey) -> Optional[str]:
         """
-        Store the inactive devices for given bare_jid, overwriting the old stored list,
-        if it exists.
-
-        bare_jid is passed as a string, devices as a dict mapping from int to int, where
-        the keys are device ids and the values are timestamps (seconds since epoch).
+        # TODO
         """
 
+        if not self.__disable_cache:
+            try:
+                return self.__trusts[identity_public_key]
+            except KeyError:
+                pass
+
+        trust = await self._load_trust(identity_public_key)
+        self.__trusts[identity_public_key] = trust
+        return trust
+
+    @abstractmethod
+    async def _load_trust(self, identity_public_key: IdentityPublicKey) -> Optional[str]:
         raise NotImplementedError
 
-    async def loadTrust(self, bare_jid, device_id):
+    async def load_trusts(self, identity_public_keys: Set[IdentityPublicKey]) -> Dict[IdentityPublicKey, str]:
         """
+        # TODO
         """
 
+        trusts: Dict[IdentityPublicKey, str] = {}
+        missing_identity_public_keys: Set[IdentityPublicKey] = set()
+
+        if not self.__disable_cache:
+            for identity_public_key in identity_public_keys:
+                try:
+                    trust = self.__trusts[identity_public_key]
+                    if trust is not None:
+                        trusts[identity_public_key] = trust
+                except KeyError:
+                    missing_identity_public_keys.add(identity_public_key)
+
+        missing_trusts: Dict[IdentityPublicKey, str] = {}
+        if len(missing_identity_public_keys) == 1:
+            missing_identity_public_key = next(iter(missing_identity_public_keys))
+            missing_trust = await self._load_trust(missing_identity_public_key)
+            if missing_trust is not None:
+                missing_trusts[missing_identity_public_key] = missing_trust
+        else:
+            missing_trusts.update(await self._load_trusts(missing_identity_public_keys))
+
+        for missing_identity_public_key in missing_identity_public_keys:
+            try:
+                self.__trusts[missing_identity_public_key] = missing_trusts[missing_identity_public_key]
+            except KeyError:
+                self.__trusts[missing_identity_public_key] = None
+
+        trusts.update(missing_trusts)
+
+        return trusts
+
+    async def _load_trusts(
+        self,
+        identity_public_keys: Set[IdentityPublicKey]
+    ) -> Dict[IdentityPublicKey, str]:
+        trusts: Dict[IdentityPublicKey, str] = {}
+
+        for identity_public_key in identity_public_keys:
+            trust = await self._load_trust(identity_public_key)
+            if trust is not None:
+                trusts[identity_public_key] = trust
+
+        return trusts
+
+    async def store_trust(self, identity_public_key: IdentityPublicKey, trust_level_name: str) -> Any:
+        """
+        # TODO
+        """
+
+        result = await self._store_trust(identity_public_key, trust_level_name)
+        self.__trusts[identity_public_key] = trust_level_name
+        return result
+
+    @abstractmethod
+    async def _store_trust(self, identity_public_key: IdentityPublicKey, trust_level_name: str) -> Any:
         raise NotImplementedError
 
-    async def loadTrusts(self, bare_jid, device_ids):
+    async def purge_bare_jid(self, bare_jid: str) -> Any: # TODO: Don't throw if non-existent # TODO: Remove sessions, devices, and identity keys # TODO: Allow even own JID
         """
-        Return a dict containing the trust status for each device id. By default, this
-        method calls loadTrust for each device id.
-        """
-
-        return dict(zip(device_ids, await asyncio.gather(*[
-            self.loadTrust(bare_jid, device_id) for device_id in device_ids
-        ])))
-
-    async def storeTrust(self, bare_jid, device_id, trust):
-        """
-        bare_jid: string
-        device_id: int
-
-        trust: None or {
-            "key"     : string (Base64 encoded bytes),
-            "trusted" : bool
-        }
+        # TODO
         """
 
-        raise NotImplementedError
+        # Invalidate the cache entries corresponding to the base JID. Invalidating is safe even in case
+        # `_purge_bare_jid` fails halfway through the deletion.
 
-    async def listJIDs(self):
-        """
-        List all bare jids that have associated device lists stored in the storage.
-        It doesn't matter if the lists are empty or not.
+        # Invalidate all sessions that belong to a device of the bare JID
+        for device in list(self.__sessions):
+            if device.bare_jid == bare_jid:
+                self.__sessions.pop(device, None)
 
-        Return a list of strings.
-        """
+        # Invalidate all devices that belong to the bare JID
+        self.__devices.pop(bare_jid, None)
 
-        raise NotImplementedError
+        # Invalidate the trust levels of all identity public keys that belong to the bare JID
+        for identity_public_key in list(self.__trusts):
+            if identity_public_key.bare_jid == bare_jid:
+                self.__trusts.pop(identity_public_key, None)
 
-    async def deleteJID(self, bare_jid):
-        """
-        Delete all data associated with given bare_jid. This includes the active and
-        inactive devices, all sessions stored for that jid and all information about
-        trusted keys.
-        """
+        return await self._purge_bare_jid(bare_jid)
 
+    @abstractmethod
+    async def _purge_bare_jid(self, bare_jid: str) -> Any:
         raise NotImplementedError
