@@ -1,5 +1,5 @@
-from abc import ABCMeta, abstractmethod
-from typing import NamedTuple, Optional, Set, Tuple, Dict, Any, TypeVar, Type, Generic
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, Generic, Optional, Type, TypeVar
 
 from .types import JSONType, OMEMOException
 
@@ -36,9 +36,15 @@ class Maybe(Generic[V]):
         try:
             return self.__value
         except AttributeError:
-            raise Nothing # -- yuck
+            raise Nothing("Maybe.fromJust: Nothing") # -- yuck
 
-    def fmap(self, f: (value: V) -> V2) -> Maybe[V2]:
+    def maybe(self, default: V) -> V:
+        try:
+            return self.__value
+        except AttributeError:
+            return default
+    
+    def fmap(self, f: Callable[[V], V2]) -> "Maybe[V2]":
         try:
             value = self.__value
         except AttributeError:
@@ -46,7 +52,13 @@ class Maybe(Generic[V]):
 
         return Maybe.just(f(value))
 
-class Storage(metaclass=ABCMeta): # TODO: Add Raises StorageException everywhere
+T = TypeVar("T")
+def check_primitive_type(key: str, value: JSONType, type: Type[T]) -> T:
+    if isinstance(value, type):
+        return value
+    raise TypeError("The value stored for key {} is not a {}: {}".format(key, type, value))
+
+class Storage(ABC): # TODO: Add Raises StorageException everywhere
     """
     # TODO
     """
@@ -56,54 +68,58 @@ class Storage(metaclass=ABCMeta): # TODO: Add Raises StorageException everywhere
         # TODO
         """
 
-        self.__device_cache: Optional[Dict[str, Maybe[Device]]] = None if disable_cache else {}
-        # TODO
+        self.__cache: Optional[Dict[str, Maybe[JSONType]]] = None if disable_cache else {}
 
     @abstractmethod
+    async def _load(self, key: str) -> Maybe[JSONType]:
+        """
+        TODO
+        """
+
+        raise NotImplementedError("Create a subclass of Storage and implement `_load`.")
+
+    @abstractmethod
+    async def _store(self, key: str, value: JSONType) -> Any:
+        """
+        TODO
+        """
+
+        raise NotImplementedError("Create a subclass of Storage and implement `_store`.")
+
+    @abstractmethod
+    async def _delete(self, key: str) -> Any:
+        """
+        TODO
+        """
+
+        raise NotImplementedError("Create a subclass of Storage and implement `_delete`.")
+
     async def load(self, key: str) -> Maybe[JSONType]:
         """
         TODO
         """
 
-        raise NotImplementedError
-
-    @abstractmethod
-    async def store(self, key: str, value: JSONType) -> Any:
-        """
-        TODO
-        """
-
-        raise NotImplementedError
-
-    @abstractmethod
-    async def delete(self, key: str) -> Any:
-        """
-        TODO
-        """
-
-        raise NotImplementedError
-
-    async def load_device(self, key: str) -> Maybe[Device]:
-        """
-        TODO
-        """
-
         try:
-            return self.__device_cache[key]
-        except TypeError, KeyError:
+            return self.__cache[key]
+        except (TypeError, KeyError):
             pass
 
-        return (await self.load(key)).fmap(DeviceModel.load)
+        value = await self._load(key)
+        try:
+            self.__cache[key] = value
+        except TypeError:
+            pass
+        return value
 
-    async def store_device(self, key: str, value: Device) -> None:
+    async def store(self, key: str, value: JSONType) -> None:
         """
         TODO
         """
 
-        await self.store(key, DeviceModel.dump(value))
+        await self._store(key, value)
 
         try:
-            self.__device_cache[key] = Maybe.just(value)
+            self.__cache[key] = Maybe.just(value)
         except TypeError:
             pass
 
@@ -112,9 +128,23 @@ class Storage(metaclass=ABCMeta): # TODO: Add Raises StorageException everywhere
         TODO
         """
 
-        await self.delete(key)
+        await self._delete(key)
 
         try:
-            self.__device_cache[key] = Maybe.nothing()
+            self.__cache[key] = Maybe.nothing()
         except TypeError:
             pass
+
+    async def load_int(self, key: str) -> Maybe[int]:
+        """
+        Variation of :meth:`load` for loading specifically int values.
+        """
+
+        return (await self.load(key)).fmap(lambda value: check_primitive_type(key, value, int))
+
+    async def load_str(self, key: str) -> Maybe[str]:
+        """
+        Variation of :meth:`load` for loading specifically str values.
+        """
+
+        return (await self.load(key)).fmap(lambda value: check_primitive_type(key, value, str))

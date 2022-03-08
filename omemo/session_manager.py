@@ -1,17 +1,14 @@
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 import enum
-from typing import TypeVar, Type, Dict, Any, Optional, Tuple, Set, NamedTuple, List
-
-from packaging.version import parse as parse_version
+from typing import Any, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar
 
 from .backend import Backend
 from .bundle  import Bundle
 from .message import Message
 from .storage import StorageException, Storage
-from .types   import OMEMOException # TODO: Used to import JSONType
-from .version import __version__
+from .types   import OMEMOException
 
-DeviceList = Set[Tuple[int, Optional[str]]
+DeviceList = Set[Tuple[int, Optional[str]]]
 
 class DeviceInformation(NamedTuple):
     namespaces: Set[str]
@@ -24,7 +21,7 @@ class DeviceInformation(NamedTuple):
     label: Optional[str]
 
 @enum.unique
-def TrustLevel(enum.Enum):
+class TrustLevel(enum.Enum):
     Trusted    = 1
     Distrusted = 2
     Undecided  = 3
@@ -72,25 +69,31 @@ class MessageSendingFailed(XMPPInteractionFailed):
     pass
 
 S = TypeVar("S", bound="SessionManager")
-class SessionManager(ABC):
+Plaintext = TypeVar("Plaintext")
+class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     """
     The core of python-omemo. Manages your own key material and bundle, device lists, sessions with other
     users, automatic session healing and much more, all while being flexibly usable with different backends
     and transparenlty maintaining a level of compatibility between the backends that allows you to maintain a
     single identity throughout all of them. Easy APIs are provided to handle common use-cases of OMEMO-enabled
     XMPP clients, with one of the primary goals being strict type safety.
+
+    TODO: Document the Plaintext generic
     """
 
     HEARTBEAT_MESSAGE_TRIGGER = 53
 
     def __init__(self) -> None:
         # Just the type definitions here
-        # TODO
+        self.__backends: List[Backend[Plaintext]]
+        self.__storage: Storage
+        self.__own_bare_jid: str
+        self.__own_device_id: int
 
     @classmethod
     async def create(
         cls: Type[S],
-        backends: List[Backend], # TODO: List[class[Backend]] ?
+        backends: List[Backend[Plaintext]],
         storage: Storage,
         own_bare_jid: str,
         initial_own_label: Optional[str],
@@ -110,7 +113,7 @@ class SessionManager(ABC):
         method loads the backend from the storage instead of creating it.
 
         Args:
-            backends: The list of backends to create/load.
+            backends: The list of backends to use.
             storage: The storage for all OMEMO-related data.
             own_bare_jid: The own bare JID of the account this device belongs to.
             initial_own_label: The initial (optional) label to assign to this device if supported by any of
@@ -169,13 +172,11 @@ class SessionManager(ABC):
             :meth:`encrypt_message` for details.
         """
 
-        # TODO: Check for backends that have been loaded before
-
-        # TODO: Check that the JID in the storage is set to own_jid
-
         self = cls()
-
-        # TODO
+        self.__backends = backends
+        self.__storage = storage
+        self.__own_bare_jid = own_bare_jid
+        self.__own_device_id = (await self.__storage.load_int("/SessionManager/own_device_id")).maybe(...) # TODO
 
         return self
 
@@ -355,12 +356,12 @@ class SessionManager(ABC):
         )
 
     @abstractmethod
-    async def _make_trust_decision(self, undecided: Set[DeviceInformation]) -> Any:
+    async def _make_trust_decision(self, undecided: Dict[str, Set[DeviceInformation]]) -> Any:
         """
         Make a trust decision on a set of undecided identity public keys.
 
         Args:
-            undecided: A set of devices that require trust decisions.
+            undecided: A mapping from bare JIDs to sets of devices that require trust decisions.
 
         Returns:
             Anything, the return value is ignored. The trust decisions are expected to be persisted by calling
@@ -472,7 +473,10 @@ class SessionManager(ABC):
             # TODO
         """
 
-        # TODO
+        await self.__storage.store(
+            "/SessionManager/devices/{}/{}/trust_level_name".format(bare_jid, identity_public_key), # TODO: Serialize correctly
+            trust_level_name
+        )
 
     ######################
     # session management #
@@ -543,6 +547,8 @@ class SessionManager(ABC):
         Raises:
             # TODO
         """
+
+        # TODO: If there is no cached device list in the storage, trigger a fetch and log a warning
 
         # TODO
 
@@ -626,6 +632,21 @@ class SessionManager(ABC):
     # TODO: need internal method to create new sessions, both for :meth:`encrypt_message` and :meth:`replace_sessions`
     # TODO: internal method to encrypt empty messages?
 
+    async def __encrypt_message(
+        self,
+        backend: Backend[Plaintext],
+        devices: Dict[str, Set[DeviceInformation]],
+        message: Plaintext
+    ) -> Message:
+        """
+        TODO
+        """
+
+        # TODO: Bundle fetching
+        # TODO: Key exchange simulation?
+
+        pass
+
     async def encrypt_message(
         self,
         bare_jids: Set[str],
@@ -637,7 +658,7 @@ class SessionManager(ABC):
 
         Args:
             bare_jids: The bare JIDs of the intended recipients.
-            message: The message to encrypt for the recipients. Details depend on the backend.
+            message: The message to encrypt for the recipients. Details depend on the backend(s).
             backend_priority_order: If a recipient device supports multiple versions of OMEMO, this parameter
                 decides which version to prioritize. If ``None`` is supplied, the order of backends as passed
                 to :meth:`create` is assumed as the order of priority. If a list of namespaces is supplied,
@@ -663,7 +684,120 @@ class SessionManager(ABC):
             information about the ``Plaintext`` type.
         """
 
-        # TODO
+        own_bare_jid = self.__own_bare_jid
+        own_device_id = self.__own_device_id
+
+        # Prepare the backend priority order list
+        effective_backend_priority_order: List[str]
+        available_backends = [ backend.namespace for backend in self.__backends ]
+
+        if backend_priority_order is None:
+            effective_backend_priority_order = available_backends
+        else:
+            unavailable_backends = set(backend_priority_order) - set(available_backends)
+            if len(unavailable_backends) > 0:
+                raise SessionManagerException(
+                    "One or more unavailable backends were passed in the priority order list: {}"
+                    .format(unavailable_backends)
+                )
+
+            effective_backend_priority_order = backend_priority_order
+
+        # Add the own bare JID to the list of recipients
+        bare_jids |= set([ own_bare_jid ])
+        
+        # Load the device information of all recipients
+        async def get_filtered_device_information(bare_jid: str) -> Set[DeviceInformation]:
+            def device_filter(device: DeviceInformation) -> bool:
+                # Remove the own device
+                if bare_jid == own_bare_jid and device.device_id == own_device_id:
+                    return False
+
+                # Remove inactive devices
+                if not device.active:
+                    return False
+
+                # Remove devices which are only available with backends that are not currently loaded and in
+                # the priority list
+                if len(device.namespaces & set(effective_backend_priority_order)) == 0:
+                    return False
+
+                return True
+
+            return set(filter(device_filter, await self.get_device_information(bare_jid)))
+
+        devices = { bare_jid: await get_filtered_device_information(bare_jid) for bare_jid in bare_jids }
+
+        # Check for recipients without a single active device
+        no_eligible_devices = filter(lambda bare_jid: len(devices[bare_jid]) == 0, devices.keys())
+        if len(no_eligible_devices) > 0:
+            raise NoEligibleDevices(
+                "One or more of the intended recipients does not have a single active device for the loaded"
+                " backends.",
+                no_eligible_devices
+            )
+
+        # Apply the backend priority order to the remaining devices
+        def apply_backend_priority_order(device: DeviceInformation) -> DeviceInformation:
+            backends_sorted = sorted(device.namespaces, key=effective_backend_priority_order.index)
+
+            return device._replace(namespaces=set(backends_sorted[0:1]))
+
+        devices = { j: set(apply_backend_priority_order(d) for d in ds) for j, ds in devices.items() }
+
+        # Ask for trust decisions on the remaining devices
+        def is_undecided(device: DeviceInformation) -> bool:
+            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Undecided
+
+        def is_trusted(device: DeviceInformation) -> bool:
+            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Trusted
+        
+        async def update_trust(device: DeviceInformation) -> DeviceInformation:
+            return device._replace(trust_level_name=(await self.__storage.load_str(
+                "/SessionManager/devices/{}/{}/trust_level_name"
+                .format(device.bare_jid, device.identity_key) # TODO: Serialize correctly
+            )).from_just())
+
+        undecided_devices = { j: set(d for d in ds if is_undecided(d)) for j, ds in devices.items() }
+        if any(len(ds) > 0 for ds in undecided_devices.values()):
+            await self._make_trust_decision(undecided_devices)
+
+            # Update to the new trust levels
+            devices = { j: set([ (await update_trust(d)) for d in ds ]) for j, ds in devices.items() }
+
+        # Make sure the trust status of all previously undecided devices has been decided on
+        undecided_devices = { j: set(d for d in ds if is_undecided(d)) for j, ds in devices.items() }
+        if any(len(ds) > 0 for ds in undecided_devices.values()):
+            raise StillUndecided(
+                "The trust status of one or more devices has not been decided on: {}"
+                .format(undecided_devices)
+            )
+
+        # Remove distrusted devices
+        devices = { j: set(d for d in ds if is_trusted(d)) for j, ds in devices.items() }
+
+        # Check for recipients without a single remaining device
+        no_eligible_devices = filter(lambda bare_jid: len(devices[bare_jid]) == 0, devices.keys())
+        if len(no_eligible_devices) > 0:
+            raise NoEligibleDevices(
+                "One or more of the intended recipients does not have a single active and trusted device for"
+                " the loaded backends.",
+                no_eligible_devices
+            )
+
+        # Encrypt the message
+        result: Dict[str, Message] = {}
+        for backend in self.__backends:
+            ns = backend.namespace
+
+            # Select the devices to encrypt for using this backend
+            backend_devices = { j: set(d for d in ds if d.namespaces[0] == ns) for j, ds in devices.items() }
+            backend_devices = { j: ds for j, ds in devices.items() if len(ds) > 0 }
+
+            if len(backend_devices) > 0:
+                result[ns] = await self.__encrypt_message(backend, backend_devices, message)
+
+        return result
 
     async def decrypt_message(self, message: Message) -> Tuple[Plaintext, DeviceInformation]:
         """
