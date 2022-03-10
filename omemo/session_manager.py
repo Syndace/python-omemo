@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+import base64
 import enum
 from typing import Any, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar
 
@@ -8,15 +9,16 @@ from .message import Message
 from .storage import StorageException, Storage
 from .types   import OMEMOException
 
-DeviceList = Set[Tuple[int, Optional[str]]]
+DeviceList = Dict[int, Optional[str]]
 
+# TODO: Consistent usage of namespace vs backend
 class DeviceInformation(NamedTuple):
     namespaces: Set[str]
+    active: Dict[str, bool]
     bare_jid: str
     device_id: int
     identity_key: bytes
     trust_level_name: str
-    active: bool
     last_used: int
     label: Optional[str]
 
@@ -176,7 +178,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self.__backends = backends
         self.__storage = storage
         self.__own_bare_jid = own_bare_jid
-        self.__own_device_id = (await self.__storage.load_int("/SessionManager/own_device_id")).maybe(...) # TODO
+        self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).maybe(...) # TODO
 
         return self
 
@@ -434,11 +436,78 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             DeviceListUploadFailed: if a device list upload failed. An upload can happen if the device list
                 update is for the own bare JID and does not include the own device. Forwarded from
                 :meth:`_upload_device_list`.
-            UnknownNamespace: if the namespace does not correspond to any of the loaded backends.
-            # TODO
         """
 
-        # TODO
+        storage = self.__storage
+
+        new_device_list = set(device_list.keys())
+        old_device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
+
+        new_devices = new_device_list - old_device_list
+
+        # If the device list is for this JID and a loaded backend, make sure this device is included
+        if (bare_jid == self.__own_bare_jid and
+            namespace in set(backend.namespace for backend in self.__backends) and
+            self.__own_device_id not in new_device_list):
+            # Add this device to the device list and publish it
+            device_list[self.__own_device_id] = (await storage.load_optional("/devices/{}/{}/label".format(
+                self.__own_bare_jid,
+                self.__own_device_id
+            ), str)).from_just()
+            await self._upload_device_list(namespace, device_list)
+
+        # Add new device information entries for new devices
+        for device_id in new_devices:
+            await storage.store("/devices/{}/{}/namespaces".format(bare_jid, device_id), [ namespace ])
+            await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), { namespace: True })
+            await storage.store("/devices/{}/{}/label".format(bare_jid, device_id), device_list[device_id])
+
+        # Update namespaces, label and status for previously known devices
+        for device_id in old_device_list:
+            namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
+                bare_jid,
+                device_id
+            ), str)).from_just())
+
+            status = (await storage.load_dict("/devices/{}/{}/active".format(
+                bare_jid,
+                device_id
+            ), str, bool)).from_just()
+
+            if device_id in device_list:
+                # Add the namespace if required
+                if namespace not in namespaces:
+                    namespaces.add(namespace)
+                    await storage.store("/devices/{}/{}/namespaces".format(bare_jid, device_id), namespaces)
+                
+                # Update the status if required
+                if namespace not in status or status[namespace] == False:
+                    status[namespace] = True
+                    await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), status)
+
+                # Update the label if required. Even though loading the value first isn't strictly required,
+                # it is done under the assumption that loading values is cheaper than writing.
+                label = (await storage.load_optional("/devices/{}/{}/label".format(
+                    bare_jid,
+                    device_id
+                ), str)).from_just()
+
+                if device_list[device_id] != label:
+                    await storage.store("/devices/{}/{}/label".format(
+                        bare_jid,
+                        device_id
+                    ), device_list[device_id])
+            else:
+                # Update the status if required
+                if namespace in namespaces:
+                    if status[namespace] == True:
+                        status[namespace] = False
+                        await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), status)
+
+        # If there are unknown devices in the new device list, update the list of known devices. Do this as
+        # the last step to ensure data consistency.
+        if len(new_devices) > 0:
+            await storage.store("/devices/{}/list".format(bare_jid), list(new_device_list | old_device_list))
 
     async def refresh_device_list(self, namespace: str, bare_jid: str) -> None:
         """
@@ -473,10 +542,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             # TODO
         """
 
-        await self.__storage.store(
-            "/SessionManager/devices/{}/{}/trust_level_name".format(bare_jid, identity_public_key), # TODO: Serialize correctly
-            trust_level_name
-        )
+        await self.__storage.store("/trust/{}/{}".format(
+            bare_jid,
+            base64.urlsafe_b64encode(identity_public_key).decode("ASCII")
+        ), trust_level_name)
 
     ######################
     # session management #
@@ -697,8 +766,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             unavailable_backends = set(backend_priority_order) - set(available_backends)
             if len(unavailable_backends) > 0:
                 raise SessionManagerException(
-                    "One or more unavailable backends were passed in the priority order list: {}"
-                    .format(unavailable_backends)
+                    "One or more unavailable backends were passed in the priority order list: {}".format(
+                        unavailable_backends
+                    )
                 )
 
             effective_backend_priority_order = backend_priority_order
@@ -713,13 +783,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 if bare_jid == own_bare_jid and device.device_id == own_device_id:
                     return False
 
-                # Remove inactive devices
-                if not device.active:
-                    return False
+                # Remove namespaces for which the device is inactive
+                namespaces = { ns for ns in device.namespaces if device.active[ns] }
 
                 # Remove devices which are only available with backends that are not currently loaded and in
                 # the priority list
-                if len(device.namespaces & set(effective_backend_priority_order)) == 0:
+                if len(namespaces & set(effective_backend_priority_order)) == 0:
                     return False
 
                 return True
@@ -739,13 +808,15 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         # Apply the backend priority order to the remaining devices
         def apply_backend_priority_order(device: DeviceInformation) -> DeviceInformation:
-            backends_sorted = sorted(device.namespaces, key=effective_backend_priority_order.index)
+            namespaces = { ns for ns in device.namespaces if device.active[ns] }
+            namespaces_sorted = sorted(namespaces, key=effective_backend_priority_order.index)
 
-            return device._replace(namespaces=set(backends_sorted[0:1]))
+            return device._replace(namespaces=set(namespaces_sorted[0:1]))
 
         devices = { j: set(apply_backend_priority_order(d) for d in ds) for j, ds in devices.items() }
 
-        # Ask for trust decisions on the remaining devices
+        # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
+        # the remaining devices)
         def is_undecided(device: DeviceInformation) -> bool:
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Undecided
 
@@ -753,9 +824,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Trusted
         
         async def update_trust(device: DeviceInformation) -> DeviceInformation:
-            return device._replace(trust_level_name=(await self.__storage.load_str(
-                "/SessionManager/devices/{}/{}/trust_level_name"
-                .format(device.bare_jid, device.identity_key) # TODO: Serialize correctly
+            return device._replace(trust_level_name=(await self.__storage.load_primitive(
+                "/trust/{}/{}".format(
+                    device.bare_jid,
+                    base64.urlsafe_b64encode(device.identity_key).decode("ASCII")
+                ),
+                str
             )).from_just())
 
         undecided_devices = { j: set(d for d in ds if is_undecided(d)) for j, ds in devices.items() }
@@ -768,10 +842,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # Make sure the trust status of all previously undecided devices has been decided on
         undecided_devices = { j: set(d for d in ds if is_undecided(d)) for j, ds in devices.items() }
         if any(len(ds) > 0 for ds in undecided_devices.values()):
-            raise StillUndecided(
-                "The trust status of one or more devices has not been decided on: {}"
-                .format(undecided_devices)
-            )
+            raise StillUndecided("The trust status of one or more devices has not been decided on: {}".format(
+                undecided_devices
+            ))
 
         # Remove distrusted devices
         devices = { j: set(d for d in ds if is_trusted(d)) for j, ds in devices.items() }

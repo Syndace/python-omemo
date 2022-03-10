@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Generic, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, TYPE_CHECKING
 
-from .types import JSONType, OMEMOException
+from .types import OMEMOException
+if TYPE_CHECKING: from .types import JSONType
 
 class StorageException(OMEMOException):
     pass
@@ -52,12 +53,9 @@ class Maybe(Generic[V]):
 
         return Maybe.just(f(value))
 
-T = TypeVar("T")
-def check_primitive_type(key: str, value: JSONType, type: Type[T]) -> T:
-    if isinstance(value, type):
-        return value
-    raise TypeError("The value stored for key {} is not a {}: {}".format(key, type, value))
-
+P = TypeVar("P")
+PK = TypeVar("PK")
+PV = TypeVar("PV")
 class Storage(ABC): # TODO: Add Raises StorageException everywhere
     """
     # TODO
@@ -135,16 +133,56 @@ class Storage(ABC): # TODO: Add Raises StorageException everywhere
         except TypeError:
             pass
 
-    async def load_int(self, key: str) -> Maybe[int]:
+    async def load_primitive(self, key: str, type: Type[P]) -> Maybe[P]:
         """
-        Variation of :meth:`load` for loading specifically int values.
-        """
-
-        return (await self.load(key)).fmap(lambda value: check_primitive_type(key, value, int))
-
-    async def load_str(self, key: str) -> Maybe[str]:
-        """
-        Variation of :meth:`load` for loading specifically str values.
+        Variation of :meth:`load` for loading specifically primitive values.
         """
 
-        return (await self.load(key)).fmap(lambda value: check_primitive_type(key, value, str))
+        def check_type(value: JSONType) -> P:
+            if isinstance(value, type):
+                return value
+            raise TypeError("The value stored for key {} is not a {}: {}".format(key, type, value))
+
+        return (await self.load(key)).fmap(check_type)
+
+    async def load_optional(self, key: str, type: Type[P]) -> Maybe[Optional[P]]:
+        """
+        Variation of :meth:`load` for loading specifically optional primitive values.
+        """
+
+        def check_type(value: JSONType) -> Optional[P]:
+            if value is None or isinstance(value, type):
+                return value
+            raise TypeError("The value stored for key {} is not an optional {}: {}".format(key, type, value))
+
+        return (await self.load(key)).fmap(check_type)
+
+    async def load_list(self, key: str, type: Type[P]) -> Maybe[List[P]]:
+        """
+        Variation of :meth:`load` for loading specifically lists of primitive values.
+        """
+
+        def check_type(value: JSONType) -> List[P]:
+            if isinstance(value, list) and all(isinstance(element, type) for element in value):
+                return value
+            raise TypeError("The value stored for key {} is not a list of {}: {}".format(key, type, value))
+
+        return (await self.load(key)).fmap(check_type)
+
+    async def load_dict(self, key: str, key_type: Type[PK], value_type: Type[PV]) -> Maybe[Dict[PK, PV]]:
+        """
+        Variation of :meth:`load` for loading specifically dictionaries of primitive values.
+        """
+
+        def check_type(value: JSONType) -> Dict[PK, PV]:
+            if isinstance(value, dict):
+                if all(isinstance(pk, key_type) and isinstance(pv, value_type) for pk, pv in value.items()):
+                    return value
+            raise TypeError("The value stored for key {} is not a dict of {} / {}: {}".format(
+                key,
+                key_type,
+                value_type,
+                value
+            ))
+
+        return (await self.load(key)).fmap(check_type)
