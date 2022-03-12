@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import base64
 from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, TYPE_CHECKING
 
 from .types import OMEMOException
@@ -142,6 +143,18 @@ class Storage(ABC): # TODO: Add Raises StorageException everywhere
             if isinstance(value, type):
                 return value
             raise TypeError("The value stored for key {} is not a {}: {}".format(key, type, value))
+
+        return (await self.load(key)).fmap(check_type)
+
+    async def load_bytes(self, key: str) -> Maybe[bytes]:
+        """
+        Variation of :meth:`load` for loading specifically bytes values.
+        """
+
+        def check_type(value: JSONType) -> bytes:
+            if isinstance(value, str):
+                return base64.urlsafe_b64decode(value.encode("ASCII"))
+            raise TypeError("The value stored for key {} is not a str/bytes: {}".format(key, value))
 
         return (await self.load(key)).fmap(check_type)
 

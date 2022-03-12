@@ -4,7 +4,6 @@
     - [x] the default is set to 1000
     - [x] the value is limited neither upwards nor downwards
     - [x] skipped message keys are deleted following LRU once the limit is reached
-    - [ ] TODO: think of a more sophisticated deletection policy based on deterministic events
 
 - [x] the maximum number of skipped message keys in a single message is configurable
     - [x] the default is set to the maximum number of skipped message keys per session
@@ -129,10 +128,8 @@
     - [x] automated responses are delayed until after catch-up is done and only one message is sent per stale session afterwards
     - [x] requires empty OMEMO messages
 
-- [ ] stale devices are detected
-    - [ ] the metrics for when a device is to be considered stale are configurable
-    - [ ] one metric is the sending chain length TODO: default?
-    - [ ] other metrics are WIP TODO: e.g. track timestamp of last activity?
+- [ ] stale devices are not detected
+    - [ ] however, API is offered to query the sending chain length of a session, which is one important piece of information that clients might use for staleness detection
 
 - [x] account purging is supported
     - [x] removes all data related to a bare JID across all backends
@@ -141,9 +138,9 @@
 - [x] a convenience method to get the identity key fingerprint of a device is provided
     - [x] independent of the backend
 
-- [ ] methods are provided to retrieve information about devices
+- [x] methods are provided to retrieve information about devices
     - [x] information for all devices of a bare JID can be retrieved in bulk
-    - [ ] includes device id, label, identity key, trust information, corresponding backend, staleness information (including a boolean "stale" flag and the metrics playing into staleness)
+    - [x] includes device id, label, identity key, trust information, supported backends, active status
     - [x] independent of the backend
 
 - [x] backends can be provided for different versions of the OMEMO protocol

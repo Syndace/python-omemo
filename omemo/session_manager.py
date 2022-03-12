@@ -6,7 +6,7 @@ from typing import Any, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, T
 from .backend import Backend
 from .bundle  import Bundle
 from .message import Message
-from .storage import StorageException, Storage
+from .storage import Nothing, StorageException, Storage
 from .types   import OMEMOException
 
 DeviceList = Dict[int, Optional[str]]
@@ -19,7 +19,6 @@ class DeviceInformation(NamedTuple):
     device_id: int
     identity_key: bytes
     trust_level_name: str
-    last_used: int
     label: Optional[str]
 
 @enum.unique
@@ -79,6 +78,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     and transparenlty maintaining a level of compatibility between the backends that allows you to maintain a
     single identity throughout all of them. Easy APIs are provided to handle common use-cases of OMEMO-enabled
     XMPP clients, with one of the primary goals being strict type safety.
+
+    Note:
+        Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
+        listed explicitly.
 
     TODO: Document the Plaintext generic
     """
@@ -180,6 +183,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self.__own_bare_jid = own_bare_jid
         self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).maybe(...) # TODO
 
+        # TODO
+
         return self
 
     async def purge_backend(self, namespace: str) -> None:
@@ -196,6 +201,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Note:
             Make sure to unsubscribe from updates to all device lists before calling this method.
         """
+        # This method is not affected by history synchronization mode. #
 
         # TODO
 
@@ -437,6 +443,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 update is for the own bare JID and does not include the own device. Forwarded from
                 :meth:`_upload_device_list`.
         """
+        # This method is not affected by history synchronization mode. #
 
         storage = self.__storage
 
@@ -469,7 +476,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 device_id
             ), str)).from_just())
 
-            status = (await storage.load_dict("/devices/{}/{}/active".format(
+            active = (await storage.load_dict("/devices/{}/{}/active".format(
                 bare_jid,
                 device_id
             ), str, bool)).from_just()
@@ -481,9 +488,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                     await storage.store("/devices/{}/{}/namespaces".format(bare_jid, device_id), namespaces)
                 
                 # Update the status if required
-                if namespace not in status or status[namespace] == False:
-                    status[namespace] = True
-                    await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), status)
+                if namespace not in active or active[namespace] == False:
+                    active[namespace] = True
+                    await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), active)
 
                 # Update the label if required. Even though loading the value first isn't strictly required,
                 # it is done under the assumption that loading values is cheaper than writing.
@@ -500,9 +507,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             else:
                 # Update the status if required
                 if namespace in namespaces:
-                    if status[namespace] == True:
-                        status[namespace] = False
-                        await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), status)
+                    if active[namespace] == True:
+                        active[namespace] = False
+                        await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), active)
 
         # If there are unknown devices in the new device list, update the list of known devices. Do this as
         # the last step to ensure data consistency.
@@ -520,10 +527,17 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             DeviceListDownloadFailed: if the device list download failed. Forwarded from
                 :meth:`_download_device_list`.
-            UnknownNamespace: if the namespace does not correspond to any of the loaded backends.
+            DeviceListUploadFailed: if a device list upload failed. An upload can happen if the device list
+                update is for the own bare JID and does not include the own device. Forwarded from
+                :meth:`update_device_list`.
         """
+        # This method is not affected by history synchronization mode. #
 
-        # TODO
+        await self.update_device_list(
+            namespace,
+            bare_jid,
+            await self._download_device_list(namespace, bare_jid)
+        )
 
     ####################
     # trust management #
@@ -537,10 +551,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             bare_jid: The bare JID of the XMPP account this identity public key belongs to.
             identity_public_key: The identity public key.
             trust_level_name: The custom trust level to set for the identity public key.
-
-        Raises:
-            # TODO
         """
+        # This method is not affected by history synchronization mode. #
 
         await self.__storage.store("/trust/{}/{}".format(
             bare_jid,
@@ -563,6 +575,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             # TODO
         """
+        # TODO: per-backend?
 
         # TODO
 
@@ -594,13 +607,27 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             DeviceListUploadFailed: if a device list upload failed. Forwarded from
                 :meth:`_upload_device_list`.
-            # TODO
 
         Note:
             It is recommended to keep the length of the label under 53 unicode code points.
         """
+        # This method is not affected by history synchronization mode. #
 
-        # TODO
+        # Store the new label
+        await self.__storage.store("/devices/{}/{}/label".format(
+            self.__own_bare_jid,
+            self.__own_device_id
+        ), own_label)
+
+        # For each loaded backend, upload an updated device list including the new label
+        devices = await self.get_device_information(self.__own_bare_jid)
+        for backend in self.__backends:
+            # Upload the new device list, including all active devices for this backend
+            await self._upload_device_list(backend.namespace, {
+                device.device_id: device.label
+                for device in devices
+                if device.active.get(backend.namespace, False)
+            })
 
     async def get_device_information(self, bare_jid: str) -> Set[DeviceInformation]:
         """
@@ -609,17 +636,67 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Returns:
             Information about each device of `bare_jid`. The information includes the device id, the identity
-            public key, the trust level, whether the device is active, the last time it was used and, if
-            supported by any of the backends, the optional label. Returns information about all known devices,
-            regardless of the backend they belong to.
+            public key, the trust level, whether the device is active and, if supported by any of the
+            backends, the optional label. Returns information about all known devices, regardless of the
+            backend they belong to.
+
+        Note:
+            Only returns information about cached devices. The cache, however, should be up to date if
+            `PEP <https://xmpp.org/extensions/xep-0163.html>`__ updates are correctly fed to
+            :meth:`update_device_list`. A manual update of a device list can be triggered using
+            :meth:`refresh_device_list` if needed.
 
         Raises:
             # TODO
         """
+        # This method is not affected by history synchronization mode. #
 
-        # TODO: If there is no cached device list in the storage, trigger a fetch and log a warning
+        storage = self.__storage
 
-        # TODO
+        device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
+        
+        async def load_device_information(device_id: int) -> DeviceInformation:
+            namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
+                bare_jid,
+                device_id
+            ), str)).from_just())
+
+            active = (await storage.load_dict("/devices/{}/{}/active".format(
+                bare_jid,
+                device_id
+            ), str, bool)).from_just()
+
+            label = (await storage.load_optional("/devices/{}/{}/label".format(
+                bare_jid,
+                device_id
+            ), str)).from_just()
+
+            try:
+                identity_key = (await storage.load_bytes("/devices/{}/{}/identity_key".format(
+                    bare_jid,
+                    device_id
+                ))).from_just()
+            except Nothing:
+                # The identity key assigned to this device is not known yet. Requesting the bundle just for
+                # that information might be a bit of a waste of bandwidth. TODO
+                pass # TODO
+
+            trust_level_name = (await storage.load_primitive("/trust/{}/{}".format(
+                bare_jid,
+                base64.urlsafe_b64encode(identity_key).decode("ASCII")
+            ), str)).from_just()
+
+            return DeviceInformation(
+                namespaces=namespaces,
+                active=active,
+                bare_jid=bare_jid,
+                device_id=device_id,
+                identity_key=identity_key,
+                trust_level_name=trust_level_name,
+                label=label
+            )
+
+        return set((await load_device_information(device_id)) for device_id in device_list)
 
     async def get_own_device_information(self) -> Tuple[DeviceInformation, Set[DeviceInformation]]:
         """
@@ -632,14 +709,18 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             # TODO
         """
+        # This method is not affected by history synchronization mode. #
 
-        # TODO
+        all_own_devices = await self.get_device_information(self.__own_bare_jid)
+        other_own_devices = set(filter(lambda d: d.device_id != self.__own_device_id, all_own_devices))
+
+        return next(all_own_devices - other_own_devices), other_own_devices
 
     @staticmethod
-    def format_identity_public_key(identity_public_key: bytes) -> List[str]: # TODO: Which form does the ik_pub need to have? Ed25519 prolly?
+    def format_identity_public_key(identity_public_key: bytes) -> List[str]:
         """
         Args:
-            identity_public_key: The identity public key to generate the fingerprint of.
+            identity_public_key: The identity public key to generate the fingerprint of (in Ed25519 format).
 
         Returns:
             The fingerprint of the identity public key, as eight groups of eight lowercase hex chars each.
@@ -670,12 +751,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             rather hypothetical) case that two or more parties selected the same one-time pre key to initiate
             a session with this device while it was offline. When history synchronization ends, all one-time
             pre keys that were kept around are deleted and the library returns to normal behaviour.
-        * During history synchronization, messages do not count towards the last usage timestamp that is
-            tracked for each device.
         * If the signed pre key is due for rotation, rotation is deferred until after history synchronization
             is done to account for delayed messages and offline periods.
         * Automated responses are collected during synchronization, such that only the minimum required number
-            of messages is sent when online again.
+            of messages is sent.
         """
 
         # TODO
@@ -710,6 +789,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         """
         TODO
         """
+        # This method is not affected by history synchronization mode. #
 
         # TODO: Bundle fetching
         # TODO: Key exchange simulation?
@@ -738,6 +818,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             account.
 
         Raises:
+            UnknownNamespace: if the backend priority order list contains a namespace of a backend that is not
+                currently available.
             StillUndecided: if the trust level for one of the recipient devices still evaluates to undecided,
                 even after :meth:`_make_trust_decision` was called to decide on the trust.
             NoEligibleDevices: if at least one of the intended recipients does not have a single device which
@@ -752,6 +834,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
             information about the ``Plaintext`` type.
         """
+        # This method is not affected by history synchronization mode. #
 
         own_bare_jid = self.__own_bare_jid
         own_device_id = self.__own_device_id
@@ -765,7 +848,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         else:
             unavailable_backends = set(backend_priority_order) - set(available_backends)
             if len(unavailable_backends) > 0:
-                raise SessionManagerException(
+                raise UnknownNamespace(
                     "One or more unavailable backends were passed in the priority order list: {}".format(
                         unavailable_backends
                     )
@@ -899,5 +982,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
             information about the ``Plaintext`` type.
         """
+        # THIS METHOD IS AFFECTED BY HISTORY SYNCHRONIZATION MODE #
 
         # TODO
