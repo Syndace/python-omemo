@@ -5,3 +5,13 @@ class Bundle(ABC):
     @abstractmethod
     def namespace() -> str:
         pass
+
+    @property
+    @abstractmethod
+    def device_id() -> int:
+        pass
+
+    @property
+    @abstractmethod
+    def bare_jid() -> str:
+        pass

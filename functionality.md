@@ -153,7 +153,6 @@
     - [ ] automatic migrations between storage format versions are provided
         - [ ] a legacy python-omemo to modern python-omemo migration tool is provided
         - [ ] a libsignal to python-omemo migration tool will be provided in the future(, as part of the legacy backend?)
-    - [ ] a default implementation using json files and directories on the file system is provided
     - [ ] storage consistency is guaranteed
         - [x] write operations MUST NOT cache but perform the writing operation right away
         - [ ] when decrypting, changes to the state are only saved on success

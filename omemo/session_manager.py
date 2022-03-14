@@ -1,17 +1,16 @@
 from abc import ABCMeta, abstractmethod
 import base64
 import enum
-from typing import Any, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar
+from typing import cast, Any, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar
 
 from .backend import Backend
 from .bundle  import Bundle
 from .message import Message
-from .storage import Nothing, StorageException, Storage
+from .storage import Nothing, Storage
 from .types   import OMEMOException
 
 DeviceList = Dict[int, Optional[str]]
 
-# TODO: Consistent usage of namespace vs backend
 class DeviceInformation(NamedTuple):
     namespaces: Set[str]
     active: Dict[str, bool]
@@ -69,6 +68,7 @@ class DeviceListDownloadFailed(XMPPInteractionFailed):
 class MessageSendingFailed(XMPPInteractionFailed):
     pass
 
+# TODO: Take care of logging
 S = TypeVar("S", bound="SessionManager")
 Plaintext = TypeVar("Plaintext")
 class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
@@ -82,10 +82,14 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
         listed explicitly.
+    
+    Note:
+        All parameters are treated as immutable unless explicitly noted otherwise. TODO
 
     TODO: Document the Plaintext generic
     """
 
+    # TODO: Should this really be the only class property?
     HEARTBEAT_MESSAGE_TRIGGER = 53
 
     def __init__(self) -> None:
@@ -582,7 +586,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     async def purge_bare_jid(self, bare_jid: str) -> None:
         """
         Delete all data corresponding to an XMPP account. This includes the device list, trust information and
-        all sessions across all backends.
+        all sessions across all loaded backends.
 
         Args:
             bare_jid: Delete all data corresponding to this bare JID.
@@ -651,7 +655,15 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         """
         # This method is not affected by history synchronization mode. #
 
+        # Do not expose the bundle cache publicly.
+        return (await self.__get_device_information(bare_jid))[0]
+
+    async def __get_device_information(self, bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
+        # This method is not affected by history synchronization mode. #
+
         storage = self.__storage
+
+        bundle_cache: Set[Bundle] = set()
 
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
         
@@ -677,8 +689,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                     device_id
                 ))).from_just()
             except Nothing:
-                # The identity key assigned to this device is not known yet. Requesting the bundle just for
-                # that information might be a bit of a waste of bandwidth. TODO
+                # The identity key assigned to this device is not known yet. Fetch the bundle to find that
+                # information. "Cache" and return the downloaded bundles to avoid double-fetching them if they
+                # are required for session initiation afterwards.
+                bundle_cache
                 pass # TODO
 
             trust_level_name = (await storage.load_primitive("/trust/{}/{}".format(
@@ -694,7 +708,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 identity_key=identity_key,
                 trust_level_name=trust_level_name,
                 label=label
-            )
+            ), bundle_cache
 
         return set((await load_device_information(device_id)) for device_id in device_list)
 
@@ -755,6 +769,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             is done to account for delayed messages and offline periods.
         * Automated responses are collected during synchronization, such that only the minimum required number
             of messages is sent.
+
+        Note:
+            TODO: The lib can process live event too while in history sync mode
         """
 
         # TODO
@@ -784,7 +801,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self,
         backend: Backend[Plaintext],
         devices: Dict[str, Set[DeviceInformation]],
-        message: Plaintext
+        message: Plaintext,
+        bundle_cache: Set[Bundle]
     ) -> Message:
         """
         TODO
@@ -841,17 +859,16 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         # Prepare the backend priority order list
         effective_backend_priority_order: List[str]
-        available_backends = [ backend.namespace for backend in self.__backends ]
+        available_namespaces = [ backend.namespace for backend in self.__backends ]
 
         if backend_priority_order is None:
-            effective_backend_priority_order = available_backends
+            effective_backend_priority_order = available_namespaces
         else:
-            unavailable_backends = set(backend_priority_order) - set(available_backends)
-            if len(unavailable_backends) > 0:
+            unavailable_namespaces = set(backend_priority_order) - set(available_namespaces)
+            if len(unavailable_namespaces) > 0:
                 raise UnknownNamespace(
-                    "One or more unavailable backends were passed in the priority order list: {}".format(
-                        unavailable_backends
-                    )
+                    "One or more unavailable namespaces were passed in the backend priority order list: {}"
+                        .format(unavailable_namespaces)
                 )
 
             effective_backend_priority_order = backend_priority_order
@@ -860,7 +877,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         bare_jids |= set([ own_bare_jid ])
         
         # Load the device information of all recipients
-        async def get_filtered_device_information(bare_jid: str) -> Set[DeviceInformation]:
+        async def get_filtered_device_information(bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
             def device_filter(device: DeviceInformation) -> bool:
                 # Remove the own device
                 if bare_jid == own_bare_jid and device.device_id == own_device_id:
@@ -876,9 +893,18 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
                 return True
 
-            return set(filter(device_filter, await self.get_device_information(bare_jid)))
+            device_information, bundle_cache = await self.__get_device_information(bare_jid)
 
-        devices = { bare_jid: await get_filtered_device_information(bare_jid) for bare_jid in bare_jids }
+            return set(filter(device_filter, device_information)), bundle_cache
+
+        filtered_device_information = {
+            bare_jid: await get_filtered_device_information(bare_jid) for bare_jid in bare_jids
+        }
+
+        devices = { bare_jid: devices for bare_jid, (devices, _) in filtered_device_information.items() }
+        bundle_cache = cast(Set[Bundle], set()).union(*(
+            bundle_cache for _, bundle_cache in filtered_device_information.values()
+        ))
 
         # Check for recipients without a single active device
         no_eligible_devices = filter(lambda bare_jid: len(devices[bare_jid]) == 0, devices.keys())
@@ -951,7 +977,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             backend_devices = { j: ds for j, ds in devices.items() if len(ds) > 0 }
 
             if len(backend_devices) > 0:
-                result[ns] = await self.__encrypt_message(backend, backend_devices, message)
+                result[ns] = await self.__encrypt_message(backend, backend_devices, message, bundle_cache)
 
         return result
 
