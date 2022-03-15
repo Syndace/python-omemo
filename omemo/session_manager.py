@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
 import base64
 import enum
+from os import device_encoding
+from turtle import back
 from typing import cast, Any, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar
 
 from .backend import Backend
@@ -374,12 +376,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         )
 
     @abstractmethod
-    async def _make_trust_decision(self, undecided: Dict[str, Set[DeviceInformation]]) -> Any:
+    async def _make_trust_decision(self, undecided: Set[DeviceInformation]) -> Any:
         """
         Make a trust decision on a set of undecided identity keys.
 
         Args:
-            undecided: A mapping from bare JIDs to sets of devices that require trust decisions.
+            undecided: A set of devices that require trust decisions.
 
         Returns:
             Anything, the return value is ignored. The trust decisions are expected to be persisted by calling
@@ -689,6 +691,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 device_id
             ), str)).from_just()
 
+            identity_key: bytes
             try:
                 identity_key = (await storage.load_bytes("/devices/{}/{}/identity_key".format(
                     bare_jid,
@@ -725,10 +728,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         tmp = { await load_device_information(device_id) for device_id in device_list }
 
-        device_information = { device_information[0] for device_information in tmp }
-        bundle_cache = cast(Set[Bundle], {}).union(*(device_information[1] for device_information in tmp))
+        devices = { device for device, _ in tmp }
+        bundle_cache = cast(Set[Bundle], {}).union(*(bundle_cache for _, bundle_cache in tmp))
 
-        return device_information, bundle_cache
+        return devices, bundle_cache
 
     async def get_own_device_information(self) -> Tuple[DeviceInformation, Set[DeviceInformation]]:
         """
@@ -744,7 +747,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # This method is not affected by history synchronization mode. #
 
         all_own_devices = await self.get_device_information(self.__own_bare_jid)
-        other_own_devices = set(filter(lambda d: d.device_id != self.__own_device_id, all_own_devices))
+        other_own_devices = set(filter(lambda dev: dev.device_id != self.__own_device_id, all_own_devices))
 
         return next(all_own_devices - other_own_devices), other_own_devices
 
@@ -817,7 +820,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     async def __encrypt_message(
         self,
-        backend: Backend[Plaintext],
+        namespace: str,
         devices: Dict[str, Set[DeviceInformation]],
         message: Plaintext,
         bundle_cache: Set[Bundle]
@@ -837,7 +840,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         bare_jids: Set[str],
         message: Plaintext,
         backend_priority_order: Optional[List[str]] = None
-    ) -> Dict[str, Message]:
+    ) -> Set[Message]:
         """
         Encrypt a message for a set of recipients.
 
@@ -872,9 +875,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         """
         # This method is not affected by history synchronization mode. #
 
-        own_bare_jid = self.__own_bare_jid
-        own_device_id = self.__own_device_id
-
         # Prepare the backend priority order list
         effective_backend_priority_order: List[str]
         available_namespaces = [ backend.namespace for backend in self.__backends ]
@@ -892,36 +892,37 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             effective_backend_priority_order = backend_priority_order
 
         # Add the own bare JID to the list of recipients
-        bare_jids |= { own_bare_jid }
+        bare_jids |= { self.__own_bare_jid }
         
         # Load the device information of all recipients
-        async def get_filtered_device_information(bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
-            def device_filter(device: DeviceInformation) -> bool:
-                # Remove the own device
-                if bare_jid == own_bare_jid and device.device_id == own_device_id:
-                    return False
+        def is_valid_recipient_device(device: DeviceInformation) -> bool:
+            # Remove the own device
+            if device.bare_jid == self.__own_bare_jid and device.device_id == self.__own_device_id:
+                return False
 
-                # Remove namespaces for which the device is inactive
-                namespaces = { ns for ns in device.namespaces if device.active[ns] }
+            # Remove namespaces for which the device is inactive
+            namespaces_active = set(filter(lambda namespace: device.active[namespace], device.namespaces))
 
-                # Remove devices which are only available with backends that are not currently loaded and in
-                # the priority list
-                if len(namespaces & set(effective_backend_priority_order)) == 0:
-                    return False
+            # Remove devices which are only available with backends that are not currently loaded and in
+            # the priority list
+            if len(namespaces_active & set(effective_backend_priority_order)) == 0:
+                return False
 
-                return True
+            return True
 
-            device_information, bundle_cache = await self.__get_device_information(bare_jid)
+        tmp = { await self.__get_device_information(bare_jid) for bare_jid in bare_jids }
 
-            return set(filter(device_filter, device_information)), bundle_cache
+        devices = cast(Set[DeviceInformation], {}).union(*(devices for devices, _ in tmp))
+        devices = set(filter(is_valid_recipient_device, devices))
 
-        tmp = { bare_jid: await get_filtered_device_information(bare_jid) for bare_jid in bare_jids }
-
-        devices = { bare_jid: devices for bare_jid, (devices, _) in tmp.items() }
-        bundle_cache = cast(Set[Bundle], {}).union(*(bundle_cache for _, bundle_cache in tmp.values()))
+        bundle_cache = cast(Set[Bundle], {}).union(*(bundle_cache for _, bundle_cache in tmp))
 
         # Check for recipients without a single active device
-        no_eligible_devices = filter(lambda bare_jid: len(devices[bare_jid]) == 0, devices.keys())
+        no_eligible_devices = set(filter(
+            lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
+            bare_jids
+        ))
+
         if len(no_eligible_devices) > 0:
             raise NoEligibleDevices(
                 "One or more of the intended recipients does not have a single active device for the loaded"
@@ -930,13 +931,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             )
 
         # Apply the backend priority order to the remaining devices
-        def apply_backend_priority_order(device: DeviceInformation) -> DeviceInformation:
-            namespaces = { ns for ns in device.namespaces if device.active[ns] }
-            namespaces_sorted = sorted(namespaces, key=effective_backend_priority_order.index)
-
-            return device._replace(namespaces={ namespaces_sorted[0] })
-
-        devices = { j: { apply_backend_priority_order(d) for d in ds } for j, ds in devices.items() }
+        devices = { device._replace(namespaces={ next(sorted(
+            filter(lambda namespace: device.active[namespace], device.namespaces),
+            key=effective_backend_priority_order.index
+        )) }) for device in devices }
 
         # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
         # the remaining devices)
@@ -946,34 +944,35 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         def is_trusted(device: DeviceInformation) -> bool:
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Trusted
         
-        async def update_trust(device: DeviceInformation) -> DeviceInformation:
-            return device._replace(trust_level_name=(await self.__storage.load_primitive(
+        undecided_devices = set(filter(is_undecided, devices))
+        if len(undecided_devices) > 0:
+            await self._make_trust_decision(undecided_devices)
+
+            # Update to the new trust levels
+            devices = { device._replace(trust_level_name=(await self.__storage.load_primitive(
                 "/trust/{}/{}".format(
                     device.bare_jid,
                     base64.urlsafe_b64encode(device.identity_key).decode("ASCII")
                 ),
                 str
-            )).from_just())
-
-        undecided_devices = { j: { d for d in ds if is_undecided(d) } for j, ds in devices.items() }
-        if any(len(ds) > 0 for ds in undecided_devices.values()):
-            await self._make_trust_decision(undecided_devices)
-
-            # Update to the new trust levels
-            devices = { j: { (await update_trust(d)) for d in ds } for j, ds in devices.items() }
+            )).maybe(self.__undecided_trust_level_name)) for device in devices }
 
         # Make sure the trust status of all previously undecided devices has been decided on
-        undecided_devices = { j: { d for d in ds if is_undecided(d) } for j, ds in devices.items() }
-        if any(len(ds) > 0 for ds in undecided_devices.values()):
+        undecided_devices = set(filter(is_undecided, devices))
+        if len(undecided_devices) > 0:
             raise StillUndecided("The trust status of one or more devices has not been decided on: {}".format(
                 undecided_devices
             ))
 
-        # Remove distrusted devices
-        devices = { j: { d for d in ds if is_trusted(d) } for j, ds in devices.items() }
+        # Keep only trusted devices
+        devices = set(filter(is_trusted, devices))
 
         # Check for recipients without a single remaining device
-        no_eligible_devices = filter(lambda bare_jid: len(devices[bare_jid]) == 0, devices.keys())
+        no_eligible_devices = set(filter(
+            lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
+            bare_jids
+        ))
+
         if len(no_eligible_devices) > 0:
             raise NoEligibleDevices(
                 "One or more of the intended recipients does not have a single active and trusted device for"
@@ -981,19 +980,14 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 no_eligible_devices
             )
 
-        # Encrypt the message
-        result: Dict[str, Message] = {}
-        for backend in self.__backends:
-            ns = backend.namespace
-
-            # Select the devices to encrypt for using this backend
-            backend_devices = { j: { d for d in ds if d.namespaces[0] == ns } for j, ds in devices.items() }
-            backend_devices = { j: ds for j, ds in devices.items() if len(ds) > 0 }
-
-            if len(backend_devices) > 0:
-                result[ns] = await self.__encrypt_message(backend, backend_devices, message, bundle_cache)
-
-        return result
+        # Encrypt the message once per backend, but skip backends that don't have a single recipient device
+        # remaining
+        return { await self.__encrypt_message(
+            ns,
+            set(filter(lambda device: device.namespaces[0] == ns, devices)),
+            message,
+            bundle_cache
+        ) for ns in effective_backend_priority_order if any(dev.namespaces[0] == ns for dev in devices) }
 
     async def decrypt_message(self, message: Message) -> Tuple[Plaintext, DeviceInformation]:
         """
