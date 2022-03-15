@@ -122,6 +122,13 @@ class Storage(ABC): # TODO: Add Raises StorageException everywhere
         except TypeError:
             pass
 
+    async def store_bytes(self, key: str, value: bytes) -> None:
+        """
+        TODO
+        """
+
+        await self.store(key, base64.urlsafe_b64encode(value).decode("ASCII"))
+
     async def delete_device(self, key: str) -> None:
         """
         TODO

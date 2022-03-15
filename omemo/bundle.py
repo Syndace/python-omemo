@@ -15,3 +15,8 @@ class Bundle(ABC):
     @abstractmethod
     def bare_jid() -> str:
         pass
+
+    @property
+    @abstractmethod
+    def identity_key() -> bytes:
+        pass

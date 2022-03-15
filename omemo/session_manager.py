@@ -86,6 +86,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     Note:
         All parameters are treated as immutable unless explicitly noted otherwise. TODO
 
+    Note:
+        All usages of "identity key" in the public API refer to the public part of the identity key pair in
+        Ed25519 format.
+
     TODO: Document the Plaintext generic
     """
 
@@ -98,6 +102,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self.__storage: Storage
         self.__own_bare_jid: str
         self.__own_device_id: int
+        self.__undecided_trust_level_name: str
 
     @classmethod
     async def create(
@@ -186,6 +191,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self.__storage = storage
         self.__own_bare_jid = own_bare_jid
         self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).maybe(...) # TODO
+        self.__undecided_trust_level_name = undecided_trust_level_name
 
         # TODO
 
@@ -370,7 +376,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     @abstractmethod
     async def _make_trust_decision(self, undecided: Dict[str, Set[DeviceInformation]]) -> Any:
         """
-        Make a trust decision on a set of undecided identity public keys.
+        Make a trust decision on a set of undecided identity keys.
 
         Args:
             undecided: A mapping from bare JIDs to sets of devices that require trust decisions.
@@ -458,7 +464,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         # If the device list is for this JID and a loaded backend, make sure this device is included
         if (bare_jid == self.__own_bare_jid and
-            namespace in set(backend.namespace for backend in self.__backends) and
+            namespace in { backend.namespace for backend in self.__backends } and
             self.__own_device_id not in new_device_list):
             # Add this device to the device list and publish it
             device_list[self.__own_device_id] = (await storage.load_optional("/devices/{}/{}/label".format(
@@ -547,20 +553,20 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     # trust management #
     ####################
 
-    async def set_trust(self, bare_jid: str, identity_public_key: bytes, trust_level_name: str) -> None:
+    async def set_trust(self, bare_jid: str, identity_key: bytes, trust_level_name: str) -> None:
         """
-        Set the trust level for an identity public key.
+        Set the trust level for an identity key.
 
         Args:
-            bare_jid: The bare JID of the XMPP account this identity public key belongs to.
-            identity_public_key: The identity public key.
-            trust_level_name: The custom trust level to set for the identity public key.
+            bare_jid: The bare JID of the XMPP account this identity key belongs to.
+            identity_key: The identity key.
+            trust_level_name: The custom trust level to set for the identity key.
         """
         # This method is not affected by history synchronization mode. #
 
         await self.__storage.store("/trust/{}/{}".format(
             bare_jid,
-            base64.urlsafe_b64encode(identity_public_key).decode("ASCII")
+            base64.urlsafe_b64encode(identity_key).decode("ASCII")
         ), trust_level_name)
 
     ######################
@@ -640,9 +646,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Returns:
             Information about each device of `bare_jid`. The information includes the device id, the identity
-            public key, the trust level, whether the device is active and, if supported by any of the
-            backends, the optional label. Returns information about all known devices, regardless of the
-            backend they belong to.
+            key, the trust level, whether the device is active and, if supported by any of the backends, the
+            optional label. Returns information about all known devices, regardless of the backend they belong
+            to.
 
         Note:
             Only returns information about cached devices. The cache, however, should be up to date if
@@ -651,7 +657,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             :meth:`refresh_device_list` if needed.
 
         Raises:
-            # TODO
+            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
         # This method is not affected by history synchronization mode. #
 
@@ -663,11 +669,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         storage = self.__storage
 
-        bundle_cache: Set[Bundle] = set()
-
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
         
-        async def load_device_information(device_id: int) -> DeviceInformation:
+        async def load_device_information(device_id: int) -> Tuple[DeviceInformation, Set[Bundle]]:
+            bundle_cache: Set[Bundle] = {}
+
             namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
                 bare_jid,
                 device_id
@@ -692,13 +698,20 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 # The identity key assigned to this device is not known yet. Fetch the bundle to find that
                 # information. "Cache" and return the downloaded bundles to avoid double-fetching them if they
                 # are required for session initiation afterwards.
-                bundle_cache
-                pass # TODO
+                bundle = await self._download_bundle(namespaces[0], bare_jid, device_id)
+                bundle_cache.add(bundle)
+
+                identity_key = bundle.identity_key
+
+                await storage.store_bytes("/devices/{}/{}/identity_key".format(
+                    bare_jid,
+                    device_id
+                ), identity_key)
 
             trust_level_name = (await storage.load_primitive("/trust/{}/{}".format(
                 bare_jid,
                 base64.urlsafe_b64encode(identity_key).decode("ASCII")
-            ), str)).from_just()
+            ), str)).maybe(self.__undecided_trust_level_name)
 
             return DeviceInformation(
                 namespaces=namespaces,
@@ -710,7 +723,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 label=label
             ), bundle_cache
 
-        return set((await load_device_information(device_id)) for device_id in device_list)
+        tmp = { await load_device_information(device_id) for device_id in device_list }
+
+        device_information = { device_information[0] for device_information in tmp }
+        bundle_cache = cast(Set[Bundle], {}).union(*(device_information[1] for device_information in tmp))
+
+        return device_information, bundle_cache
 
     async def get_own_device_information(self) -> Tuple[DeviceInformation, Set[DeviceInformation]]:
         """
@@ -721,7 +739,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             information about the other devices of the own bare JID.
 
         Raises:
-            # TODO
+            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
         # This method is not affected by history synchronization mode. #
 
@@ -731,18 +749,18 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         return next(all_own_devices - other_own_devices), other_own_devices
 
     @staticmethod
-    def format_identity_public_key(identity_public_key: bytes) -> List[str]:
+    def format_identity_key(identity_key: bytes) -> List[str]:
         """
         Args:
-            identity_public_key: The identity public key to generate the fingerprint of (in Ed25519 format).
+            identity_key: The identity key to generate the fingerprint of.
 
         Returns:
-            The fingerprint of the identity public key, as eight groups of eight lowercase hex chars each.
-            Consider applying `Consistent Color Generation <https://xmpp.org/extensions/xep-0392.html>`__ to
-            each individual group when displaying the fingerprint, if applicable.
+            The fingerprint of the identity key, as eight groups of eight lowercase hex chars each. Consider
+            applying `Consistent Color Generation <https://xmpp.org/extensions/xep-0392.html>`__ to each
+            individual group when displaying the fingerprint, if applicable.
         """
 
-        ik_hex_string = identity_public_key.hex()
+        ik_hex_string = identity_key.hex()
         group_size = 8
 
         return [ ik_hex_string[i : i + group_size] for i in range(0, len(ik_hex_string), group_size) ]
@@ -874,7 +892,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             effective_backend_priority_order = backend_priority_order
 
         # Add the own bare JID to the list of recipients
-        bare_jids |= set([ own_bare_jid ])
+        bare_jids |= { own_bare_jid }
         
         # Load the device information of all recipients
         async def get_filtered_device_information(bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
@@ -897,14 +915,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
             return set(filter(device_filter, device_information)), bundle_cache
 
-        filtered_device_information = {
-            bare_jid: await get_filtered_device_information(bare_jid) for bare_jid in bare_jids
-        }
+        tmp = { bare_jid: await get_filtered_device_information(bare_jid) for bare_jid in bare_jids }
 
-        devices = { bare_jid: devices for bare_jid, (devices, _) in filtered_device_information.items() }
-        bundle_cache = cast(Set[Bundle], set()).union(*(
-            bundle_cache for _, bundle_cache in filtered_device_information.values()
-        ))
+        devices = { bare_jid: devices for bare_jid, (devices, _) in tmp.items() }
+        bundle_cache = cast(Set[Bundle], {}).union(*(bundle_cache for _, bundle_cache in tmp.values()))
 
         # Check for recipients without a single active device
         no_eligible_devices = filter(lambda bare_jid: len(devices[bare_jid]) == 0, devices.keys())
@@ -920,9 +934,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             namespaces = { ns for ns in device.namespaces if device.active[ns] }
             namespaces_sorted = sorted(namespaces, key=effective_backend_priority_order.index)
 
-            return device._replace(namespaces=set(namespaces_sorted[0:1]))
+            return device._replace(namespaces={ namespaces_sorted[0] })
 
-        devices = { j: set(apply_backend_priority_order(d) for d in ds) for j, ds in devices.items() }
+        devices = { j: { apply_backend_priority_order(d) for d in ds } for j, ds in devices.items() }
 
         # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
         # the remaining devices)
@@ -941,22 +955,22 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 str
             )).from_just())
 
-        undecided_devices = { j: set(d for d in ds if is_undecided(d)) for j, ds in devices.items() }
+        undecided_devices = { j: { d for d in ds if is_undecided(d) } for j, ds in devices.items() }
         if any(len(ds) > 0 for ds in undecided_devices.values()):
             await self._make_trust_decision(undecided_devices)
 
             # Update to the new trust levels
-            devices = { j: set([ (await update_trust(d)) for d in ds ]) for j, ds in devices.items() }
+            devices = { j: { (await update_trust(d)) for d in ds } for j, ds in devices.items() }
 
         # Make sure the trust status of all previously undecided devices has been decided on
-        undecided_devices = { j: set(d for d in ds if is_undecided(d)) for j, ds in devices.items() }
+        undecided_devices = { j: { d for d in ds if is_undecided(d) } for j, ds in devices.items() }
         if any(len(ds) > 0 for ds in undecided_devices.values()):
             raise StillUndecided("The trust status of one or more devices has not been decided on: {}".format(
                 undecided_devices
             ))
 
         # Remove distrusted devices
-        devices = { j: set(d for d in ds if is_trusted(d)) for j, ds in devices.items() }
+        devices = { j: { d for d in ds if is_trusted(d) } for j, ds in devices.items() }
 
         # Check for recipients without a single remaining device
         no_eligible_devices = filter(lambda bare_jid: len(devices[bare_jid]) == 0, devices.keys())
@@ -973,7 +987,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             ns = backend.namespace
 
             # Select the devices to encrypt for using this backend
-            backend_devices = { j: set(d for d in ds if d.namespaces[0] == ns) for j, ds in devices.items() }
+            backend_devices = { j: { d for d in ds if d.namespaces[0] == ns } for j, ds in devices.items() }
             backend_devices = { j: ds for j, ds in devices.items() if len(ds) > 0 }
 
             if len(backend_devices) > 0:
