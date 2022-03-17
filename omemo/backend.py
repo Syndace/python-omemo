@@ -92,3 +92,14 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         """
 
         pass
+
+    @abstractmethod
+    async def purge(self) -> Any:
+        """
+        Remove all data related to this backend from the storage.
+
+        Returns:
+            Anything, the return value is ignored.
+        """
+
+        pass

@@ -71,10 +71,10 @@ Plaintext = TypeVar("Plaintext")
 class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     """
     The core of python-omemo. Manages your own key material and bundle, device lists, sessions with other
-    users, automatic session healing and much more, all while being flexibly usable with different backends
-    and transparenlty maintaining a level of compatibility between the backends that allows you to maintain a
-    single identity throughout all of them. Easy APIs are provided to handle common use-cases of OMEMO-enabled
-    XMPP clients, with one of the primary goals being strict type safety.
+    users and much more, all while being flexibly usable with different backends and transparenlty maintaining
+    a level of compatibility between the backends that allows you to maintain a single identity throughout all
+    of them. Easy APIs are provided to handle common use-cases of OMEMO-enabled XMPP clients, with one of the
+    primary goals being strict type safety.
 
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
@@ -90,7 +90,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     TODO: Document the Plaintext generic
     """
 
-    # TODO: Should this really be the only class property?
     HEARTBEAT_MESSAGE_TRIGGER = 53
 
     def __init__(self) -> None:
@@ -157,7 +156,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 :meth:`_upload_device_list`.
             DeviceListDownloadFailed: if a device list download failed. Forwarded from
                 :meth:`_download_device_list`.
-            # TODO
 
         Warning:
             The library starts in history synchronization mode. Call :meth:`after_history_sync` to return to
@@ -246,7 +244,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # If there a mismatch between loaded and active namespaces, look for changes in the loaded backends.
         device, _ = await self.get_own_device_information()
         loaded_namespaces = { backend.namespace for backend in self.__backends }
-        active_namespaces = { namespace for namespace, active in device.active.items() if active }
+        active_namespaces = device.namespaces
         if loaded_namespaces != active_namespaces:
             # Store the updated list of loaded namespaces
             await storage.store("/devices/{}/{}/namespaces".format(
@@ -294,7 +292,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     async def purge_backend(self, namespace: str) -> None:
         """
         Purge a backend, removing both the online data (bundle, device list entry) and the offline data that
-        belongs to this backend.
+        belongs to this backend. Note that the backend-specific offline data can only be purged if the
+        respective backend is currently loaded. This backend-specific removal can be triggered manually at any
+        time by calling the :meth:`purge` method of the respecfive backend. If the backend to purge is
+        currently loaded, the method will unload it.
 
         Args:
             namespace: The XML namespace managed by the backend to purge.
@@ -305,14 +306,48 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 :meth:`_upload_device_list`.
             DeviceListDownloadFailed: if a device list download failed. Forwarded from
                 :meth:`_download_device_list`.
-            # TODO
 
-        Note:
+        Warning:
             Make sure to unsubscribe from updates to all device lists before calling this method.
         """
         # This method is not affected by history synchronization mode. #
 
-        # TODO
+        # First half of online data removal: remove this device from the device list. This has to be the first
+        # step for consistency reasons.
+        device_list = await self._download_device_list(namespace, self.__own_bare_jid)
+        try:
+            device_list.pop(self.__own_device_id)
+        except KeyError:
+            pass
+        else:
+            await self._upload_device_list(namespace, device_list)
+
+        # Synchronize the offline device list with the online information
+        device, _ = await self.get_own_device_information()
+        device.namespaces.remove(namespace)
+        device.active.pop(namespace, None)
+
+        await self.__storage.store("/devices/{}/{}/namespaces".format(
+            self.__own_bare_jid,
+            self.__own_device_id
+        ), device.namespaces)
+
+        await self.__storage.store("/devices/{}/{}/active".format(
+            self.__own_bare_jid,
+            self.__own_device_id
+        ), device.active)
+
+        # If the backend is currently loaded, remove it from the list of loaded backends
+        backends = { backend for backend in self.__backends if backend.namespace == namespace }
+        self.__backends = self.__backends - backends
+
+        # Remaining backend-specific offline data removal
+        for backend in backends:
+            await backend.purge()
+
+        # Second half of online data removal: delete the bundle of this device. This step has low priority,
+        # thus done last.
+        await self._delete_bundle(namespace, self.__own_device_id)
 
     ####################
     # abstract methods #
@@ -502,21 +537,19 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     async def _send_message(message: Message) -> Any:
         """
         Send an OMEMO-encrypted message. This is required for various automated behaviours to improve the
-        overall stability of the protocol:
+        overall stability of the protocol, for example:
 
         * Automatic handshake completion, by responding to incoming key exchanges.
         * Automatic heartbeat messages to forward the ratchet if many messages were received without a
-            (manual) response, to assure forward secrecy. The number of messages required to trigger this
-            behaviour is hardcoded in ``SessionManager.HEARTBEAT_MESSAGE_TRIGGER``.
+            (manual) response, to assure forward secrecy (aka staleness prevention). The number of messages
+            required to trigger this behaviour is hardcoded in ``SessionManager.HEARTBEAT_MESSAGE_TRIGGER``.
         * Automatic session initiation if an encrypted message is received but no session exists for that
             device.
-        * Automatic session replacement of "broken" sessions, by sending empty key exchanges. Whether this
-            feature is used and the exact conditions for an automatic session replacement depends on the
-            respective backend. 
+        * Backend-dependent session healing mechanisms.
         * Backend-dependent empty messages to notify other devices about potentially "broken" sessions.
 
-        Note that messages created here don't contain any content, they are just empty messages to transport
-        key material.
+        Note that messages sent here do not contain any content, they are just empty messages to transport key
+        material.
 
         Args:
             message: The message to send.
@@ -902,7 +935,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             a session with this device while it was offline. When history synchronization ends, all one-time
             pre keys that were kept around are deleted and the library returns to normal behaviour.
         * Automated responses are collected during synchronization, such that only the minimum required number
-            of messages is sent.
+            of messages is sent. TODO: Really tho?
 
         Note:
             TODO: The lib can process live event too while in history sync mode
@@ -938,13 +971,15 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         bundle_cache: Set[Bundle]
     ) -> Message:
         """
-        TODO
+        Iternal method for message encryption to a fixed set of recipients, i.e. trust decisions etc. must be
+        performed by the calling code beforehand.
         """
         # This method is not affected by history synchronization mode. #
 
         backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
 
         # Prepare the sessions
+        # TODO: Handle failures (can anything other than bundle downloads fail?)
         async def load_or_create_session(device: DeviceInformation) -> Session:
             session = await backend.load_session(device)
             if session is None:
