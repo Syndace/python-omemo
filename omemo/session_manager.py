@@ -300,7 +300,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Warning:
             Make sure to unsubscribe from updates to all device lists before calling this method.
         """
-        # This method is not affected by history synchronization mode. #
 
         # First half of online data removal: remove this device from the device list. This has to be the first
         # step for consistency reasons.
@@ -328,7 +327,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         ), device.active)
 
         # If the backend is currently loaded, remove it from the list of loaded backends
-        backends = { backend for backend in self.__backends if backend.namespace == namespace }
+        backends = set(filter(lambda backend: backend.namespace == namespace, self.__backends))
         self.__backends = self.__backends - backends
 
         # Remaining backend-specific offline data removal
@@ -574,7 +573,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 update is for the own bare JID and does not include the own device. Forwarded from
                 :meth:`_upload_device_list`.
         """
-        # This method is not affected by history synchronization mode. #
 
         storage = self.__storage
 
@@ -662,7 +660,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 update is for the own bare JID and does not include the own device. Forwarded from
                 :meth:`update_device_list`.
         """
-        # This method is not affected by history synchronization mode. #
 
         await self.update_device_list(
             namespace,
@@ -683,7 +680,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             identity_key: The identity key.
             trust_level_name: The custom trust level to set for the identity key.
         """
-        # This method is not affected by history synchronization mode. #
 
         await self.__storage.store("/trust/{}/{}".format(
             bare_jid,
@@ -706,7 +702,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             # TODO
         """
-        # This method is not affected by history synchronization mode. #
 
         async def filter_namespaces(device: DeviceInformation) -> DeviceInformation:
             # TODO: Remove all namespaces that
@@ -732,16 +727,40 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     async def purge_bare_jid(self, bare_jid: str) -> None:
         """
         Delete all data corresponding to an XMPP account. This includes the device list, trust information and
-        all sessions across all loaded backends.
+        all sessions across all loaded backends. The backend-specific data can be removed at any time by
+        calling the :meth:`purge_bare_jid` method of the respective backend.
 
         Args:
             bare_jid: Delete all data corresponding to this bare JID.
 
         Raises:
-            # TODO
+            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
-        # TODO
+        storage = self.__storage
+
+        # Delete information about the individual devices
+        devices = await self.get_device_information(bare_jid)
+        for device in devices:
+            await storage.delete("/devices/{}/{}/namespaces".format(bare_jid, device.device_id))
+            await storage.delete("/devices/{}/{}/active".format(bare_jid, device.device_id))
+            await storage.delete("/devices/{}/{}/label".format(bare_jid, device.device_id))
+            await storage.delete("/devices/{}/{}/identity_key".format(bare_jid, device.device_id))
+
+        # Delete the device list
+        await storage.delete("/devices/{}/list".format(bare_jid))
+
+        # Delete information about the identity keys
+        identity_keys = { device.identity_key for device in devices }
+        for identity_key in identity_keys:
+            await storage.delete("/trust/{}/{}".format(
+                bare_jid,
+                base64.urlsafe_b64encode(identity_key).decode("ASCII")
+            ))
+
+        # Remove backend-specific data
+        for backend in self.__backends:
+            await backend.purge_bare_jid(bare_jid)
 
     ##############################
     # device metadata management #
@@ -761,7 +780,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Note:
             It is recommended to keep the length of the label under 53 unicode code points.
         """
-        # This method is not affected by history synchronization mode. #
 
         # Store the new label
         await self.__storage.store("/devices/{}/{}/label".format(
@@ -799,14 +817,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
-        # This method is not affected by history synchronization mode. #
 
         # Do not expose the bundle cache publicly.
         return (await self.__get_device_information(bare_jid))[0]
 
     async def __get_device_information(self, bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
-        # This method is not affected by history synchronization mode. #
-
         storage = self.__storage
 
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
@@ -882,7 +897,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
-        # This method is not affected by history synchronization mode. #
 
         all_own_devices = await self.get_device_information(self.__own_bare_jid)
         other_own_devices = set(filter(lambda dev: dev.device_id != self.__own_device_id, all_own_devices))
@@ -964,7 +978,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Iternal method for message encryption to a fixed set of recipients, i.e. trust decisions etc. must be
         performed by the calling code beforehand.
         """
-        # This method is not affected by history synchronization mode. #
 
         backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
 
@@ -1040,7 +1053,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
             information about the ``Plaintext`` type.
         """
-        # This method is not affected by history synchronization mode. #
 
         # Prepare the backend priority order list
         effective_backend_priority_order: List[str]

@@ -128,7 +128,7 @@ class Storage(ABC): # TODO: Add Raises StorageException everywhere
 
         await self.store(key, base64.urlsafe_b64encode(value).decode("ASCII"))
 
-    async def delete_device(self, key: str) -> None:
+    async def delete(self, key: str) -> None:
         """
         TODO
         """

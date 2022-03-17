@@ -106,3 +106,17 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         """
 
         pass
+
+    @abstractmethod
+    async def purge_bare_jid(self, bare_jid: str) -> Any:
+        """
+        Delete all data corresponding to an XMPP account.
+
+        Args:
+            bare_jid: Delete all data corresponding to this bare JID.
+
+        Returns:
+            Anything, the return value is ignored.
+        """
+
+        pass
