@@ -25,7 +25,6 @@ class Maybe(Generic[V]):
 
     @classmethod
     def just(cls: Type[M], value: V) -> M:
-        # pylint: disable=protected-access
         self = cls()
         self.__value = value
         return self

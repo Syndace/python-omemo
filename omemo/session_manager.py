@@ -1,26 +1,21 @@
 from abc import ABCMeta, abstractmethod
 import base64
 import enum
-from os import device_encoding
-from turtle import back
-from typing import cast, Any, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar
+import itertools
+import os
+import struct
+from typing import cast, Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar
+
 
 from .backend import Backend
 from .bundle  import Bundle
+from .identity_key_pair import IdentityKeyPair
 from .message import Message
+from .session import Session
 from .storage import Nothing, Storage
-from .types   import OMEMOException
+from .types   import DeviceInformation, OMEMOException
 
 DeviceList = Dict[int, Optional[str]]
-
-class DeviceInformation(NamedTuple):
-    namespaces: Set[str]
-    active: Dict[str, bool]
-    bare_jid: str
-    device_id: int
-    identity_key: bytes
-    trust_level_name: str
-    label: Optional[str]
 
 @enum.unique
 class TrustLevel(enum.Enum):
@@ -71,7 +66,7 @@ class MessageSendingFailed(XMPPInteractionFailed):
     pass
 
 # TODO: Take care of logging
-S = TypeVar("S", bound="SessionManager")
+SM = TypeVar("SM", bound="SessionManager")
 Plaintext = TypeVar("Plaintext")
 class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     """
@@ -90,7 +85,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
-        Ed25519 format.
+        Ed25519 format. Otherwise, "identity key pair" is explicitly used to refer to the full key pair.
 
     TODO: Document the Plaintext generic
     """
@@ -105,22 +100,21 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self.__own_bare_jid: str
         self.__own_device_id: int
         self.__undecided_trust_level_name: str
+        self.__identity_key_pair: IdentityKeyPair
 
     @classmethod
     async def create(
-        cls: Type[S],
+        cls: Type[SM],
         backends: List[Backend[Plaintext]],
         storage: Storage,
         own_bare_jid: str,
         initial_own_label: Optional[str],
         undecided_trust_level_name: str,
-        decrypt_when_undecided: bool = True,
         max_num_per_session_skipped_keys: int = 1000,
         max_num_per_message_skipped_keys: Optional[int] = None,
         signed_pre_key_rotation_period: int = 7 * 24 * 60 * 60,
         pre_key_refill_threshold: int = 99
-    ) -> S:
-        # pylint: disable=protected-access
+    ) -> SM:
         """
         Load or create OMEMO backends. This method takes care of everything regarding the initialization of
         OMEMO: generating a unique device id, uploading the bundle and adding the new device to the device
@@ -137,9 +131,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             undecided_trust_level_name: The name of the custom trust level to initialize the trust level with
                 when a new device is first encoutered. :meth:`_evaluate_custom_trust_level` should evaluate
                 this custom trust level to ``TrustLevel.Undecided``.
-            decrypt_when_undecided: When receiving an encrypted message from a source that is not yet trusted
-                or distrusted, this flag decides what to do. If set to ``True`` (the default), the message is
-                decrypted. If set to ``False``, the message is not decrypted and an exception is raised.
             max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep around per
                 session. Once the maximum is reached, old message keys are deleted to make space for newer
                 ones.
@@ -175,7 +166,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Note:
             This method takes care of leaving the device lists in a consistent state. To do so, backends are
-            initialized one after the other. For each backend, the device list is updated as the very last
+            "initialized" one after the other. For each backend, the device list is updated as the very last
             step, after everything else that could fail is done. This ensures that either all data is
             consistent or the device list does not yet list the inconsistent device. If the creation of one
             backend succeeds, the data is persisted in the storage before the next backend is created. This
@@ -192,10 +183,111 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self.__backends = backends
         self.__storage = storage
         self.__own_bare_jid = own_bare_jid
-        self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).maybe(...) # TODO
         self.__undecided_trust_level_name = undecided_trust_level_name
+        self.__identity_key_pair = await IdentityKeyPair.get(storage)
 
-        # TODO
+        try:
+            self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).from_just()
+        except Nothing:
+            # First run.
+
+            # Fetch the device lists for this bare JID for all loaded backends.
+            device_ids = cast(Set[int], {}).union(*{
+                set((await self._download_device_list(backend.namespace, self.__own_bare_jid)).keys())
+                for backend
+                in self.__backends
+            })
+
+            # Generate a new device id for this device, making sure that it doesn't clash with any of the
+            # existing device ids.
+            DEVICE_ID_MIN = 1
+            DEVICE_ID_MAX = 2 ** 31 - 1
+            self.__own_device_id = next(
+                device_id
+                for device_id
+                in (cast(Tuple[int], struct.unpack(">L", os.urandom(4)))[0] for _ in itertools.count())
+                if device_id >= DEVICE_ID_MIN and device_id <= DEVICE_ID_MAX and device_id not in device_ids
+            )
+
+            # Store the device information for this device
+            await storage.store("/devices/{}/{}/namespaces".format(
+                self.__own_bare_jid,
+                self.__own_device_id
+            ), [ backend.namespace for backend in self.__backends ])
+
+            await storage.store("/devices/{}/{}/active".format(
+                self.__own_bare_jid,
+                self.__own_device_id
+            ), { backend.namespace: True for backend in self.__backends })
+
+            await storage.store("/devices/{}/{}/label".format(
+                self.__own_bare_jid,
+                self.__own_device_id
+            ), initial_own_label)
+
+            await storage.store_bytes("/devices/{}/{}/identity_key".format(
+                self.__own_bare_jid,
+                self.__own_device_id
+            ), self.__identity_key_pair.identity_key)
+
+            # Publish the bundles for all backends
+            for backend in self.__backends:
+                await self._upload_bundle(await backend.bundle(
+                    self.__own_bare_jid,
+                    self.__own_device_id,
+                    self.__identity_key_pair.identity_key
+                ))
+
+            # Trigger a refresh of the own device lists for all backends, this will result in this device
+            # being added to the lists and the lists republished.
+            for backend in self.__backends:
+                await self.refresh_device_list(backend.namespace, self.__own_bare_jid)
+        
+        # If there a mismatch between loaded and active namespaces, look for changes in the loaded backends.
+        device, _ = await self.get_own_device_information()
+        loaded_namespaces = { backend.namespace for backend in self.__backends }
+        active_namespaces = { namespace for namespace, active in device.active.items() if active }
+        if loaded_namespaces != active_namespaces:
+            # Store the updated list of loaded namespaces
+            await storage.store("/devices/{}/{}/namespaces".format(
+                self.__own_bare_jid,
+                self.__own_device_id
+            ), loaded_namespaces)
+
+            # Set the device active for all loaded namespaces
+            await storage.store("/devices/{}/{}/active".format(
+                self.__own_bare_jid,
+                self.__own_device_id
+            ), { namespace: True for namespace in loaded_namespaces })
+
+            # Take care of the initialization of newly added backends
+            for backend in self.__backends:
+                if backend.namespace not in active_namespaces:
+                    # Publish the bundle of the new backend
+                    await self._upload_bundle(await backend.bundle(
+                        self.__own_bare_jid,
+                        self.__own_device_id,
+                        self.__identity_key_pair.identity_key
+                    ))
+
+                    # Trigger a refresh of the own device list of the new backend, this will result in this
+                    # device being added to the lists and the lists republished.
+                    await self.refresh_device_list(backend.namespace, self.__own_bare_jid)
+            
+            # Perform cleanup of removed backends
+            for namespace in active_namespaces - loaded_namespaces:
+                # TODO: Is this a little radical?
+                await self.purge_backend(namespace)
+
+        # Perform age check and rotation of the signed pre key
+        for backend in self.__backends:
+            if await backend.signed_pre_key_age() > signed_pre_key_rotation_period:
+                await backend.rotate_signed_pre_key(self.__identity_key_pair)
+                await self._upload_bundle(await backend.bundle(
+                    self.__own_bare_jid,
+                    self.__own_device_id,
+                    self.__identity_key_pair.identity_key
+                ))
 
         return self
 
@@ -208,6 +300,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             namespace: The XML namespace managed by the backend to purge.
 
         Raises:
+            BundleDeletionFailed: if a bundle deletion failed. Forwarded from :meth:`_delete_bundle`.
+            DeviceListUploadFailed: if a device list upload failed. Forwarded from
+                :meth:`_upload_device_list`.
+            DeviceListDownloadFailed: if a device list download failed. Forwarded from
+                :meth:`_download_device_list`.
             # TODO
 
         Note:
@@ -223,13 +320,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    async def _upload_bundle(bundle: Bundle, device_id: int) -> Any:
+    async def _upload_bundle(bundle: Bundle) -> Any:
         """
         Upload the bundle corresponding to this device, overwriting any previously published bundle data.
 
         Args:
             bundle: The bundle to publish.
-            device_id: The id of this device.
 
         Returns:
             Anything, the return value is ignored.
@@ -587,7 +683,26 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             # TODO
         """
-        # TODO: per-backend?
+        # This method is not affected by history synchronization mode. #
+
+        async def filter_namespaces(device: DeviceInformation) -> DeviceInformation:
+            # TODO: Remove all namespaces that
+            # - correspond to a backend which is not currently loaded
+            # - correspond to a backend which has no session for this device
+            pass
+
+        devices, bundle_cache = await self.__get_device_information(bare_jid)
+        devices = { await filter_namespaces(device) for device in devices }
+        devices = set(filter(lambda device: len(device.namespaces) > 0, devices))
+
+        # TODO: The difficulty here is to replace the sessions in such a manner that potential desyncs are
+        # minimized. Potentially mercilessly replace one-by-one, including the empty OMEMO message?
+
+        # TODO: Can anything be done against the hazard between deleting the old session and building the new
+        # one?
+
+        # TODO: Have to actually replace ALL sessions, even unused ones for inactive, untrusted devices of
+        # unused backends etc. Everything else would risk desync sessions.
 
         # TODO
 
@@ -786,8 +901,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             rather hypothetical) case that two or more parties selected the same one-time pre key to initiate
             a session with this device while it was offline. When history synchronization ends, all one-time
             pre keys that were kept around are deleted and the library returns to normal behaviour.
-        * If the signed pre key is due for rotation, rotation is deferred until after history synchronization
-            is done to account for delayed messages and offline periods.
         * Automated responses are collected during synchronization, such that only the minimum required number
             of messages is sent.
 
@@ -815,13 +928,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     # TODO: check whether the ephemeral key is stored with the session for omemo:1
     # TODO: check whether the key exchange header is stored with the session until a successful key exchange is confirmed
-    # TODO: need internal method to create new sessions, both for :meth:`encrypt_message` and :meth:`replace_sessions`
     # TODO: internal method to encrypt empty messages?
 
     async def __encrypt_message(
         self,
         namespace: str,
-        devices: Dict[str, Set[DeviceInformation]],
+        devices: Set[DeviceInformation],
         message: Plaintext,
         bundle_cache: Set[Bundle]
     ) -> Message:
@@ -830,10 +942,38 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         """
         # This method is not affected by history synchronization mode. #
 
-        # TODO: Bundle fetching
-        # TODO: Key exchange simulation?
+        backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
 
-        pass
+        # Prepare the sessions
+        async def load_or_create_session(device: DeviceInformation) -> Session:
+            session = await backend.load_session(device)
+            if session is None:
+                cached_bundle = list(filter(lambda bundle: (
+                    bundle.bare_jid == device.bare_jid and
+                    bundle.device_id == device.device_id
+                ), bundle_cache))
+
+                try:
+                    bundle = cached_bundle[0]
+                except IndexError:
+                    bundle = await self._download_bundle(namespace, device.bare_jid, device.device_id)
+
+                session = await backend.build_session(device, bundle)
+
+            return session
+
+        sessions = { await load_or_create_session(device) for device in devices }
+
+        # Perform the encryption, which is mostly backend-specific. There are certain aspects common to all
+        # backends, however forcing those into interfaces is not worth it, as the code duplication is
+        # negligible.
+        result = await backend.encrypt_message(sessions, message)
+
+        # Store the sessions as the final step
+        for session in sessions:
+            await session.persist()
+
+        return result
 
     async def encrypt_message(
         self,
@@ -864,6 +1004,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             NoEligibleDevices: if at least one of the intended recipients does not have a single device which
                 qualifies for encryption. Either the recipient does not advertize any OMEMO-enabled devices or
                 all devices were disqualified due to missing trust or failure to download their bundles.
+            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
             # TODO
 
         Note:
@@ -986,7 +1127,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             ns,
             set(filter(lambda device: device.namespaces[0] == ns, devices)),
             message,
-            bundle_cache
+            set(filter(lambda bundle: bundle.namespace == ns, bundle_cache))
         ) for ns in effective_backend_priority_order if any(dev.namespaces[0] == ns for dev in devices) }
 
     async def decrypt_message(self, message: Message) -> Tuple[Plaintext, DeviceInformation]:
@@ -994,7 +1135,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Decrypt a message.
 
         Args:
-            message: The message to decrypt. The backend is selected based on the type of `message`.
+            message: The message to decrypt.
 
         Returns:
             A tuple, where the first entry is the decrypted message and the second entry contains information
@@ -1009,8 +1150,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             applicable.
 
         Note:
-            If the trust level of the sender evaluates to undecided, the value of ``decrypt_when_undecided``
-            as passed to :meth:`create` determines whether the message is decrypted or rejected.
+            If the trust level of the sender evaluates to undecided, the message is decrypted.
 
         Note:
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for

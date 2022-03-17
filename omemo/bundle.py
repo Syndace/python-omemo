@@ -8,12 +8,12 @@ class Bundle(ABC):
 
     @property
     @abstractmethod
-    def device_id() -> int:
+    def bare_jid() -> str:
         pass
 
     @property
     @abstractmethod
-    def bare_jid() -> str:
+    def device_id() -> int:
         pass
 
     @property
