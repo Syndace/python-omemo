@@ -1,8 +1,7 @@
-# pylint: disable=exec-used
 import os
 from typing import Dict, Union, List
 
-from setuptools import setup, find_packages # type: ignore[import]
+from setuptools import setup, find_packages
 
 source_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "omemo")
 
@@ -27,7 +26,6 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
 
-    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -60,10 +58,9 @@ setup(
     install_requires = [
         "X3DH>=1.0.0,<2",
         "DoubleRatchet>=1.0.0,<2",
-        "cryptography>=3.3.2,<37",
-        "packaging>=20.9,<22"
+        "cryptography>=3.3.2,<37"
     ],
-    python_requires = ">=3.6,<4",
+    python_requires = ">=3.7,<4",
     include_package_data = True,
     zip_safe = False,
     classifiers = classifiers,
