@@ -1025,6 +1025,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
             TODO
         """
+    
+        # TODO: Think about how to handle bundle download failures here. Not raising feels wrong.
 
         backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
 
@@ -1100,9 +1102,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             information about the ``Plaintext`` type.
         """
 
-        # TODO: Currently, a single device without a bundle (or with a broken bundle) can block a whole
-        # message from being sent, which can only be fixed by removing the bare JID from the set of recipients
-
         # Prepare the backend priority order list
         effective_backend_priority_order: List[str]
         available_namespaces = [ backend.namespace for backend in self.__backends ]
@@ -1138,6 +1137,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
             return True
 
+        # Using get_device_information here means that some devices may be excluded, if their corresponding
+        # identity key is not known and attempts to download the respecitve bundles fail. Those devices
+        # missing is fine, since get_device_information is the public API for device information anyway, so
+        # the publicly available device list and the recipient devices used here are consistent.
         tmp = { await self.__get_device_information(bare_jid) for bare_jid in bare_jids }
 
         devices = cast(Set[DeviceInformation], {}).union(*(devices for devices, _ in tmp))
