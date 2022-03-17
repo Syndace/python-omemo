@@ -709,7 +709,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             # - correspond to a backend which has no session for this device
             pass
 
-        devices, bundle_cache = await self.__get_device_information(bare_jid)
+        devices, bundle_cache = await self.__get_device_information(bare_jid) # TODO: Replace with raw device list from storage
         devices = { await filter_namespaces(device) for device in devices }
         devices = set(filter(lambda device: len(device.namespaces) > 0, devices))
 
@@ -732,26 +732,35 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Args:
             bare_jid: Delete all data corresponding to this bare JID.
-
-        Raises:
-            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
         storage = self.__storage
 
+        # Get the set of devices to delete
+        device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
+        
+        # Collect identity keys used by this account
+        identity_keys: Set[bytes] = {}
+        for device_id in device_list:
+            try:
+                identity_keys.add((await storage.load_bytes("/devices/{}/{}/identity_key".format(
+                    bare_jid,
+                    device_id
+                ))).from_just())
+            except Nothing:
+                pass
+
         # Delete information about the individual devices
-        devices = await self.get_device_information(bare_jid)
-        for device in devices:
-            await storage.delete("/devices/{}/{}/namespaces".format(bare_jid, device.device_id))
-            await storage.delete("/devices/{}/{}/active".format(bare_jid, device.device_id))
-            await storage.delete("/devices/{}/{}/label".format(bare_jid, device.device_id))
-            await storage.delete("/devices/{}/{}/identity_key".format(bare_jid, device.device_id))
+        for device_id in device_list:
+            await storage.delete("/devices/{}/{}/namespaces".format(bare_jid, device_id))
+            await storage.delete("/devices/{}/{}/active".format(bare_jid, device_id))
+            await storage.delete("/devices/{}/{}/label".format(bare_jid, device_id))
+            await storage.delete("/devices/{}/{}/identity_key".format(bare_jid, device_id))
 
         # Delete the device list
         await storage.delete("/devices/{}/list".format(bare_jid))
 
         # Delete information about the identity keys
-        identity_keys = { device.identity_key for device in devices }
         for identity_key in identity_keys:
             await storage.delete("/trust/{}/{}".format(
                 bare_jid,
@@ -776,6 +785,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             DeviceListUploadFailed: if a device list upload failed. Forwarded from
                 :meth:`_upload_device_list`.
+            DeviceListDownloadFailed: if a device list download failed. Forwarded from
+                :meth:`_download_device_list`.
 
         Note:
             It is recommended to keep the length of the label under 53 unicode code points.
@@ -788,14 +799,13 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         ), own_label)
 
         # For each loaded backend, upload an updated device list including the new label
-        devices = await self.get_device_information(self.__own_bare_jid)
         for backend in self.__backends:
-            # Upload the new device list, including all active devices for this backend
-            await self._upload_device_list(backend.namespace, {
-                device.device_id: device.label
-                for device in devices
-                if device.active.get(backend.namespace, False)
-            })
+            # Note: it is not required to download the device list here, since it should be cached locally.
+            # However, one PEP node fetch per backend isn't super expensive and it's nice to avoid the code to
+            # load the cached device list.
+            device_list = await self._download_device_list(backend.namespace, self.__own_bare_jid)
+            device_list[self.__own_device_id] = own_label
+            await self._upload_device_list(backend.namespace, device_list)
 
     async def get_device_information(self, bare_jid: str) -> Set[DeviceInformation]:
         """
@@ -813,7 +823,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             `PEP <https://xmpp.org/extensions/xep-0163.html>`__ updates are correctly fed to
             :meth:`update_device_list`. A manual update of a device list can be triggered using
             :meth:`refresh_device_list` if needed.
-
+        
+        Warning:
+            This method attempts to download the bundle of devices whose corresponding identity key is not
+            known yet. In case the information can not be fetched due to bundle download failures, the device
+            is not included in the returned set.
+        
         Raises:
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
@@ -826,8 +841,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
         
-        async def load_device_information(device_id: int) -> Tuple[DeviceInformation, Set[Bundle]]:
-            bundle_cache: Set[Bundle] = {}
+        async def load_device_information(device_id: int) -> Tuple[DeviceInformation, Optional[Bundle]]:
+            bundle: Optional[Bundle] = None
 
             namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
                 bare_jid,
@@ -852,10 +867,20 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 ))).from_just()
             except Nothing:
                 # The identity key assigned to this device is not known yet. Fetch the bundle to find that
-                # information. "Cache" and return the downloaded bundles to avoid double-fetching them if they
-                # are required for session initiation afterwards.
-                bundle = await self._download_bundle(namespaces[0], bare_jid, device_id)
-                bundle_cache.add(bundle)
+                # information. Return the downloaded bundle to avoid double-fetching it if the same bundle is
+                # required for session initiation afterwards.
+                for namespace in namespaces:
+                    try:
+                        bundle = await self._download_bundle(namespace, bare_jid, device_id)
+                        break
+                    except BundleDownloadFailed:
+                        pass
+                
+                if bundle is None:
+                    raise BundleDownloadFailed(
+                        "All attempts at downloading a bundle for {}:{} failed. Attempted namespaces: {}"
+                            .format(bare_jid, device_id, namespaces)
+                    )
 
                 identity_key = bundle.identity_key
 
@@ -877,12 +902,20 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 identity_key=identity_key,
                 trust_level_name=trust_level_name,
                 label=label
-            ), bundle_cache
+            ), bundle
 
-        tmp = { await load_device_information(device_id) for device_id in device_list }
+        devices: Set[DeviceInformation] = {}
+        bundle_cache: Set[Bundle] = {}
 
-        devices = { device for device, _ in tmp }
-        bundle_cache = cast(Set[Bundle], {}).union(*(bundle_cache for _, bundle_cache in tmp))
+        for device_id in device_list:
+            try:
+                device, bundle = await load_device_information(device_id)
+            except BundleDownloadFailed:
+                pass
+            else:
+                devices.add(device)
+                if bundle is not None:
+                    bundle_cache.add(bundle)
 
         return devices, bundle_cache
 
@@ -975,14 +1008,27 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         bundle_cache: Set[Bundle]
     ) -> Message:
         """
-        Iternal method for message encryption to a fixed set of recipients, i.e. trust decisions etc. must be
+        Internal method for message encryption to a fixed set of recipients, i.e. trust decisions etc. must be
         performed by the calling code beforehand.
+
+        Args:
+            namespace: The namespace of the backend to encrypt the message with.
+            devices: The set of devices to encrypt for.
+            message: The message to encrypt.
+            bundle_cache: A set of bundles that were recently downloaded and should be used instead of
+                fetching them to reduce network load.
+        
+        Returns:
+            The encrypted message.
+        
+        Raises:
+            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
+            TODO
         """
 
         backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
 
         # Prepare the sessions
-        # TODO: Handle failures (bundle download and key exchange foo)
         async def load_or_create_session(device: DeviceInformation) -> Session:
             session = await backend.load_session(device)
             if session is None:
@@ -1053,6 +1099,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
             information about the ``Plaintext`` type.
         """
+
+        # TODO: Currently, a single device without a bundle (or with a broken bundle) can block a whole
+        # message from being sent, which can only be fixed by removing the bare JID from the set of recipients
 
         # Prepare the backend priority order list
         effective_backend_priority_order: List[str]
