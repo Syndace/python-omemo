@@ -5,7 +5,10 @@ from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
 from .message import Message
 from .session import Session
-from .types import DeviceInformation
+from .types import DeviceInformation, OMEMOException
+
+class BackendException(OMEMOException):
+    pass
 
 Plaintext = TypeVar("Plaintext")
 class Backend(Generic[Plaintext], metaclass=ABCMeta):

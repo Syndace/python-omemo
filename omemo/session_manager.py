@@ -1,11 +1,9 @@
 from abc import ABCMeta, abstractmethod
 import base64
-import enum
 import itertools
 import os
 import struct
-from typing import cast, Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar
-
+from typing import cast, Any, Generic, List, Optional, Set, Tuple, Type, TypeVar
 
 from .backend import Backend
 from .bundle  import Bundle
@@ -13,15 +11,7 @@ from .identity_key_pair import IdentityKeyPair
 from .message import Message
 from .session import Session
 from .storage import Nothing, Storage
-from .types   import DeviceInformation, OMEMOException
-
-DeviceList = Dict[int, Optional[str]]
-
-@enum.unique
-class TrustLevel(enum.Enum):
-    Trusted    = 1
-    Distrusted = 2
-    Undecided  = 3
+from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
 
 class SessionManagerException(OMEMOException):
     pass
@@ -979,7 +969,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
 
         # Prepare the sessions
-        # TODO: Handle failures (can anything other than bundle downloads fail?)
+        # TODO: Handle failures (bundle download and key exchange foo)
         async def load_or_create_session(device: DeviceInformation) -> Session:
             session = await backend.load_session(device)
             if session is None:
@@ -1034,13 +1024,14 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             UnknownNamespace: if the backend priority order list contains a namespace of a backend that is not
                 currently available.
+            TrustDecisionFailed: if for any reason the trust decision failed/could not be completed. Forwarded
+                from :meth:`_make_trust_decision`.
             StillUndecided: if the trust level for one of the recipient devices still evaluates to undecided,
                 even after :meth:`_make_trust_decision` was called to decide on the trust.
             NoEligibleDevices: if at least one of the intended recipients does not have a single device which
                 qualifies for encryption. Either the recipient does not advertize any OMEMO-enabled devices or
                 all devices were disqualified due to missing trust or failure to download their bundles.
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
-            # TODO
 
         Note:
             The own JID is implicitly added to the set of recipients, there is no need to list it manually.

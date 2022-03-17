@@ -3,15 +3,11 @@ from typing import TYPE_CHECKING
 from .version import __version__
 from .project import   project
 
-from .backend import Backend
+from .backend import BackendException, Backend
 from .bundle import Bundle
 from .message import Message
 
 from .session_manager import (
-    DeviceList,
-    DeviceInformation,
-    TrustLevel,
-
     SessionManagerException,
     XMPPInteractionFailed,
     UnknownTrustLevel,
@@ -38,5 +34,5 @@ from .storage import (
     Storage
 )
 
-from .types import OMEMOException
+from .types import DeviceInformation, DeviceList, OMEMOException, TrustLevel
 if TYPE_CHECKING: from .types import JSONType
