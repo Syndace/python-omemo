@@ -690,39 +690,70 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     # session management #
     ######################
 
-    async def replace_sessions(self, bare_jid: str) -> None:
+    async def replace_sessions(self, bare_jid: str) -> Set[Tuple[DeviceInformation, OMEMOException]]:
         """
-        Manually replace sessions. Can be used if sessions are suspected to be broken and secure automatic
-        session healing does not seem to automatically replace them. This method automatically notifies the
-        other ends about the new sessions, so that hopefully no messages are lost.
+        Manually replace sessions. Can be used if sessions are suspected to be broken. This method
+        automatically notifies the other ends about the new sessions, so that hopefully no messages are lost.
 
         Args:
             bare_jid: The bare JID of the XMPP account whose sessions are to be replaced.
+        
+        Returns:
+            A set of devices for which the attempt at session replacement was unsuccessful, including the
+            reason for the failure. If the reason is a :class:`StorageException`, there is a high change that
+            the session was left in an inconsistent state. Other reasons imply that the session replacement
+            failed before having any effect on the state of either side.
 
-        Raises:
-            # TODO
+        Warning:
+            This method can not guarantee that sessions are left in a consistent state. For example, if the
+            notification message for the recipient is lost or heavily delayed, the recipient may not know
+            about the new session and keep using the old one. Only use this method to attempt replacement of
+            sessions that already seem broken. Do not attempt to replace healthy sessions.
+        
+        Warning:
+            This method does not optimize towards minimizing network usage. One notification message is sent
+            per session to replace, the notifications are not bundled. This is to minimize the negative impact
+            of network failure.
         """
 
-        async def filter_namespaces(device: DeviceInformation) -> DeviceInformation:
-            # TODO: Remove all namespaces that
-            # - correspond to a backend which is not currently loaded
-            # - correspond to a backend which has no session for this device
-            pass
+        # The challenge with this method is minimizing the impact of failures at any point. For example, if a
+        # session is replaced and persisted in storage, but sending the corresponding empty message to notify
+        # the recipient about the new session fails, the session in storage will be desync with the session on
+        # the recipient side. Thus, the replacement session is only persisted after the message was
+        # successfully sent. Persisting the new session could fail, resulting in another desync state, however
+        # storage interactions are assumed to be more stable than network interactions. None of this is
+        # failure-proof: the notification message could be lost or heavily delayed, too. However, since this
+        # method is used to replace broken sessions in the first place, a low chance of replacing the broken
+        # session with another broken one doesn't hurt too much.
 
-        devices, bundle_cache = await self.__get_device_information(bare_jid) # TODO: Replace with raw device list from storage
-        devices = { await filter_namespaces(device) for device in devices }
-        devices = set(filter(lambda device: len(device.namespaces) > 0, devices))
+        # Load information about all recipient devices. It is okay to use get_device_information here, since
+        # there can only be sessions for devices that have full device information available.
+        devices = await self.get_device_information(bare_jid)
 
-        # TODO: The difficulty here is to replace the sessions in such a manner that potential desyncs are
-        # minimized. Potentially mercilessly replace one-by-one, including the empty OMEMO message?
+        # Remove namespaces that correspond to backends which are not currently loaded or backends which have
+        # no session for this device.
+        devices = { device._replace(namespaces=(device.namespaces & {
+            backend.namespace
+            for backend
+            in self.__backends
+            if await backend.load_session(device) is not None
+        })) for device in devices }
 
-        # TODO: Can anything be done against the hazard between deleting the old session and building the new
-        # one?
+        unsuccessful: Set[Tuple[DeviceInformation, OMEMOException]] = {}
 
-        # TODO: Have to actually replace ALL sessions, even unused ones for inactive, untrusted devices of
-        # unused backends etc. Everything else would risk desync sessions.
+        # Perform the replacement
+        for backend in self.__backends:
+            for device in devices:
+                if backend.namespace in device.namespaces:
+                    try:
+                        bundle = self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
+                        session = await backend.build_session(device, bundle)
+                        await self.__send_empty_message(backend, session) # TODO
+                        await session.persist()
+                    except OMEMOException as e:
+                        unsuccessful.add((device, e))
 
-        # TODO
+        return unsuccessful
 
     async def purge_bare_jid(self, bare_jid: str) -> None:
         """

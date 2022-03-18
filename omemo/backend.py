@@ -46,6 +46,13 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
     async def build_session(self, device: DeviceInformation, bundle: Bundle) -> Session:
         """
         TODO
+
+        Warning:
+            This method may be called for a device which already has a session. In that case, the original
+            session must remain in storage and must remain loadable via :meth:`load_session`. Only upon
+            calling :meth:`persist` on the new session, the old session must be overwritten with the new one.
+            In summary, multiple sessions for the same device can exist in memory, while only one session per
+            device can exist in storage, which can be controlled using the :meth:`persist` method.
         """
 
         pass
