@@ -763,7 +763,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                     try:
                         bundle = self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
                         session = await backend.build_session(device, bundle)
-                        await self.__send_empty_message(backend, session) # TODO
+                        await self._send_message(await backend.encrypt_empty_message(session))
                         await session.persist()
                     except OMEMOException as e:
                         unsuccessful.add((device, e))

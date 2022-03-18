@@ -19,8 +19,8 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
         listed explicitly.
     
-    Note:
-        All parameters are treated as immutable unless explicitly noted otherwise.
+    Warning:
+        All parameters must be treated as immutable unless explicitly noted otherwise.
 
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
@@ -59,6 +59,14 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
 
     @abstractmethod
     async def encrypt_message(self, sessions: Set[Session], message: Plaintext) -> Message:
+        """
+        TODO
+        """
+
+        pass
+
+    @abstractmethod
+    async def encrypt_empty_message(self, session: Session) -> Message:
         """
         TODO
         """
