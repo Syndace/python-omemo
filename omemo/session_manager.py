@@ -700,9 +700,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         
         Returns:
             A set of devices for which the attempt at session replacement was unsuccessful, including the
-            reason for the failure. If the reason is a :class:`StorageException`, there is a high change that
-            the session was left in an inconsistent state. Other reasons imply that the session replacement
-            failed before having any effect on the state of either side.
+            reason for the failure. The `namespaces` field of the returned device information structure
+            contains those namespaces for which the replacement attempt has failed. If the reason is a
+            :class:`StorageException`, there is a high change that the session was left in an inconsistent
+            state. Other reasons imply that the session replacement failed before having any effect on the
+            state of either side. 
 
         Warning:
             This method can not guarantee that sessions are left in a consistent state. For example, if the
@@ -752,6 +754,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                         await session.persist()
                     except OMEMOException as e:
                         unsuccessful.add((device, e))
+                    else:
+                        device.namespaces.remove(backend.namespace)
 
         return unsuccessful
 
