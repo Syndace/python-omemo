@@ -1,8 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import base64
 import itertools
-import os
-import struct
+import secrets
 from typing import cast, Any, Generic, List, Optional, Set, Tuple, Type, TypeVar
 
 from .backend import Backend
@@ -64,20 +63,23 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     users and much more, all while being flexibly usable with different backends and transparenlty maintaining
     a level of compatibility between the backends that allows you to maintain a single identity throughout all
     of them. Easy APIs are provided to handle common use-cases of OMEMO-enabled XMPP clients, with one of the
-    primary goals being strict type safety.
+    primary goals being strict type safety. The plaintext generic can be used to choose a convenient type for
+    the plaintext passed/received from the encrypt/decrypt methods. Which type to choose depends on the loaded
+    backends. For example, if only one backend is loaded which uses
+    `SCE <https://xmpp.org/extensions/xep-0420.html>`__, a good choice for the plaintext type might be some
+    XML/stanza structure. For other backends, Pythons `str` type might be a better choice. If multiple
+    backends are loaded, a common ground must be found.
 
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
         listed explicitly.
     
     Note:
-        All parameters are treated as immutable unless explicitly noted otherwise. TODO
+        All parameters are treated as immutable unless explicitly noted otherwise.
 
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
         Ed25519 format. Otherwise, "identity key pair" is explicitly used to refer to the full key pair.
-
-    TODO: Document the Plaintext generic
     """
 
     HEARTBEAT_MESSAGE_TRIGGER = 53
@@ -152,6 +154,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             normal operation. Refer to the documentation of :meth:`before_history_sync` and
             :meth:`after_history_sync` for details.
 
+        Warning:
+            The library takes care of keeping online data in sync. That means, if the library is loaded
+            without a backend that was loaded before, it will remove all online data related to the missing
+            backend and as much of the offline data as possible (refer to :meth:`purge_backend` for details).
+
         Note:
             This method takes care of leaving the device lists in a consistent state. To do so, backends are
             "initialized" one after the other. For each backend, the device list is updated as the very last
@@ -168,7 +175,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         """
 
         self = cls()
-        self.__backends = backends
+        self.__backends = list(backends) # Copy to make sure the original is not modified
         self.__storage = storage
         self.__own_bare_jid = own_bare_jid
         self.__undecided_trust_level_name = undecided_trust_level_name
@@ -190,12 +197,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             # existing device ids.
             DEVICE_ID_MIN = 1
             DEVICE_ID_MAX = 2 ** 31 - 1
-            self.__own_device_id = next(
-                device_id
-                for device_id
-                in (cast(Tuple[int], struct.unpack(">L", os.urandom(4)))[0] for _ in itertools.count())
-                if device_id >= DEVICE_ID_MIN and device_id <= DEVICE_ID_MAX and device_id not in device_ids
-            )
+
+            self.__own_device_id = next(filter(
+                lambda device_id: device_id not in device_ids,
+                (secrets.randbelow(DEVICE_ID_MAX - DEVICE_ID_MIN) + DEVICE_ID_MIN for _ in itertools.count())
+            ))
 
             # Store the device information for this device
             await storage.store("/devices/{}/{}/namespaces".format(
@@ -264,7 +270,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             
             # Perform cleanup of removed backends
             for namespace in active_namespaces - loaded_namespaces:
-                # TODO: Is this a little radical?
                 await self.purge_backend(namespace)
 
         # Perform age check and rotation of the signed pre key
@@ -299,6 +304,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Warning:
             Make sure to unsubscribe from updates to all device lists before calling this method.
+        
+        Note:
+            If the backend-specific offline data is not purged, the backend can be loaded again at a later
+            point and the online data can be restored. This is what happens when a backend that was previously
+            loaded is omitted from :meth:`create`.
         """
 
         # First half of online data removal: remove this device from the device list. This has to be the first
@@ -327,11 +337,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         ), device.active)
 
         # If the backend is currently loaded, remove it from the list of loaded backends
-        backends = set(filter(lambda backend: backend.namespace == namespace, self.__backends))
-        self.__backends = self.__backends - backends
+        purged_backends = set(filter(lambda backend: backend.namespace == namespace, self.__backends))
+        self.__backends = list(filter(lambda backend: backend.namespace != namespace, self.__backends))
 
         # Remaining backend-specific offline data removal
-        for backend in backends:
+        for backend in purged_backends:
             await backend.purge()
 
         # Second half of online data removal: delete the bundle of this device. This step has low priority,
@@ -575,6 +585,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         """
 
         storage = self.__storage
+
+        # Copy to make sure the original is not modified
+        device_list = dict(device_list)
 
         new_device_list = set(device_list.keys())
         old_device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
@@ -1006,11 +1019,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             rather hypothetical) case that two or more parties selected the same one-time pre key to initiate
             a session with this device while it was offline. When history synchronization ends, all one-time
             pre keys that were kept around are deleted and the library returns to normal behaviour.
-        * Automated responses are collected during synchronization, such that only the minimum required number
-            of messages is sent. TODO: Really tho?
-
+        
         Note:
-            TODO: The lib can process live event too while in history sync mode
+            While in history synchronization mode, the library can process live events too.
         """
 
         # TODO
@@ -1020,9 +1031,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         If the library is in "history synchronization mode" started by :meth:`create` or
         :meth:`before_history_sync`, calling this makes it return to normal working behaviour. Make sure to
         call this as soon as history synchronization (if any) is done.
-
-        Raises:
-            # TODO
         """
 
         # TODO
@@ -1030,10 +1038,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     ##############################
     # message en- and decryption #
     ##############################
-
-    # TODO: check whether the ephemeral key is stored with the session for omemo:1
-    # TODO: check whether the key exchange header is stored with the session until a successful key exchange is confirmed
-    # TODO: internal method to encrypt empty messages?
 
     async def __encrypt_message(
         self,
@@ -1153,8 +1157,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
             effective_backend_priority_order = backend_priority_order
 
-        # Add the own bare JID to the list of recipients
-        bare_jids |= { self.__own_bare_jid }
+        # Add the own bare JID to the list of recipients.
+        # Copy to make sure the original is not modified.
+        bare_jids = set(bare_jids) | { self.__own_bare_jid }
         
         # Load the device information of all recipients
         def is_valid_recipient_device(device: DeviceInformation) -> bool:
@@ -1281,6 +1286,5 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
             information about the ``Plaintext`` type.
         """
-        # THIS METHOD IS AFFECTED BY HISTORY SYNCHRONIZATION MODE #
 
         # TODO
