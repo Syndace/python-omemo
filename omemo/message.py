@@ -1,11 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Set, Tuple
 
 class Content(ABC):
     pass
 
 class KeyMaterial(ABC):
-    pass
+    @property
+    @abstractmethod
+    def bare_jid(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def device_id(self) -> int:
+        pass
 
 class KeyExchange(ABC):
     @property
@@ -21,12 +29,12 @@ class Message(ABC):
 
     @property
     @abstractmethod
-    def sender_bare_jid(self) -> str:
+    def bare_jid(self) -> str:
         pass
 
     @property
     @abstractmethod
-    def sender_device_id(self) -> int:
+    def device_id(self) -> int:
         pass
 
     @property
@@ -34,10 +42,7 @@ class Message(ABC):
     def content(self) -> Content:
         pass
 
+    @property
     @abstractmethod
-    def get_key_material(self, bare_jid: str, device_id: int) -> Optional[KeyMaterial]:
-        pass
-
-    @abstractmethod
-    def get_key_exchange(self, bare_jid: str, device_id: int) -> Optional[KeyExchange]:
+    def keys(self) -> Set[Tuple[KeyMaterial, Optional[KeyExchange]]]:
         pass

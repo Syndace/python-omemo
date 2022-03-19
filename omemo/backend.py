@@ -10,6 +10,8 @@ from .types import DeviceInformation, OMEMOException
 class BackendException(OMEMOException):
     pass
 
+# TODO: Find a better way to handle Message, Bundle etc. subtypes
+
 Plaintext = TypeVar("Plaintext")
 class Backend(Generic[Plaintext], metaclass=ABCMeta):
     """
@@ -80,8 +82,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
     def build_message(
         self,
         content: Content,
-        key_material: Set[KeyMaterial],
-        key_exchanges: Set[KeyExchange]
+        keys: Set[Tuple[KeyMaterial, Optional[KeyExchange]]]
     ) -> Message:
         """
         TODO

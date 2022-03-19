@@ -782,7 +782,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                         session.set_key_exchange(key_exchange)
 
                         content, key_material = await backend.encrypt_empty(session)
-                        message = backend.build_message(content, { key_material }, { key_exchange })
+                        message = backend.build_message(content, { (key_material, key_exchange) })
                         await self._send_message(message)
                         await session.persist()
                     except OMEMOException as e:
@@ -1117,8 +1117,13 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         content, key_material = await backend.encrypt(sessions, plaintext)
         message = backend.build_message(
             content,
-            key_material,
-            { session.key_exchange for session in sessions if session.key_exchange is not None }
+            { (
+                next(filter(
+                    lambda km: km.bare_jid == session.bare_jid and km.device_id == session.device_id,
+                    key_material
+                )),
+                session.key_exchange
+            ) for session in sessions }
         )
 
         # Store the sessions as the final step
@@ -1323,28 +1328,30 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             ))
 
         # Check if there is key material for us
-        key_material = message.get_key_material(self.__own_bare_jid, self.__own_device_id)
-        if key_material is None:
+        try:
+            key_material, key_exchange = next(filter(
+                lambda k: k[0].bare_jid == self.__own_bare_jid and k[0].device_id == self.__own_device_id,
+                message.keys
+            ))
+        except StopIteration:
             raise # TODO
 
-        key_exchange = message.get_key_exchange(self.__own_bare_jid, self.__own_device_id)
-
         # Check whether the sending device is known
-        devices = await self.get_device_information(message.sender_bare_jid)
-        device = next(filter(lambda device: device.device_id == message.sender_device_id, devices), None)
+        devices = await self.get_device_information(message.bare_jid)
+        device = next(filter(lambda device: device.device_id == message.device_id, devices), None)
         if device is None:
             # If it isn't, trigger a refresh of the device list. This shouldn't be necessary due to PEP
             # subscription mechanisms, however there might be race conditions and it doesn't hurt to refresh
             # here.
-            await self.refresh_device_list(message.namespace, message.sender_bare_jid)
+            await self.refresh_device_list(message.namespace, message.bare_jid)
 
             # Once the device list has been refreshed, look for the device again
-            devices = await self.get_device_information(message.sender_bare_jid)
+            devices = await self.get_device_information(message.bare_jid)
 
             # This time, if the device is still not found, abort. This is not strictly required - the message
             # could be decrypted anyway. However, it would mean the sending device is not complying with the
             # specification, which is shady, thus it's not wrong to abort here either.
-            device = next(filter(lambda device: device.device_id == message.sender_device_id, devices), None)
+            device = next(filter(lambda device: device.device_id == message.device_id, devices), None)
             if device is None:
                 raise # TODO
 
