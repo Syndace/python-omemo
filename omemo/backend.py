@@ -1,9 +1,9 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any, Generic, Optional, Set, TypeVar
+from typing import Any, Generic, Optional, Set, Tuple, TypeVar
 
 from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
-from .message import Encrypted, KeyExchange, Message
+from .message import Content, KeyMaterial, KeyExchange, Message
 from .session import Session
 from .types import DeviceInformation, OMEMOException
 
@@ -43,7 +43,11 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def build_session_active(self, device: DeviceInformation, bundle: Bundle) -> Session:
+    async def build_session_active(
+        self,
+        device: DeviceInformation,
+        bundle: Bundle
+    ) -> Tuple[Session, KeyExchange]:
         """
         TODO
 
@@ -73,7 +77,12 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def key_exchange_builds_session(self, key_exchange: KeyExchange, session: Session) -> bool:
+    def build_message(
+        self,
+        content: Content,
+        key_material: Set[KeyMaterial],
+        key_exchanges: Set[KeyExchange]
+    ) -> Message:
         """
         TODO
         """
@@ -81,7 +90,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def encrypt_message(self, sessions: Set[Session], message: Plaintext) -> Message:
+    async def encrypt(self, sessions: Set[Session], plaintext: Plaintext) -> Tuple[Content, Set[KeyMaterial]]:
         """
         TODO
         """
@@ -89,7 +98,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def encrypt_empty_message(self, session: Session) -> Message:
+    async def encrypt_empty(self, session: Session) -> Tuple[Content, KeyMaterial]:
         """
         TODO
         """
@@ -97,10 +106,11 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def decrypt_message(
+    async def decrypt(
         self,
         session: Session,
-        encrypted: Encrypted,
+        content: Content,
+        key_material: KeyMaterial,
         max_num_per_session_skipped_keys: int,
         max_num_per_message_skipped_keys: int
     ) -> Plaintext:

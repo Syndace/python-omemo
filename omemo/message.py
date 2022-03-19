@@ -1,15 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Optional
 
-class Encrypted(ABC):
+class Content(ABC):
+    pass
+
+class KeyMaterial(ABC):
     pass
 
 class KeyExchange(ABC):
-    @property
-    @abstractmethod
-    def encrypted(self) -> Encrypted:
-        pass
-
     @property
     @abstractmethod
     def identity_key(self) -> bytes:
@@ -31,6 +29,15 @@ class Message(ABC):
     def sender_device_id(self) -> int:
         pass
 
+    @property
     @abstractmethod
-    def get_submessage(self, bare_jid: str, device_id: int) -> Optional[Union[Encrypted, KeyExchange]]:
+    def content(self) -> Content:
+        pass
+
+    @abstractmethod
+    def get_key_material(self, bare_jid: str, device_id: int) -> Optional[KeyMaterial]:
+        pass
+
+    @abstractmethod
+    def get_key_exchange(self, bare_jid: str, device_id: int) -> Optional[KeyExchange]:
         pass

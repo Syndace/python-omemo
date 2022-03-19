@@ -7,7 +7,7 @@ from typing import cast, Any, Generic, List, Optional, Set, Tuple, Type, TypeVar
 from .backend import Backend
 from .bundle  import Bundle
 from .identity_key_pair import IdentityKeyPair
-from .message import Encrypted, KeyExchange, Message
+from .message import Message
 from .session import Session
 from .storage import Nothing, Storage
 from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
@@ -173,9 +173,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             from the storage when calling this method again.
 
         Note:
-            The order of the backends can optionally be used by :meth:`encrypt_message` as the order of
-            priority, in case a recipient device supports multiple backends. Refer to the documentation of
-            :meth:`encrypt_message` for details.
+            The order of the backends can optionally be used by :meth:`encrypt` as the order of priority, in
+            case a recipient device supports multiple backends. Refer to the documentation of :meth:`encrypt`
+            for details.
         """
 
         if len({ backend.namespace for backend in backends }) != len(backends):
@@ -495,7 +495,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         * `Trusted`: This device is trusted, encryption/decryption of messages to/from it is allowed.
         * `Distrusted`: This device is explicitly *not* trusted, do not encrypt/decrypt messages to/from it.
         * `Undecided`: A trust decision is yet to be made. It is not clear whether it is okay to
-            encrypt/decrypt messages to/from it.
+            encrypt messages to it, however decrypting messages from it is allowed.
 
         Args:
             trust_level_name: The name of the custom trust level to translate.
@@ -533,11 +533,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 to raise a subclass instead.
 
         Note:
-            This is called when the message encryption needs to know whether it is allowed to encrypt the
-            message for these devices or not. When this method returns, all previously undecided trust levels
-            should have been replaced by calling :meth:`set_trust` with a different trust level. If they are
-            not replaced or still evaluate to the undecided trust level after the call, the message encryption
-            will fail with an exception. See :meth:`encrypt_message` for details.
+            This is called when the encryption needs to know whether it is allowed to encrypt for these
+            devices or not. When this method returns, all previously undecided trust levels should have been
+            replaced by calling :meth:`set_trust` with a different trust level. If they are not replaced or
+            still evaluate to the undecided trust level after the call, the encryption will fail with an
+            exception. See :meth:`encrypt` for details.
         """
 
         raise NotImplementedError("Create a subclass of SessionManager and implement `_make_trust_decision`.")
@@ -558,8 +558,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         * Backend-dependent session healing mechanisms.
         * Backend-dependent empty messages to notify other devices about potentially "broken" sessions.
 
-        Note that messages sent here do not contain any content, they are just empty messages to transport key
-        material.
+        Note that messages sent here do not contain any content, they just transport key material.
 
         Args:
             message: The message to send.
@@ -772,9 +771,19 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             for device in devices:
                 if backend.namespace in device.namespaces:
                     try:
-                        bundle = self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
-                        session = await backend.build_session_active(device, bundle)
-                        await self._send_message(await backend.encrypt_empty_message(session))
+                        session, key_exchange = await backend.build_session_active(
+                            device,
+                            await self._download_bundle(
+                                backend.namespace,
+                                device.bare_jid,
+                                device.device_id
+                            )
+                        )
+                        session.set_key_exchange(key_exchange)
+
+                        content, key_material = await backend.encrypt_empty(session)
+                        message = backend.build_message(content, { key_material }, { key_exchange })
+                        await self._send_message(message)
                         await session.persist()
                     except OMEMOException as e:
                         unsuccessful.add((device, e))
@@ -1048,25 +1057,25 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         for backend in self.__backends:
             await backend.delete_hidden_pre_keys()
 
-    ##############################
-    # message en- and decryption #
-    ##############################
+    ######################
+    # en- and decryption #
+    ######################
 
-    async def __encrypt_message(
+    async def __encrypt( # TODO: There is no reason to have this separate, right?
         self,
         namespace: str,
         devices: Set[DeviceInformation],
-        message: Plaintext,
+        plaintext: Plaintext,
         bundle_cache: Set[Bundle]
     ) -> Message:
         """
-        Internal method for message encryption to a fixed set of recipients, i.e. trust decisions etc. must be
-        performed by the calling code beforehand.
+        Internal method for plaintext encryption to a fixed set of recipients, i.e. trust decisions etc. must
+        be performed by the calling code beforehand.
 
         Args:
-            namespace: The namespace of the backend to encrypt the message with.
+            namespace: The namespace of the backend to encrypt the plaintext with.
             devices: The set of devices to encrypt for.
-            message: The message to encrypt.
+            plaintext: The plaintext to encrypt.
             bundle_cache: A set of bundles that were recently downloaded and should be used instead of
                 fetching them to reduce network load.
         
@@ -1078,7 +1087,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             TODO
         """
     
-        # TODO: Think about how to handle bundle download failures here. Not raising feels wrong.
+        # TODO: Think about how to handle bundle download and key exchange failures here. Currently just
+        # raises.
 
         backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
 
@@ -1086,17 +1096,16 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         async def load_or_create_session(device: DeviceInformation) -> Session:
             session = await backend.load_session(device)
             if session is None:
-                cached_bundle = list(filter(lambda bundle: (
-                    bundle.bare_jid == device.bare_jid and
-                    bundle.device_id == device.device_id
-                ), bundle_cache))
-
                 try:
-                    bundle = cached_bundle[0]
-                except IndexError:
+                    bundle = next(filter(lambda bundle: (
+                        bundle.bare_jid == device.bare_jid and
+                        bundle.device_id == device.device_id
+                    ), bundle_cache))
+                except StopIteration:
                     bundle = await self._download_bundle(namespace, device.bare_jid, device.device_id)
 
-                session = await backend.build_session_active(device, bundle)
+                session, key_exchange = await backend.build_session_active(device, bundle)
+                session.set_key_exchange(key_exchange)
 
             return session
 
@@ -1105,27 +1114,31 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # Perform the encryption, which is mostly backend-specific. There are certain aspects common to all
         # backends, however forcing those into interfaces is not worth it, as the code duplication is
         # negligible.
-        # TODO: Maybe this should go a bit deeper after all?
-        result = await backend.encrypt_message(sessions, message)
+        content, key_material = await backend.encrypt(sessions, plaintext)
+        message = backend.build_message(
+            content,
+            key_material,
+            { session.key_exchange for session in sessions if session.key_exchange is not None }
+        )
 
         # Store the sessions as the final step
         for session in sessions:
             await session.persist()
 
-        return result
+        return message
 
-    async def encrypt_message(
+    async def encrypt(
         self,
         bare_jids: Set[str],
-        message: Plaintext,
+        plaintext: Plaintext,
         backend_priority_order: Optional[List[str]] = None
     ) -> Set[Message]:
         """
-        Encrypt a message for a set of recipients.
+        Encrypt some plaintext for a set of recipients.
 
         Args:
             bare_jids: The bare JIDs of the intended recipients.
-            message: The message to encrypt for the recipients. Details depend on the backend(s).
+            plaintext: The plaintext to encrypt for the recipients. Details depend on the backend(s).
             backend_priority_order: If a recipient device supports multiple versions of OMEMO, this parameter
                 decides which version to prioritize. If ``None`` is supplied, the order of backends as passed
                 to :meth:`create` is assumed as the order of priority. If a list of namespaces is supplied,
@@ -1265,16 +1278,16 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 no_eligible_devices
             )
 
-        # Encrypt the message once per backend, but skip backends that don't have a single recipient device
-        # remaining
-        return { await self.__encrypt_message(
+        # Encrypt the plaintext once per backend, but skip backends that don't have a single recipient device
+        # remaining # TODO: Think about failure handling here too
+        return { await self.__encrypt(
             ns,
             set(filter(lambda device: device.namespaces[0] == ns, devices)),
-            message,
+            plaintext,
             set(filter(lambda bundle: bundle.namespace == ns, bundle_cache))
         ) for ns in effective_backend_priority_order if any(dev.namespaces[0] == ns for dev in devices) }
 
-    async def decrypt_message(self, message: Message) -> Tuple[Plaintext, DeviceInformation]:
+    async def decrypt(self, message: Message) -> Tuple[Plaintext, DeviceInformation]:
         """
         Decrypt a message.
 
@@ -1282,8 +1295,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             message: The message to decrypt.
 
         Returns:
-            A tuple, where the first entry is the decrypted message and the second entry contains information
-            about the device that sent the message.
+            A tuple, where the first entry is the decrypted plaintext and the second entry contains
+            information about the device that sent the message.
 
         Raises:
             UnkownNamespace: if the backend to handle the message is not currently loaded.
@@ -1309,20 +1322,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 message.namespace
             ))
 
-        # Check if there is a submessage for us
-        submessage = message.get_submessage(self.__own_bare_jid, self.__own_device_id)
-        if submessage is None:
+        # Check if there is key material for us
+        key_material = message.get_key_material(self.__own_bare_jid, self.__own_device_id)
+        if key_material is None:
             raise # TODO
 
-        # Unpack the submessage into key exchange and encrypted
-        key_exchange: Optional[KeyExchange]
-        encrypted: Encrypted
-        if isinstance(submessage, KeyExchange):
-            key_exchange = submessage
-            encrypted = key_exchange.encrypted
-        else:
-            key_exchange = None
-            encrypted = submessage
+        key_exchange = message.get_key_exchange(self.__own_bare_jid, self.__own_device_id)
 
         # Check whether the sending device is known
         devices = await self.get_device_information(message.sender_bare_jid)
@@ -1362,7 +1367,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             session = await backend.load_session(device)
             if session is not None:
                 # Check whether the key exchange would build the same session
-                if not await backend.key_exchange_builds_session(key_exchange, session):
+                if not session.built_by_key_exchange(key_exchange):
                     # If the key exchange would build a new session, treat this session as non-existent
                     session = None
 
@@ -1371,12 +1376,19 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 session = await backend.build_session_passive(device, key_exchange)
 
         # Decrypt the message
-        plaintext = await backend.decrypt_message(
+        plaintext = await backend.decrypt(
             session,
-            encrypted,
+            message.content,
+            key_material,
             self.__max_num_per_session_skipped_keys,
             self.__max_num_per_message_skipped_keys
         )
+
+        # Key exchanges are sent with encrypted messages for new sessions, until it is confirmed that the
+        # other party has received at least one of them. Once a new session is used to decrypt a message, the
+        # other party is confirmed to have received at least one of the key exchanges, so the data can be
+        # safely deleted.
+        session.delete_key_exchange()
 
         # Persist the session following successful decryption
         await session.persist()

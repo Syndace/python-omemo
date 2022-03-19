@@ -1,5 +1,7 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any
+from typing import Any, Optional
+
+from .message import KeyExchange
 
 class Session(metaclass=ABCMeta):
     """
@@ -40,4 +42,38 @@ class Session(metaclass=ABCMeta):
         TODO
         """
 
+        pass
+
+    @property
+    @abstractmethod
+    def key_exchange(self) -> Optional[KeyExchange]:
+        """
+        TODO
+        """
+
+        pass
+
+    @abstractmethod
+    def set_key_exchange(self, key_exchange: KeyExchange) -> Any:
+        """
+        TODO
+        """
+
+        pass
+
+    @abstractmethod
+    def delete_key_exchange(self) -> Any:
+        """
+        TODO
+        """
+
+        pass
+
+    @abstractmethod
+    def built_by_key_exchange(self, key_exchange: KeyExchange) -> bool:
+        """
+        TODO
+        """
+
+        # TODO: Could this just be KeyExchange.__eq__?
         pass
