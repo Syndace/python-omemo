@@ -7,7 +7,7 @@ from typing import cast, Any, Generic, List, Optional, Set, Tuple, Type, TypeVar
 from .backend import Backend
 from .bundle  import Bundle
 from .identity_key_pair import IdentityKeyPair
-from .message import Message
+from .message import Encrypted, KeyExchange, Message
 from .session import Session
 from .storage import Nothing, Storage
 from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
@@ -91,7 +91,11 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         self.__own_bare_jid: str
         self.__own_device_id: int
         self.__undecided_trust_level_name: str
+        self.__max_num_per_session_skipped_keys: int
+        self.__max_num_per_message_skipped_keys: Optional[int]
+        self.__pre_key_refill_threshold: int
         self.__identity_key_pair: IdentityKeyPair
+        self.__synchronizing: bool
 
     @classmethod
     async def create(
@@ -174,12 +178,19 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             :meth:`encrypt_message` for details.
         """
 
+        if len({ backend.namespace for backend in backends }) != len(backends):
+            raise ValueError("Multiple backends that handle the same namespace were passed.")
+
         self = cls()
         self.__backends = list(backends) # Copy to make sure the original is not modified
         self.__storage = storage
         self.__own_bare_jid = own_bare_jid
         self.__undecided_trust_level_name = undecided_trust_level_name
+        self.__max_num_per_session_skipped_keys = max_num_per_session_skipped_keys
+        self.__max_num_per_message_skipped_keys = max_num_per_message_skipped_keys
+        self.__pre_key_refill_threshold = pre_key_refill_threshold
         self.__identity_key_pair = await IdentityKeyPair.get(storage)
+        self.__synchronizing = True
 
         try:
             self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).from_just()
@@ -337,12 +348,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         ), device.active)
 
         # If the backend is currently loaded, remove it from the list of loaded backends
-        purged_backends = set(filter(lambda backend: backend.namespace == namespace, self.__backends))
+        purged_backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends), None)
         self.__backends = list(filter(lambda backend: backend.namespace != namespace, self.__backends))
 
         # Remaining backend-specific offline data removal
-        for backend in purged_backends:
-            await backend.purge()
+        if purged_backend is not None:
+            await purged_backend.purge()
 
         # Second half of online data removal: delete the bundle of this device. This step has low priority,
         # thus done last.
@@ -762,7 +773,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 if backend.namespace in device.namespaces:
                     try:
                         bundle = self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
-                        session = await backend.build_session(device, bundle)
+                        session = await backend.build_session_active(device, bundle)
                         await self._send_message(await backend.encrypt_empty_message(session))
                         await session.persist()
                     except OMEMOException as e:
@@ -1024,7 +1035,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             While in history synchronization mode, the library can process live events too.
         """
 
-        # TODO
+        self.__synchronizing = True
 
     async def after_history_sync(self) -> None:
         """
@@ -1033,7 +1044,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         call this as soon as history synchronization (if any) is done.
         """
 
-        # TODO
+        self.__synchronizing = False
+        for backend in self.__backends:
+            await backend.delete_hidden_pre_keys()
 
     ##############################
     # message en- and decryption #
@@ -1083,7 +1096,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 except IndexError:
                     bundle = await self._download_bundle(namespace, device.bare_jid, device.device_id)
 
-                session = await backend.build_session(device, bundle)
+                session = await backend.build_session_active(device, bundle)
 
             return session
 
@@ -1092,6 +1105,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # Perform the encryption, which is mostly backend-specific. There are certain aspects common to all
         # backends, however forcing those into interfaces is not worth it, as the code duplication is
         # negligible.
+        # TODO: Maybe this should go a bit deeper after all?
         result = await backend.encrypt_message(sessions, message)
 
         # Store the sessions as the final step
@@ -1272,6 +1286,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             about the device that sent the message.
 
         Raises:
+            UnkownNamespace: if the backend to handle the message is not currently loaded.
             # TODO
 
         Warning:
@@ -1287,4 +1302,103 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             information about the ``Plaintext`` type.
         """
 
-        # TODO
+        # Find the backend to handle this message
+        backend = next(filter(lambda backend: backend.namespace == message.namespace, self.__backends), None)
+        if backend is None:
+            raise UnknownNamespace("Backend corresponding to namespace {} is not currently loaded.".format(
+                message.namespace
+            ))
+
+        # Check if there is a submessage for us
+        submessage = message.get_submessage(self.__own_bare_jid, self.__own_device_id)
+        if submessage is None:
+            raise # TODO
+
+        # Unpack the submessage into key exchange and encrypted
+        key_exchange: Optional[KeyExchange]
+        encrypted: Encrypted
+        if isinstance(submessage, KeyExchange):
+            key_exchange = submessage
+            encrypted = key_exchange.encrypted
+        else:
+            key_exchange = None
+            encrypted = submessage
+
+        # Check whether the sending device is known
+        devices = await self.get_device_information(message.sender_bare_jid)
+        device = next(filter(lambda device: device.device_id == message.sender_device_id, devices), None)
+        if device is None:
+            # If it isn't, trigger a refresh of the device list. This shouldn't be necessary due to PEP
+            # subscription mechanisms, however there might be race conditions and it doesn't hurt to refresh
+            # here.
+            await self.refresh_device_list(message.namespace, message.sender_bare_jid)
+
+            # Once the device list has been refreshed, look for the device again
+            devices = await self.get_device_information(message.sender_bare_jid)
+
+            # This time, if the device is still not found, abort. This is not strictly required - the message
+            # could be decrypted anyway. However, it would mean the sending device is not complying with the
+            # specification, which is shady, thus it's not wrong to abort here either.
+            device = next(filter(lambda device: device.device_id == message.sender_device_id, devices), None)
+            if device is None:
+                raise # TODO
+
+        # Check the trust level of the sending device. Abort in case of explicit distrust.
+        if self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Distrusted:
+            raise # TODO
+
+        # Handle the key exchange if available
+        if key_exchange is None:
+            # If there is no key exchange, a session has to exist and should be loadable
+            session = await backend.load_session(device)
+            if session is None:
+                raise # TODO
+        else:
+            # Check whether the identity key matches the one we know
+            if key_exchange.identity_key != device.identity_key:
+                raise # TODO
+
+            # Check whether there is a session with the sending device already
+            session = await backend.load_session(device)
+            if session is not None:
+                # Check whether the key exchange would build the same session
+                if not await backend.key_exchange_builds_session(key_exchange, session):
+                    # If the key exchange would build a new session, treat this session as non-existent
+                    session = None
+
+            # If a new session needs to be built, do so
+            if session is None:
+                session = await backend.build_session_passive(device, key_exchange)
+
+        # Decrypt the message
+        plaintext = await backend.decrypt_message(
+            session,
+            encrypted,
+            self.__max_num_per_session_skipped_keys,
+            self.__max_num_per_message_skipped_keys
+        )
+
+        # Persist the session following successful decryption
+        await session.persist()
+
+        # If this message was a key exchange, take care of pre key hiding/deletion as the last step.
+        if key_exchange is not None:
+            bundle_changed: bool
+            if self.__synchronizing:
+                # If the library is currently in history synchronization mode, hide the pre key but defer the
+                # deletion.
+                bundle_changed = await backend.hide_pre_key(session)
+            else:
+                # Otherwise, delete the pre key right away
+                bundle_changed = await backend.delete_pre_key(session)
+
+            if bundle_changed:
+                await backend.refill_pre_keys(self.__pre_key_refill_threshold)
+                await self._upload_bundle(await backend.bundle(
+                    self.__own_bare_jid,
+                    self.__own_device_id,
+                    self.__identity_key_pair.identity_key
+                ))
+
+        # Return the plaintext and information about the sending device
+        return (plaintext, device)

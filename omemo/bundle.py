@@ -3,20 +3,20 @@ from abc import ABC, abstractmethod
 class Bundle(ABC):
     @property
     @abstractmethod
-    def namespace() -> str:
+    def namespace(self) -> str:
         pass
 
     @property
     @abstractmethod
-    def bare_jid() -> str:
+    def bare_jid(self) -> str:
         pass
 
     @property
     @abstractmethod
-    def device_id() -> int:
+    def device_id(self) -> int:
         pass
 
     @property
     @abstractmethod
-    def identity_key() -> bytes:
+    def identity_key(self) -> bytes:
         pass
