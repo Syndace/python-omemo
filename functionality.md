@@ -72,7 +72,6 @@
     - [x] own devices are automatically added to the list of recipients, the sending device is removed from the list
     - [x] messages are only encrypted for devices whose trust level evaluates to "trusted"
     - [x] the message is not automatically sent, but a structure containing the encrypted payload and the headers is returned
-        - [x] this allows implementation of e.g. KeyTransportMessages of legacy OMEMO
     - [x] the backend to encrypt the message with can be selected explicitly or implicitly
         - [x] in the implicit selection, a list of backends is given of which the order decides priority
         - [x] in the implicit selection, support for each backend by the recipient is detected by looking for the presence of respective bundles on the server
@@ -83,7 +82,7 @@
 
 - [x] empty OMEMO messages can be sent
     - [x] transparently when required by the protocol
-    - [x] explicit APIs for empty OMEMO messages are not provided (KeyTransportMessages for legacy OMEMO are a different topic)
+    - [x] explicit API for empty OMEMO messages is not provided
     - [x] a mechanism must be provided by the application to send empty OMEMO messages
     - [x] trust is circumvented for empty OMEMO messages
 
@@ -153,10 +152,9 @@
     - [ ] automatic migrations between storage format versions are provided
         - [ ] a legacy python-omemo to modern python-omemo migration tool is provided
         - [ ] a libsignal to python-omemo migration tool will be provided in the future(, as part of the legacy backend?)
-    - [ ] storage consistency is guaranteed
-        - [x] write operations MUST NOT cache but perform the writing operation right away
-        - [ ] when decrypting, changes to the state are only saved on success
-        - [ ] when encrypting, changes to the state are saved before they are used for any further operation
+    - [x] storage consistency is guaranteed
+        - [x] write operations MUST NOT cache or defer but perform the writing operation right away
+        - [x] when encrypting or decrypting, changes to the state are only persisted when success is guaranteed
 
 - [ ] a convenience method to verify consistency (and fix) of the server-side data with the local data is provided
     - [ ] whether these consistency checks are ran automatically, e.g. once during library startup/once per day etc. is WIP
