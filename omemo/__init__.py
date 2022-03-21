@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING
 from .version import __version__
 from .project import   project
 
-from .backend import BackendException, Backend
+from .backend import Backend, BackendException, KeyExchangeFailed
 from .bundle import Bundle
-from .message import Message
+from .message import Content, KeyExchange, KeyMaterial, Message
 
 from .session_manager import (
     SessionManagerException,
@@ -25,14 +25,6 @@ from .session_manager import (
     SessionManager
 )
 
-from .storage import (
-    StorageException,
-    
-    Nothing,
-    Maybe,
-    
-    Storage
-)
-
+from .storage import Maybe, Nothing, Storage, StorageException
 from .types import DeviceInformation, DeviceList, OMEMOException, TrustLevel
 if TYPE_CHECKING: from .types import JSONType

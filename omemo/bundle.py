@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
 class Bundle(ABC):
+    """
+    TODO
+    """
+
     @property
     @abstractmethod
     def namespace(self) -> str:

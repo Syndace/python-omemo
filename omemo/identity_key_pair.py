@@ -16,7 +16,6 @@ class IdentityKeyPair:
         """
 
         # TODO
-        pass
 
     @classmethod
     async def get(cls: Type[IKP], storage: Storage) -> IKP:
@@ -32,4 +31,3 @@ class IdentityKeyPair:
         """
 
         # TODO
-        pass

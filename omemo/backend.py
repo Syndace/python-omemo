@@ -8,7 +8,20 @@ from .session import Session
 from .types import DeviceInformation, OMEMOException
 
 class BackendException(OMEMOException):
-    pass
+    """
+    Parent type for all exceptions specific to :class:`Backend`.
+    """
+
+class KeyExchangeFailed(BackendException):
+    """
+    Raised by :meth:`build_session_active` and :meth:`build_session_passive` in case of an error during the
+    processing of a key exchange for session building. Known error conditions are:
+    - The bundle does not contain and pre keys (active session building)
+    - The signature of the signed pre key could not be verified (active session building)
+    - An unkown (signed) pre key was referred to (passive session building)
+
+    Additional backend-specific error conditions might exist.
+    """
 
 # TODO: Find a better way to handle Message, Bundle etc. subtypes resp. type safety
 
@@ -65,6 +78,9 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         Returns:
             The newly built session and the key exchange information required by the other device to complete
             the passive part of session building.
+        
+        Raises:
+            KeyExchangeFailed: in case of failure related to the key exchange required for session building.
 
         Warning:
             This method may be called for a device which already has a session. In that case, the original
@@ -88,6 +104,9 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         Returns:
             The newly built session. Note that the pre key used to initiate this session must somehow be
             associated with the session, such that :meth:`hide_pre_key` and :meth:`delete_pre_key` can work.
+        
+        Raises:
+            KeyExchangeFailed: in case of failure related to the key exchange required for session building.
 
         Warning:
             This method may be called for a device which already has a session. In that case, the original

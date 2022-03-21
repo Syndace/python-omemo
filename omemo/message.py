@@ -2,9 +2,15 @@ from abc import ABC, abstractmethod
 from typing import Optional, Set, Tuple
 
 class Content(ABC):
-    pass
+    """
+    TODO
+    """
 
 class KeyMaterial(ABC):
+    """
+    TODO
+    """
+
     @property
     @abstractmethod
     def bare_jid(self) -> str:
@@ -16,12 +22,20 @@ class KeyMaterial(ABC):
         pass
 
 class KeyExchange(ABC):
+    """
+    TODO
+    """
+
     @property
     @abstractmethod
     def identity_key(self) -> bytes:
         pass
 
 class Message(ABC):
+    """
+    TODO
+    """
+    
     @property
     @abstractmethod
     def namespace(self) -> str:

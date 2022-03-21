@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from .message import KeyExchange
 
+# TODO: Move "complex" API to Backend and add documentation about the motivation for doing that
 class Session(ABC):
     """
     TODO

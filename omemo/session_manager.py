@@ -13,46 +13,74 @@ from .storage import Nothing, Storage
 from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
 
 class SessionManagerException(OMEMOException):
-    pass
+    """
+    TODO
+    """
 
 class XMPPInteractionFailed(SessionManagerException):
-    pass
+    """
+    TODO
+    """
 
 class UnknownTrustLevel(SessionManagerException):
-    pass
+    """
+    TODO
+    """
 
 class TrustDecisionFailed(SessionManagerException):
-    pass
+    """
+    TODO
+    """
 
 class StillUndecided(SessionManagerException):
-    pass
+    """
+    TODO
+    """
 
 class NoEligibleDevices(SessionManagerException):
+    """
+    TODO
+    """
+
     def __init__(self, msg: str, bare_jids: Set[str]) -> None:
         super().__init__(msg)
 
         self.bare_jids = bare_jids
 
 class UnknownNamespace(SessionManagerException):
-    pass
+    """
+    TODO
+    """
 
 class BundleUploadFailed(XMPPInteractionFailed):
-    pass
+    """
+    TODO
+    """
 
 class BundleDownloadFailed(XMPPInteractionFailed):
-    pass
+    """
+    TODO
+    """
 
 class BundleDeletionFailed(XMPPInteractionFailed):
-    pass
+    """
+    TODO
+    """
 
 class DeviceListUploadFailed(XMPPInteractionFailed):
-    pass
+    """
+    TODO
+    """
 
 class DeviceListDownloadFailed(XMPPInteractionFailed):
-    pass
+    """
+    TODO
+    """
 
 class MessageSendingFailed(XMPPInteractionFailed):
-    pass
+    """
+    TODO
+    """
 
 # TODO: Take care of logging
 SM = TypeVar("SM", bound="SessionManager")
@@ -68,7 +96,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     backends. For example, if only one backend is loaded which uses
     `SCE <https://xmpp.org/extensions/xep-0420.html>`__, a good choice for the plaintext type might be some
     XML/stanza structure. For other backends, Pythons `str` type might be a better choice. If multiple
-    backends are loaded, a common ground must be found.
+    backends are loaded, a common ground must be chosen.
 
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
@@ -906,11 +934,19 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         return (await self.__get_device_information(bare_jid))[0]
 
     async def __get_device_information(self, bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
+        """
+        TODO
+        """
+
         storage = self.__storage
 
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
         
         async def load_device_information(device_id: int) -> Tuple[DeviceInformation, Optional[Bundle]]:
+            """
+            TODO
+            """
+
             bundle: Optional[Bundle] = None
 
             namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
@@ -1062,77 +1098,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     # en- and decryption #
     ######################
 
-    async def __encrypt( # TODO: There is no reason to have this separate, right?
-        self,
-        namespace: str,
-        devices: Set[DeviceInformation],
-        plaintext: Plaintext,
-        bundle_cache: Set[Bundle]
-    ) -> Message:
-        """
-        Internal method for plaintext encryption to a fixed set of recipients, i.e. trust decisions etc. must
-        be performed by the calling code beforehand.
-
-        Args:
-            namespace: The namespace of the backend to encrypt the plaintext with.
-            devices: The set of devices to encrypt for.
-            plaintext: The plaintext to encrypt.
-            bundle_cache: A set of bundles that were recently downloaded and should be used instead of
-                fetching them to reduce network load.
-        
-        Returns:
-            The encrypted message.
-        
-        Raises:
-            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
-            TODO
-        """
-    
-        # TODO: Think about how to handle bundle download and key exchange failures here. Currently just
-        # raises.
-
-        backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends))
-
-        # Prepare the sessions
-        async def load_or_create_session(device: DeviceInformation) -> Session:
-            session = await backend.load_session(device)
-            if session is None:
-                try:
-                    bundle = next(filter(lambda bundle: (
-                        bundle.bare_jid == device.bare_jid and
-                        bundle.device_id == device.device_id
-                    ), bundle_cache))
-                except StopIteration:
-                    bundle = await self._download_bundle(namespace, device.bare_jid, device.device_id)
-
-                session, key_exchange = await backend.build_session_active(device, bundle)
-                session.set_key_exchange(key_exchange)
-
-            return session
-
-        sessions = { await load_or_create_session(device) for device in devices }
-
-        # Perform the encryption, which is mostly backend-specific. There are certain aspects common to all
-        # backends, however forcing those into interfaces is not worth it, as the code duplication is
-        # negligible.
-        content, key_material = await backend.encrypt(sessions, plaintext)
-        message = backend.build_message(
-            content,
-            { (
-                next(filter(
-                    lambda km: km.bare_jid == session.bare_jid and km.device_id == session.device_id,
-                    key_material
-                )),
-                session.key_exchange
-            ) for session in sessions }
-        )
-
-        # Store the sessions as the final step
-        for session in sessions:
-            await session.persist()
-
-        return message
-
     async def encrypt(
         self,
         bare_jids: Set[str],
@@ -1165,6 +1130,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 qualifies for encryption. Either the recipient does not advertize any OMEMO-enabled devices or
                 all devices were disqualified due to missing trust or failure to download their bundles.
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
+            # TODO: Key exchange error (or nothing?); also applies to BundleDownloadFailed
 
         Note:
             The own JID is implicitly added to the set of recipients, there is no need to list it manually.
@@ -1196,6 +1162,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         
         # Load the device information of all recipients
         def is_valid_recipient_device(device: DeviceInformation) -> bool:
+            """
+            TODO
+            """
+
             # Remove the own device
             if device.bare_jid == self.__own_bare_jid and device.device_id == self.__own_device_id:
                 return False
@@ -1243,9 +1213,17 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
         # the remaining devices)
         def is_undecided(device: DeviceInformation) -> bool:
+            """
+            TODO
+            """
+
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Undecided
 
         def is_trusted(device: DeviceInformation) -> bool:
+            """
+            TODO
+            """
+        
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Trusted
         
         undecided_devices = set(filter(is_undecided, devices))
@@ -1284,14 +1262,75 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 no_eligible_devices
             )
 
-        # Encrypt the plaintext once per backend, but skip backends that don't have a single recipient device
-        # remaining # TODO: Think about failure handling here too
-        return { await self.__encrypt(
-            ns,
-            set(filter(lambda device: device.namespaces[0] == ns, devices)),
-            plaintext,
-            set(filter(lambda bundle: bundle.namespace == ns, bundle_cache))
-        ) for ns in effective_backend_priority_order if any(dev.namespaces[0] == ns for dev in devices) }
+        async def load_or_create_session(backend: Backend[Plaintext], device: DeviceInformation) -> Session:
+            """
+            Helper to load a session for a device or create it if it doesn't exist.
+
+            Args:
+                backend: The backend to load/create this session with.
+                device: The device to load/create this session with.
+            
+            Returns:
+                The loaded or newly created session.
+            
+            Raises:
+                BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
+                TODO: Key exchange error
+            """
+
+            session = await backend.load_session(device)
+            if session is None:
+                try:
+                    bundle = next(filter(lambda bundle: (
+                        bundle.namespace == backend.namespace and
+                        bundle.bare_jid == device.bare_jid and
+                        bundle.device_id == device.device_id
+                    ), bundle_cache))
+                except StopIteration:
+                    bundle = await self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
+
+                session, key_exchange = await backend.build_session_active(device, bundle)
+                session.set_key_exchange(key_exchange)
+
+            return session
+
+        # Encrypt the plaintext once per backend
+        # TODO: Think about how to handle failures
+        # - Device-scope failures: bundle download and key exchange failures
+        # - Library-scope failures: storage failures
+        # - Anything else?
+        messages: Set[Message] = {}
+        for backend in self.__backends:
+            # Find the devices to encrypt for using this backend
+            backend_devices = set(filter(lambda device: device.namespaces[0] == backend.namespace, devices))
+
+            # Skip this backend if there isn't a single recipient device using it
+            if len(backend_devices) == 0:
+                continue
+
+            # Prepare the sessions
+            sessions = { await load_or_create_session(backend, device) for device in backend_devices }
+
+            # Perform the encryption, which is mostly backend-specific.
+            content, key_material = await backend.encrypt(sessions, plaintext)
+
+            # Build pairs of key material and key exchange information
+            keys = { (
+                next(filter(
+                    lambda km: km.bare_jid == session.bare_jid and km.device_id == session.device_id,
+                    key_material
+                )),
+                session.key_exchange
+            ) for session in sessions }
+
+            # Build the message from content, key material and key exchange information
+            messages.add(backend.build_message(content, keys))
+
+            # Persist the sessions as the final step
+            for session in sessions:
+                await session.persist()
+
+        return messages
 
     async def decrypt(self, message: Message) -> Tuple[Plaintext, DeviceInformation]:
         """
@@ -1306,6 +1345,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Raises:
             UnkownNamespace: if the backend to handle the message is not currently loaded.
+            KeyExchangeFailed: in case a new session is built while decrypting this message, and there is an
+                error during the key exchange that's part of the session building. Forwarded from
+                :meth:`~omemo.backend.Backend.build_session_passive`.
             # TODO
 
         Warning:
@@ -1413,8 +1455,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 bundle_changed = await backend.delete_pre_key(session)
 
             if bundle_changed:
-                if await backend.get_num_visible_pre_keys() <= self.__pre_key_refill_threshold:
-                    await backend.generate_pre_keys(100 - bundle.num_pre_keys)
+                num_visible_pre_keys = await backend.get_num_visible_pre_keys()
+                if num_visible_pre_keys <= self.__pre_key_refill_threshold:
+                    await backend.generate_pre_keys(100 - num_visible_pre_keys)
                     bundle = await backend.bundle(
                         self.__own_bare_jid,
                         self.__own_device_id,
