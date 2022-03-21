@@ -1036,10 +1036,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         synchronization mode has no effect.
 
         Internally, the library does the following things differently during history synchronization:
-        * One-time pre keys are kept around during history synchronization, to account for the (hopefully
-            rather hypothetical) case that two or more parties selected the same one-time pre key to initiate
-            a session with this device while it was offline. When history synchronization ends, all one-time
-            pre keys that were kept around are deleted and the library returns to normal behaviour.
+        * Pre keys are kept around during history synchronization, to account for the (hopefully rather
+            hypothetical) case that two or more parties selected the same pre key to initiate a session with
+            this device while it was offline. When history synchronization ends, all pre keys that were kept
+            around are deleted and the library returns to normal behaviour.
         
         Note:
             While in history synchronization mode, the library can process live events too.
