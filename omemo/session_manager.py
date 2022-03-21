@@ -1413,12 +1413,15 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 bundle_changed = await backend.delete_pre_key(session)
 
             if bundle_changed:
-                await backend.refill_pre_keys(self.__pre_key_refill_threshold)
-                await self._upload_bundle(await backend.bundle(
-                    self.__own_bare_jid,
-                    self.__own_device_id,
-                    self.__identity_key_pair.identity_key
-                ))
+                if await backend.get_num_visible_pre_keys() <= self.__pre_key_refill_threshold:
+                    await backend.generate_pre_keys(100 - bundle.num_pre_keys)
+                    bundle = await backend.bundle(
+                        self.__own_bare_jid,
+                        self.__own_device_id,
+                        self.__identity_key_pair.identity_key
+                    )
+
+                await self._upload_bundle(bundle)
 
         # Return the plaintext and information about the sending device
         return (plaintext, device)

@@ -10,7 +10,7 @@ from .types import DeviceInformation, OMEMOException
 class BackendException(OMEMOException):
     pass
 
-# TODO: Find a better way to handle Message, Bundle etc. subtypes
+# TODO: Find a better way to handle Message, Bundle etc. subtypes resp. type safety
 
 Plaintext = TypeVar("Plaintext")
 class Backend(Generic[Plaintext], metaclass=ABCMeta):
@@ -39,10 +39,14 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
     @abstractmethod
     async def load_session(self, device: DeviceInformation) -> Optional[Session]:
         """
-        TODO
+        Args:
+            device: The device whose session to load.
+
+        Returns:
+            The session associated with the device, or `None` if such a session does not exist.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `load_session`.")
 
     @abstractmethod
     async def build_session_active(
@@ -51,7 +55,16 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         bundle: Bundle
     ) -> Tuple[Session, KeyExchange]:
         """
-        TODO
+        Actively build a session.
+
+        Args:
+            device: The device to initiate the key exchange with.
+            bundle: The bundle containing the public key material of the other device required for active
+                session building.
+        
+        Returns:
+            The newly built session and the key exchange information required by the other device to complete
+            the passive part of session building.
 
         Warning:
             This method may be called for a device which already has a session. In that case, the original
@@ -61,12 +74,20 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
             device can exist in storage, which can be controlled using the :meth:`persist` method.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `build_session_active`.")
 
     @abstractmethod
     async def build_session_passive(self, device: DeviceInformation, key_exchange: KeyExchange) -> Session:
         """
-        TODO
+        Passively build a session.
+
+        Args:
+            device: The device which actively initiated the key exchange.
+            key_exchange: Key exchange information for the passive session building.
+        
+        Returns:
+            The newly built session. Note that the pre key used to initiate this session must somehow be
+            associated with the session, such that :meth:`hide_pre_key` and :meth:`delete_pre_key` can work.
 
         Warning:
             This method may be called for a device which already has a session. In that case, the original
@@ -76,7 +97,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
             device can exist in storage, which can be controlled using the :meth:`persist` method.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `build_session_passive`.")
 
     @abstractmethod
     def build_message(
@@ -85,10 +106,15 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         keys: Set[Tuple[KeyMaterial, Optional[KeyExchange]]]
     ) -> Message:
         """
-        TODO
+        Args:
+            content: The content of the message.
+            keys: A set containing one pair of key material and key exchange information per recipient.
+
+        Returns:
+            A message instance, bundling the given content, key material and key exchanges.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `build_message`.")
 
     @abstractmethod
     async def encrypt(self, sessions: Set[Session], plaintext: Plaintext) -> Tuple[Content, Set[KeyMaterial]]:
@@ -128,7 +154,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
             The age of the signed pre key, i.e. the time elapsed since it was last rotated, in seconds.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `signed_pre_key_age`.")
 
     @abstractmethod
     async def rotate_signed_pre_key(self, identity_key_pair: IdentityKeyPair) -> Any:
@@ -137,45 +163,81 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         until this method is called again.
 
         Args:
-            identity_key_pair: The identity key pair of this device, to sign the signed pre key with.
+            identity_key_pair: The identity key pair of this device, to sign the new signed pre key with.
 
         Returns:
             Anything, the return value is ignored.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `rotate_signed_pre_key`.")
 
     @abstractmethod
     async def hide_pre_key(self, session: Session) -> bool:
         """
-        TODO
+        Hide a pre key from the bundle returned by :meth:`bundle` and pre key count returned by
+        :meth:`get_num_visible_pre_keys`, but keep the pre key for cryptographic operations.
+
+        Args:
+            session: A session that was passively built using :meth:`build_session_passive`. Use this session
+                to identity the pre key to hide.
+
+        Returns:
+            Whether the pre key was hidden. If the pre key doesn't exist (e.g. because it has already been
+            deleted), or was already hidden, do not throw an exception, but return `False` instead.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `hide_pre_key`.")
 
     @abstractmethod
     async def delete_pre_key(self, session: Session) -> bool:
         """
-        TODO
+        Delete a pre key.
+
+        Args:
+            session: A session that was passively built using :meth:`build_session_passive`. Use this session
+                to identity the pre key to delete.
+
+        Returns:
+            Whether the pre key was deleted. If the pre key doesn't exist (e.g. because it has already been
+            deleted), do not throw an exception, but return `False` instead.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `delete_pre_key`.")
 
     @abstractmethod
     async def delete_hidden_pre_keys(self) -> Any:
         """
-        TODO
+        Delete all pre keys that were previously hidden using :meth:`hide_pre_key`.
+
+        Returns:
+            Anything, the return value is ignored.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `delete_hidden_pre_keys`.")
 
     @abstractmethod
-    async def refill_pre_keys(self, refill_threshold: int) -> Any:
+    async def get_num_visible_pre_keys(self) -> int:
         """
-        TODO
+        Returns:
+            The number of visible pre keys available. The number returned here should match the number of pre
+            keys included in the bundle returned by :meth:`bundle`.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `get_num_pre_keys`.")
+
+    @abstractmethod
+    async def generate_pre_keys(self, num_pre_keys: int) -> Any:
+        """
+        Generate and store pre keys.
+
+        Args:
+            num_pre_keys: The number of pre keys to generate.
+        
+        Returns:
+            Anything, the return value is ignored.
+        """
+
+        raise NotImplementedError("Create a subclass of Backend and implement `generate_pre_keys`.")
 
     @abstractmethod
     async def bundle(self, bare_jid: str, device_id: int, identity_key: bytes) -> Bundle:
@@ -187,9 +249,12 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
 
         Returns:
             The bundle containing public information about the cryptographic state of this backend.
+            
+        Warning:
+            Do not include pre keys hidden by :meth:`hide_pre_key` in the bundle!
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `bundle`.")
 
     @abstractmethod
     async def purge(self) -> Any:
@@ -200,7 +265,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
             Anything, the return value is ignored.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `purge`.")
 
     @abstractmethod
     async def purge_bare_jid(self, bare_jid: str) -> Any:
@@ -214,4 +279,4 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
             Anything, the return value is ignored.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `purge_bare_jid`.")

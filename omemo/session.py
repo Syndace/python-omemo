@@ -1,9 +1,9 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 from .message import KeyExchange
 
-class Session(metaclass=ABCMeta):
+class Session(ABC):
     """
     TODO
 
