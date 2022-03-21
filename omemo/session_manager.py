@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import base64
 import itertools
 import secrets
-from typing import cast, Any, Generic, List, Optional, Set, Tuple, Type, TypeVar
+from typing import Any, cast, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar
 
 from .backend import Backend
 from .bundle  import Bundle
@@ -713,24 +713,24 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     # session management #
     ######################
 
-    async def replace_sessions(self, bare_jid: str) -> Set[Tuple[DeviceInformation, OMEMOException]]:
+    async def replace_sessions(self, device: DeviceInformation) -> Dict[str, OMEMOException]:
         """
-        Manually replace sessions. Can be used if sessions are suspected to be broken. This method
-        automatically notifies the other ends about the new sessions, so that hopefully no messages are lost.
+        Manually replace all sessions for a device. Can be used if sessions are suspected to be broken. This
+        method automatically notifies the other end about the new sessions, so that hopefully no messages are
+        lost.
 
         Args:
-            bare_jid: The bare JID of the XMPP account whose sessions are to be replaced.
+            device: The device whose sessions to replace.
         
         Returns:
-            A set of devices for which the attempt at session replacement was unsuccessful, including the
-            reason for the failure. The `namespaces` field of the returned device information structure
-            contains those namespaces for which the replacement attempt has failed. If the reason is a
-            :class:`StorageException`, there is a high change that the session was left in an inconsistent
-            state. Other reasons imply that the session replacement failed before having any effect on the
-            state of either side. 
+            Information about exceptions that happened during session replacement attempts. A mapping from the
+            namespace of the backend for which the replacement failed, to the reason of failure. If the reason
+            is a :class:`StorageException`, there is a high change that the session was left in an
+            inconsistent state. Other reasons imply that the session replacement failed before having any
+            effect on the state of either side.
 
         Warning:
-            This method can not guarantee that sessions are left in a consistent state. For example, if the
+            This method can not guarantee that sessions are left in a consistent state. For example, if a
             notification message for the recipient is lost or heavily delayed, the recipient may not know
             about the new session and keep using the old one. Only use this method to attempt replacement of
             sessions that already seem broken. Do not attempt to replace healthy sessions.
@@ -751,44 +751,45 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # method is used to replace broken sessions in the first place, a low chance of replacing the broken
         # session with another broken one doesn't hurt too much.
 
-        # Load information about all recipient devices. It is okay to use get_device_information here, since
-        # there can only be sessions for devices that have full device information available.
-        devices = await self.get_device_information(bare_jid)
+        # Do not assume that the given device information is complete and up-to-date. It is okay to use
+        # get_device_information here, since there can only be sessions for devices that have full device
+        # information available.
+        device = next(filter(
+            lambda dev: dev.device_id == device.device_id,
+            await self.get_device_information(device.bare_jid)
+        ))
 
         # Remove namespaces that correspond to backends which are not currently loaded or backends which have
         # no session for this device.
-        devices = { device._replace(namespaces=(device.namespaces & {
+        device = device._replace(namespaces=(device.namespaces & {
             backend.namespace
             for backend
             in self.__backends
             if await backend.load_session(device) is not None
-        })) for device in devices }
+        }))
 
-        unsuccessful: Set[Tuple[DeviceInformation, OMEMOException]] = {}
+        unsuccessful: Dict[str, OMEMOException] = {}
 
         # Perform the replacement
         for backend in self.__backends:
-            for device in devices:
-                if backend.namespace in device.namespaces:
-                    try:
-                        session, key_exchange = await backend.build_session_active(
-                            device,
-                            await self._download_bundle(
-                                backend.namespace,
-                                device.bare_jid,
-                                device.device_id
-                            )
+            if backend.namespace in device.namespaces:
+                try:
+                    session, key_exchange = await backend.build_session_active(
+                        device,
+                        await self._download_bundle(
+                            backend.namespace,
+                            device.bare_jid,
+                            device.device_id
                         )
-                        session.set_key_exchange(key_exchange)
+                    )
+                    session.set_key_exchange(key_exchange)
 
-                        content, key_material = await backend.encrypt_empty(session)
-                        message = backend.build_message(content, { (key_material, key_exchange) })
-                        await self._send_message(message)
-                        await session.persist()
-                    except OMEMOException as e:
-                        unsuccessful.add((device, e))
-                    else:
-                        device.namespaces.remove(backend.namespace)
+                    content, key_material = await backend.encrypt_empty(session)
+                    message = backend.build_message(content, { (key_material, key_exchange) })
+                    await self._send_message(message)
+                    await session.persist()
+                except OMEMOException as e:
+                    unsuccessful[backend.namespace] = e
 
         return unsuccessful
 

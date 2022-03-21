@@ -116,11 +116,10 @@
     - [x] delays automated staleness prevention responses
     - [x] requires automatic completion of passive session initiations
 
-- [x] manual session replacement is provided
-    - [x] per-device session replacement is not provided
-    - [x] per-JID session replacement is provided, where all sessions with a bare JID are replaced across all backends
+- [x] manual per-device session replacement is provided
     - [x] requires empty OMEMO messages
-    - [ ] TODO: is a global reset provided?
+
+- [x] global or per-JID session replacement is not provided
 
 - [x] own staleness is prevented
     - [x] received messages with a ratchet counter of 53 or higher trigger an automated response
