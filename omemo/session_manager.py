@@ -14,72 +14,83 @@ from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
 
 class SessionManagerException(OMEMOException):
     """
-    TODO
+    Parent type for all exceptions specific to :class:`SessionManager`.
     """
 
 class XMPPInteractionFailed(SessionManagerException):
     """
-    TODO
+    Parent type for all exceptions related to network/XMPP interactions.
     """
 
 class UnknownTrustLevel(SessionManagerException):
     """
-    TODO
+    Raised by :meth:`_evaluate_custom_trust_level` if the custom trust level name to evaluate is unknown.
+    Indirectly raised by the encryption and decryption flows.
     """
 
 class TrustDecisionFailed(SessionManagerException):
     """
-    TODO
+    Raised by :meth:`_make_trust_decision` if the trust decisions that were queried somehow failed. Indirectly
+    raised by the encryption flow.
     """
 
 class StillUndecided(SessionManagerException):
     """
-    TODO
+    Raised by :meth:`encrypt` in case there are still undecided devices after a trust decision was queried via
+    :meth:`_make_trust_decision`.
     """
 
 class NoEligibleDevices(SessionManagerException):
     """
-    TODO
+    Raised by :meth:`encrypt` in case none of the devices of one or more recipient are eligible for
+    encryption, for example due to distrust or bundle downloading failures.
     """
 
     def __init__(self, msg: str, bare_jids: Set[str]) -> None:
+        """
+        Args:
+            bare_jids: The JIDs whose devices were not eligible. Accessible as an attribute of the returned
+                instance.
+        """
+
         super().__init__(msg)
 
         self.bare_jids = bare_jids
 
 class UnknownNamespace(SessionManagerException):
     """
-    TODO
+    Raised by various methods of :class:`SessionManager`, in case the namespace to perform an operation under
+    is not known or the corresponding backend is not currently loaded.
     """
 
 class BundleUploadFailed(XMPPInteractionFailed):
     """
-    TODO
+    Raised by :meth:`_upload_bundle`, and indirectly by various methods of :class:`SessionManager`.
     """
 
 class BundleDownloadFailed(XMPPInteractionFailed):
     """
-    TODO
+    Raised by :meth:`_download_bundle`, and indirectly by various methods of :class:`SessionManager`.
     """
 
 class BundleDeletionFailed(XMPPInteractionFailed):
     """
-    TODO
+    Raised by :meth:`_delete_bundle`, and indirectly by :meth:`purge_backend`.
     """
 
 class DeviceListUploadFailed(XMPPInteractionFailed):
     """
-    TODO
+    Raised by :meth:`_upload_device_list`, and indirectly by various methods of :class:`SessionManager`.
     """
 
 class DeviceListDownloadFailed(XMPPInteractionFailed):
     """
-    TODO
+    Raised by :meth:`_download_device_list`, and indirectly by various methods of :class:`SessionManager`.
     """
 
 class MessageSendingFailed(XMPPInteractionFailed):
     """
-    TODO
+    Raised by :meth:`_send_message`, and indirectly by various methods of :class:`SessionManager`.
     """
 
 # TODO: Take care of logging
@@ -410,6 +421,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
             modifications to the object (``self``, in case of subclasses) may not have happened when this
             method is called.
+
+        Note:
+            This method must be able to handle at least the namespaces of all loaded backends.
         """
 
         raise NotImplementedError("Create a subclass of SessionManager and implement `_upload_bundle`.")
@@ -429,12 +443,16 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             The bundle.
 
         Raises:
+            UnkownNamespace: if the namespace is unknown.
             BundleDownloadFailed: if the download failed. Feel free to raise a subclass instead.
 
         Note:
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
             modifications to the object (``self``, in case of subclasses) may not have happened when this
             method is called.
+
+        Note:
+            This method must be able to handle at least the namespaces of all loaded backends.
         """
 
         raise NotImplementedError("Create a subclass of SessionManager and implement `_download_bundle`.")
@@ -453,12 +471,18 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             Anything, the return value is ignored.
 
         Raises:
+            UnkownNamespace: if the namespace is unknown.
             BundleDeletionFailed: if the deletion failed. Feel free to raise a subclass instead.
 
         Note:
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
             modifications to the object (``self``, in case of subclasses) may not have happened when this
             method is called.
+
+        Note:
+            This method must be able to handle at least the namespaces of all loaded backends. In case of
+            backend purging via :meth:`purge_backend`, the corresponding namespace must be supported even if
+            the backend is not currently loaded.
         """
 
         raise NotImplementedError("Create a subclass of SessionManager and implement `_delete_bundle`.")
@@ -477,12 +501,16 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             Anything, the return value is ignored.
 
         Raises:
+            UnkownNamespace: if the namespace is unknown.
             DeviceListUploadFailed: if the upload failed. Feel free to raise a subclass instead.
 
         Note:
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
             modifications to the object (``self``, in case of subclasses) may not have happened when this
             method is called.
+
+        Note:
+            This method must be able to handle at least the namespaces of all loaded backends.
         """
 
         raise NotImplementedError("Create a subclass of SessionManager and implement `_upload_device_list`.")
@@ -502,12 +530,16 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             The list of device ids and their optional label, if available.
 
         Raises:
+            UnkownNamespace: if the namespace is unknown.
             DeviceListDownloadFailed: if the download failed. Feel free to raise a subclass instead.
 
         Note:
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
             modifications to the object (``self``, in case of subclasses) may not have happened when this
             method is called.
+
+        Note:
+            This method must be able to handle at least the namespaces of all loaded backends.
         """
 
         raise NotImplementedError(
@@ -617,12 +649,19 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 optional label, if available.
 
         Raises:
+            UnkownNamespace: if the backend to handle the message is not currently loaded.
             DeviceListUploadFailed: if a device list upload failed. An upload can happen if the device list
                 update is for the own bare JID and does not include the own device. Forwarded from
                 :meth:`_upload_device_list`.
         """
 
         storage = self.__storage
+
+        # This isn't strictly necessary, but good for consistency
+        if namespace not in { backend.namespace for backend in self.__backends }:
+            raise UnknownNamespace("The backend hanlding the namespace {} is not currently loaded.".format(
+                namespace
+            ))
 
         # Copy to make sure the original is not modified
         device_list = dict(device_list)
@@ -705,6 +744,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             bare_jid: The bare JID of the XMPP account.
 
         Raises:
+            UnkownNamespace: if the namespace is unknown.
             DeviceListDownloadFailed: if the device list download failed. Forwarded from
                 :meth:`_download_device_list`.
             DeviceListUploadFailed: if a device list upload failed. An upload can happen if the device list
@@ -1128,8 +1168,10 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Raises:
             UnknownNamespace: if the backend priority order list contains a namespace of a backend that is not
                 currently available.
-            TrustDecisionFailed: if for any reason the trust decision failed/could not be completed. Forwarded
-                from :meth:`_make_trust_decision`.
+            UnknownTrustLevel: if an unknown custom trust level name is encountered. Forwarded from
+                :meth:`_evaluate_custom_trust_level`.
+            TrustDecisionFailed: if for any reason the trust decision for undecided devices failed/could not
+                be completed. Forwarded from :meth:`_make_trust_decision`.
             StillUndecided: if the trust level for one of the recipient devices still evaluates to undecided,
                 even after :meth:`_make_trust_decision` was called to decide on the trust.
             NoEligibleDevices: if at least one of the intended recipients does not have a single device which
@@ -1169,7 +1211,17 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # Load the device information of all recipients
         def is_valid_recipient_device(device: DeviceInformation) -> bool:
             """
-            TODO
+            Helper that performs various checks to device whether a device is a valid recipient for this
+            encryption operation or not. Excluded are:
+            - this device aka the sending device
+            - devices that are only supported by inactive backends
+            - devices that are only supported by backends which are not in the effective priority order list
+
+            Args:
+                device: The device to check.
+            
+            Returns:
+                Whether the device is a valid recipient for this encryption operation or not.
             """
 
             # Remove the own device
@@ -1220,14 +1272,28 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # the remaining devices)
         def is_undecided(device: DeviceInformation) -> bool:
             """
-            TODO
+            Helper for trust level evaluation and checks.
+
+            Args:
+                device: A device.
+            
+            Returns:
+                Whether the trust status of this device is undecided, i.e. whether the custom trust level
+                assigned to the identity key used by this device evaluates to `TrustLevel.Undecided`.
             """
 
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Undecided
 
         def is_trusted(device: DeviceInformation) -> bool:
             """
-            TODO
+            Helper for trust level evaluation and checks.
+
+            Args:
+                device: A device.
+            
+            Returns:
+                Whether the trust status of this device is trusted, i.e. whether the custom trust level
+                assigned to the identity key used by this device evaluates to `TrustLevel.Trusted`.
             """
         
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Trusted
@@ -1351,6 +1417,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Raises:
             UnkownNamespace: if the backend to handle the message is not currently loaded.
+            UnknownTrustLevel: if an unknown custom trust level name is encountered. Forwarded from
+                :meth:`_evaluate_custom_trust_level`.
             KeyExchangeFailed: in case a new session is built while decrypting this message, and there is an
                 error during the key exchange that's part of the session building. Forwarded from
                 :meth:`~omemo.backend.Backend.build_session_passive`.
@@ -1471,6 +1539,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                     )
 
                 await self._upload_bundle(bundle)
+        
+        # TODO: Empty messages for session completion and staleness prevention
 
         # Return the plaintext and information about the sending device
         return (plaintext, device)
