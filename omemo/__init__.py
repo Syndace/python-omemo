@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from .version import __version__
 from .project import   project
 
-from .backend import Backend, BackendException, KeyExchangeFailed
+from .backend import Backend, BackendException, KeyExchangeFailed, TooManySkippedMessageKeys
 from .bundle import Bundle
 from .message import Content, KeyExchange, KeyMaterial, Message
 

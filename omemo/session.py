@@ -87,3 +87,12 @@ class Session(ABC):
         """
 
         pass
+
+    @property
+    @abstractmethod
+    def sending_chain_length(self) -> int:
+        """
+        TODO
+        """
+
+        pass

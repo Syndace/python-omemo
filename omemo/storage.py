@@ -108,6 +108,10 @@ class Storage(ABC):
     """
     A simple key/value storage class with optional caching (on by default). Keys can be any Python string,
     values any JSON-serializable structure.
+
+    Warning:
+        Writing operations must be performed right away, before returning from the method. Writing operations
+        must not be cached or otherwise deferred.
     
     Warning:
         All parameters must be treated as immutable unless explicitly noted otherwise.
@@ -138,7 +142,7 @@ class Storage(ABC):
             The loaded value, if it exists.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         raise NotImplementedError("Create a subclass of Storage and implement `_load`.")
@@ -156,7 +160,7 @@ class Storage(ABC):
             Anything, the return value is ignored.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         raise NotImplementedError("Create a subclass of Storage and implement `_store`.")
@@ -173,8 +177,8 @@ class Storage(ABC):
             Anything, the return value is ignored.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
-            TODO: Throw if the key doesn't exist, or silently do nothing?
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+                Do not raise if the key doesn't exist.
         """
 
         raise NotImplementedError("Create a subclass of Storage and implement `_delete`.")
@@ -190,7 +194,7 @@ class Storage(ABC):
             The loaded value, if it exists.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         try:
@@ -214,7 +218,7 @@ class Storage(ABC):
             value: The value to store under the given key.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         await self._store(key, value)
@@ -232,8 +236,8 @@ class Storage(ABC):
             key: The key identifying the value to delete.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
-            TODO: Throw if the key doesn't exist, or silently do nothing?
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+                Do not raise if the key doesn't exist.
         """
 
         await self._delete(key)
@@ -252,7 +256,7 @@ class Storage(ABC):
             value: The value to store under the given key.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         await self.store(key, base64.urlsafe_b64encode(value).decode("ASCII"))
@@ -269,7 +273,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         def check_type(value: JSONType) -> PrimitiveType:
@@ -290,7 +294,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         def check_type(value: JSONType) -> bytes:
@@ -312,7 +316,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         def check_type(value: JSONType) -> Optional[PrimitiveType]:
@@ -334,7 +338,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         def check_type(value: JSONType) -> List[PrimitiveType]:
@@ -362,7 +366,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
         def check_type(value: JSONType) -> Dict[PrimitiveKeyType, PrimitiveValueType]:

@@ -1,11 +1,11 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any, Generic, Optional, Set, Tuple, TypeVar
 
-from .bundle import Bundle
+from .bundle  import Bundle
 from .identity_key_pair import IdentityKeyPair
 from .message import Content, KeyMaterial, KeyExchange, Message
 from .session import Session
-from .types import DeviceInformation, OMEMOException
+from .types   import DeviceInformation, OMEMOException
 
 class BackendException(OMEMOException):
     """
@@ -23,13 +23,23 @@ class KeyExchangeFailed(BackendException):
     Additional backend-specific error conditions might exist.
     """
 
-# TODO: Find a better way to handle Message, Bundle etc. subtypes resp. type safety
-# TODO: Maybe a serialize/deserialize method for plaintext <-> bytes?
+class TooManySkippedMessageKeys(BackendException):
+    """
+    Raise by :meth:`decrypt` if a message skips more message keys than allowed.
+    """
+
+# TODO: Find a better way to handle type safety of Message, Bundle, Session etc.
 
 PlaintextType = TypeVar("PlaintextType")
 class Backend(Generic[PlaintextType], metaclass=ABCMeta):
     """
-    TODO
+    The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
+    version to the core library. Refer to the documentation page for details about the concept and a guide on
+    building your own backend. TODO: Linkify
+
+    The plaintext generic can be used to choose a convenient type for the plaintext passed/received from the
+    encrypt/decrypt methods. This can for example be a stanze type for backend implementations utilizing
+    `SCE <https://xmpp.org/extensions/xep-0420.html>`__.
 
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
@@ -41,14 +51,15 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
         Ed25519 format. Otherwise, "identity key pair" is explicitly used to refer to the full key pair.
-
-    TODO: Document the Plaintext generic
     """
 
     @property
     @abstractmethod
     def namespace(self) -> str:
-        pass
+        """
+        Returns:
+            The namespace provided/handled by this backend implementation.
+        """
 
     @abstractmethod
     async def load_session(self, device: DeviceInformation) -> Optional[Session]:
@@ -135,22 +146,70 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `build_message`.")
+    
+    @abstractmethod
+    def serialize_plaintext(self, plaintext: PlaintextType) -> bytes:
+        """
+        Args:
+            plaintext: The plaintext to serialize.
+        
+        Returns:
+            The plaintext serialized to bytes.
+
+        Note:
+            Refer to the documentation of the :class:`~omemo.backend.Backend` class for information about the
+            ``PlaintextType`` type.
+        """
+
+        raise NotImplementedError("Create a subclass of Backend and implement `serialize_plaintext`.")
 
     @abstractmethod
-    async def encrypt(self, sessions: Set[Session], plaintext: PlaintextType) -> Tuple[Content, Set[KeyMaterial]]:
+    async def encrypt(self, sessions: Set[Session], plaintext: bytes) -> Tuple[Content, Set[KeyMaterial]]:
         """
-        TODO
+        Encrypt some plaintext symmetrically, and encrypt the corresponding key material once with each
+        session.
+
+        Args:
+            sessions: The sessions to encrypt the key material with.
+            plaintext: The serialized plaintext to encrypt symmetrically.
+        
+        Returns:
+            The symmetrically encrypted plaintext, and a set containing the encrypted key material for each
+            sessions.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `encrypt`.")
 
     @abstractmethod
     async def encrypt_empty(self, session: Session) -> Tuple[Content, KeyMaterial]:
         """
-        TODO
+        Encrypt an empty message for the sole purpose of session manangement/ratchet forwarding/key material
+        transportation.
+
+        Args:
+            session: The session to encrypt the key material for the empty message with.
+        
+        Returns:
+            The symmetrically encrypted empty content, and the encrypted key material.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `encrypt_empty`.")
+
+    @abstractmethod
+    def deserialize_plaintext(self, plaintext: bytes) -> PlaintextType:
+        """
+        Args:
+            plaintext: The serialized plaintext as bytes.
+        
+        Returns:
+            The deserialized plaintext.
+
+        Note:
+            Refer to the documentation of the :class:`~omemo.backend.Backend` class for information about the
+            ``PlaintextType`` type.
+        """
+
+        raise NotImplementedError("Create a subclass of Backend and implement `deserialize_plaintext`.")
 
     @abstractmethod
     async def decrypt(
@@ -160,12 +219,33 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
         key_material: KeyMaterial,
         max_num_per_session_skipped_keys: int,
         max_num_per_message_skipped_keys: int
-    ) -> PlaintextType:
+    ) -> bytes:
         """
-        TODO
+        Decrypt some key material using the session, then decrypt the content symmetrically using the key
+        material.
+
+        Args:
+            session: The session to decrypt the key material with.
+            content: The symmetrically encrypted content.
+            key_material: The encrypted key material.
+            max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep per session.
+            max_num_per_message_skipped_keys: The maximum number of skipped message keys allowed in a single
+                message.
+
+        Returns:
+            The decrypted, yet serialized plaintext.
+        
+        Raises:
+            TooManySkippedMessageKeys: if the number of message keys skipped by this message exceeds the upper
+                limit enforced by `max_num_per_message_skipped_keys`.
+        
+        Note:
+            When the maximum number of skipped message keys for this session, given by
+            `max_num_per_session_skipped_keys`, is exceeded, old skipped message keys are deleted to make
+            space for new ones.
         """
 
-        pass
+        raise NotImplementedError("Create a subclass of Backend and implement `decrypt`.")
     
     @abstractmethod
     async def signed_pre_key_age(self) -> int:

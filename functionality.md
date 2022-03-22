@@ -26,21 +26,20 @@
     - [x] device lists of different backends are merged. it is assumed that device ids are unique even across backends. the same device id in multiple lists is assumed to represent the same device.
     - [x] the backends supported by each device are indicated together with the device id
 
-- [x] the own public bundle is managed
+- [x] the own bundle is managed
     - [x] the identity key is managed
     - [x] the signed pre key is managed
         - [x] the signed pre key is rotated periodically
         - [x] the rotation period is configurable
         - [x] a default rotation period of between one week and one month is provided
         - [x] the signed pre key of the previous rotation is kept around for the next full period to account for delayed messages
-        - [x] to account for delayed messages and offline periods of the client, the signed pre key is only ever rotated after any offline message catch-up is done
     - [x] the pre keys are managed
         - [x] the number of pre keys is capped to 100
         - [x] the threshold for when to generate new pre keys is configurable
         - [x] the threshold can not be configured lower than 25
         - [x] the default threshold is 99, which means that every used pre key is replaced right away
-    - [x] a PEP publishing mechanism must be provided by the application to update the public bundle in PEP
-    - [x] a PEP downloading mechanism must be provided by the application to download the public bundle from PEP
+    - [x] a PEP publishing mechanism must be provided by the application to update the bundle in PEP
+    - [x] a PEP downloading mechanism must be provided by the application to download a bundle from PEP
     - [x] one bundle is managed per backend, only the identity key is shared between all backends/bundles
         - [x] care is taken to provide the identity key to each backend in the format required by the backend (i.e. Ed25519 or Curve25519)
 
@@ -62,7 +61,7 @@
 - [x] sessions can be built
     - [x] transparently when sending or receiving encrypted messages
     - [x] explicit session building APIs are not provided
-    - [x] requires own public bundle management
+    - [x] requires own bundle management
     - [x] sessions are per-backend
     - [x] a PEP downloading mechanism must be provided by the application to download public bundles from PEP
 
@@ -72,9 +71,8 @@
     - [x] own devices are automatically added to the list of recipients, the sending device is removed from the list
     - [x] messages are only encrypted for devices whose trust level evaluates to "trusted"
     - [x] the message is not automatically sent, but a structure containing the encrypted payload and the headers is returned
-    - [x] the backend to encrypt the message with can be selected explicitly or implicitly
-        - [x] in the implicit selection, a list of backends is given of which the order decides priority
-        - [x] in the implicit selection, support for each backend by the recipient is detected by looking for the presence of respective bundles on the server
+    - [x] the backend(s) to encrypt the message with can be selected explicitly or implicitly
+        - [x] in the explicit selection, a list of namespaces is given of which the order decides priority
         - [x] the type of the message parameter to the encryption methods is generic, and each backend provides a method to serialize the type into a byte string
             - [x] this is necessary because different backends require different inputs to message encryption. For example, omemo:1 requires stanzas for SCE and legacy OMEMO requires just text
             - [x] when multiple backends are used together, the generic type can be chosen as the lowest common denominator between all backend input types, and implement the serialization methods accordingly
@@ -84,7 +82,7 @@
     - [x] transparently when required by the protocol
     - [x] explicit API for empty OMEMO messages is not provided
     - [x] a mechanism must be provided by the application to send empty OMEMO messages
-    - [x] trust is circumvented for empty OMEMO messages
+    - [x] trust is not applied for empty OMEMO messages
 
 - [x] messages can be decrypted
     - [x] requires session building and trust management
@@ -94,9 +92,7 @@
         - [x] when multiple backends are used together, the generic type can be chosen as the lowest common denominator between all backend output types, and implement the deserialization methods accordingly
     - [x] device lists are automatically refreshed when encountering a message by a device that is not cached
     - [x] the backend to decrypt the message with is implicitly selected by looking at the type of the message structure
-    - [x] in case there is no session with the sending device, a new session is transparently initiated
-        - [x] requires empty OMEMO messages
-    - [x] whether messages of devices with undecided trust are decrypted is configurable
+    - [x] messages sent by devices with undecided trust are decrytped
         - [x] it is detectable in case the message of an undecided device was decrypted
     - [x] duplicate messages are not detected, that task is up to the application
 
@@ -112,7 +108,6 @@
     - [x] methods are provided to notify the library about start and end of message catch-up
     - [x] the library automatically enters catch-up mode when loaded
     - [x] pre keys are retained during catch-up and deleted when the catch-up is done
-    - [x] if the signed pre key is due for rotation, rotation is performed when exiting catch-up mode
     - [x] delays automated staleness prevention responses
     - [x] requires automatic completion of passive session initiations
 
@@ -126,14 +121,14 @@
     - [x] automated responses are delayed until after catch-up is done and only one message is sent per stale session afterwards
     - [x] requires empty OMEMO messages
 
-- [ ] stale devices are not detected
-    - [ ] however, API is offered to query the sending chain length of a session, which is one important piece of information that clients might use for staleness detection
+- [x] stale devices are not detected
+    - [x] however, API is offered to query the sending chain length of a session, which is one important piece of information that clients might use for staleness detection
 
 - [x] account purging is supported
     - [x] removes all data related to a bare JID across all backends
     - [x] useful e.g. to remove all OMEMO-related data corresponding to an XMPP account that was blocked by the user
 
-- [x] a convenience method to get the identity key fingerprint of a device is provided
+- [x] a convenience method to get the identity key fingerprint is provided
     - [x] independent of the backend
 
 - [x] methods are provided to retrieve information about devices
@@ -149,17 +144,18 @@
         - [x] this interface transparently handles caching
         - [x] the interface represents generic key-value storage with opaque keys and values
     - [ ] automatic migrations between storage format versions are provided
-        - [ ] a legacy python-omemo to modern python-omemo migration tool is provided
-        - [ ] a libsignal to python-omemo migration tool will be provided in the future(, as part of the legacy backend?)
     - [x] storage consistency is guaranteed
         - [x] write operations MUST NOT cache or defer but perform the writing operation right away
         - [x] when encrypting or decrypting, changes to the state are only persisted when success is guaranteed
 
 - [ ] a convenience method to verify consistency (and fix) of the server-side data with the local data is provided
-    - [ ] whether these consistency checks are ran automatically, e.g. once during library startup/once per day etc. is WIP
+    - [ ] these checks are not ran automatically, but the documentation includes a hint and examples run the checks after startup
 
 # Part of the respective backends
 
+- [ ] a state migration tool/function is provided for migration from legacy python-omemo to the new storage format
+- [ ] a state migration tool/function is provided for migration from libsignal to python-omemo
+
 - [ ] convenience functions for XML (de)serialization is provided using the ElementTree API
     - [ ] this part is fully optional, the application may take care of (de)serialization itself
-    - [ ] installed only when doing `pip install python-omemo-backend-foo[xml]`
+    - [ ] installed only when doing `pip install python-omemo-backend-foo[etree]`

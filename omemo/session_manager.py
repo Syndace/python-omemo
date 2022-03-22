@@ -12,8 +12,8 @@ from .session import Session
 from .storage import Nothing, Storage
 from .types   import DeviceInformation, OMEMOException, TrustLevel
 
-# TODO: Add missing API promised in functionality.md
 # TODO: Add more machine-readable data to exceptions?
+# TODO: Should the XEP contain rules for version compat?
 
 class SessionManagerException(OMEMOException):
     """
@@ -159,6 +159,11 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
         Ed25519 format. Otherwise, "identity key pair" is explicitly used to refer to the full key pair.
+    
+    Note:
+        The library was designed for use as part of an XMPP library/client. The API is shaped for XMPP and
+        comments/documentation contain references to XEPs and other XMPP-specific nomenclature. However, the
+        library can be used with any economy that provides similar functionality.
     """
 
     HEARTBEAT_MESSAGE_TRIGGER = 53
@@ -171,7 +176,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         self.__own_device_id: int
         self.__undecided_trust_level_name: str
         self.__max_num_per_session_skipped_keys: int
-        self.__max_num_per_message_skipped_keys: Optional[int]
+        self.__max_num_per_message_skipped_keys: int
         self.__pre_key_refill_threshold: int
         self.__identity_key_pair: IdentityKeyPair
         self.__synchronizing: bool
@@ -259,6 +264,21 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
         if len({ backend.namespace for backend in backends }) != len(backends):
             raise ValueError("Multiple backends that handle the same namespace were passed.")
+        
+        if max_num_per_message_skipped_keys == 0 and max_num_per_session_skipped_keys != 0:
+            raise ValueError(
+                "The number of allowed per-message skipped keys must be nonzero if the number of per-session"
+                " skipped keys to keep is nonzero."
+            )
+        
+        if max_num_per_message_skipped_keys or 0 > max_num_per_session_skipped_keys:
+            raise ValueError(
+                "The number of allowed per-message skipped keys must not be greater than the number of"
+                " per-session skipped keys to keep."
+            )
+        
+        if not (25 <= pre_key_refill_threshold <= 99):
+            raise ValueError("Pre key refill threshold out of allowed range.")
 
         self = cls()
         self.__backends = list(backends) # Copy to make sure the original is not modified
@@ -266,7 +286,8 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         self.__own_bare_jid = own_bare_jid
         self.__undecided_trust_level_name = undecided_trust_level_name
         self.__max_num_per_session_skipped_keys = max_num_per_session_skipped_keys
-        self.__max_num_per_message_skipped_keys = max_num_per_message_skipped_keys
+        self.__max_num_per_message_skipped_keys = max_num_per_session_skipped_keys if \
+            max_num_per_message_skipped_keys is None else max_num_per_message_skipped_keys
         self.__pre_key_refill_threshold = pre_key_refill_threshold
         self.__identity_key_pair = await IdentityKeyPair.get(storage)
         self.__synchronizing = True
@@ -437,6 +458,97 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         # Second half of online data removal: delete the bundle of this device. This step has low priority,
         # thus done last.
         await self._delete_bundle(namespace, self.__own_device_id)
+
+    async def purge_bare_jid(self, bare_jid: str) -> None:
+        """
+        Delete all data corresponding to an XMPP account. This includes the device list, trust information and
+        all sessions across all loaded backends. The backend-specific data can be removed at any time by
+        calling the :meth:`purge_bare_jid` method of the respective backend.
+
+        Args:
+            bare_jid: Delete all data corresponding to this bare JID.
+        """
+
+        storage = self.__storage
+
+        # Get the set of devices to delete
+        device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
+        
+        # Collect identity keys used by this account
+        identity_keys: Set[bytes] = {}
+        for device_id in device_list:
+            try:
+                identity_keys.add((await storage.load_bytes("/devices/{}/{}/identity_key".format(
+                    bare_jid,
+                    device_id
+                ))).from_just())
+            except Nothing:
+                pass
+
+        # Delete information about the individual devices
+        for device_id in device_list:
+            await storage.delete("/devices/{}/{}/namespaces".format(bare_jid, device_id))
+            await storage.delete("/devices/{}/{}/active".format(bare_jid, device_id))
+            await storage.delete("/devices/{}/{}/label".format(bare_jid, device_id))
+            await storage.delete("/devices/{}/{}/identity_key".format(bare_jid, device_id))
+
+        # Delete the device list
+        await storage.delete("/devices/{}/list".format(bare_jid))
+
+        # Delete information about the identity keys
+        for identity_key in identity_keys:
+            await storage.delete("/trust/{}/{}".format(
+                bare_jid,
+                base64.urlsafe_b64encode(identity_key).decode("ASCII")
+            ))
+
+        # Remove backend-specific data
+        for backend in self.__backends:
+            await backend.purge_bare_jid(bare_jid)
+    
+    async def ensure_data_consistency(self) -> None:
+        """
+        Ensure that the online data for all loaded backends is consistent with the offline data. Refreshes
+        device lists of all backends while making sure that this device is included in all of them. Downloads
+        the bundle for each backend, compares it with the local bundle contents, and uploads the local bundle
+        if necessary.
+
+        Raises:
+            DeviceListDownloadFailed: if a device list download failed. Forwarded from
+                :meth:`_download_device_list`.
+            DeviceListUploadFailed: if a device list upload failed. Forwarded from :meth:`update_device_list`.
+            BundleUploadFailed: if a bundle upload failed. Forwarded from :meth:`_upload_bundle`.
+
+        Note:
+            This method is not called automatically by the library, since under normal working conditions,
+            online and offline data should never desync. However, if clients can spare the network traffic, it
+            is recommended to call this method e.g. once after starting the library and possibly in other
+            scenarios/at regular intervals too.
+        """
+
+        for backend in self.__backends:
+            await self.refresh_device_list(backend.namespace, self.__own_bare_jid)
+
+            local_bundle = await backend.bundle(
+                self.__own_bare_jid,
+                self.__own_device_id,
+                self.__identity_key_pair.identity_key
+            )
+
+            upload_bundle = False
+            try:
+                remote_bundle = await self._download_bundle(
+                    backend.namespace,
+                    self.__own_bare_jid,
+                    self.__own_device_id
+                )
+            except BundleDownloadFailed:
+                upload_bundle = True
+            else:
+                upload_bundle = remote_bundle != local_bundle
+
+            if upload_bundle:
+                await self._upload_bundle(local_bundle)
 
     ####################
     # abstract methods #
@@ -902,53 +1014,32 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                     unsuccessful[backend.namespace] = e
 
         return unsuccessful
-
-    async def purge_bare_jid(self, bare_jid: str) -> None:
+    
+    async def get_sending_chain_length(self, device: DeviceInformation) -> Dict[str, Optional[int]]:
         """
-        Delete all data corresponding to an XMPP account. This includes the device list, trust information and
-        all sessions across all loaded backends. The backend-specific data can be removed at any time by
-        calling the :meth:`purge_bare_jid` method of the respective backend.
+        Get the sending chain lengths of all sessions with a device. Can be used for external staleness
+        detection logic.
 
         Args:
-            bare_jid: Delete all data corresponding to this bare JID.
+            device: The device.
+        
+        Returns:
+            A mapping from namespace to sending chain length. `None` for the sending chain length implies that
+            there is no session with the device for that backend.
         """
 
-        storage = self.__storage
+        sessions = {
+            backend.namespace: await backend.load_session(device)
+            for backend
+            in self.__backends
+            if backend.namespace in device.namespaces
+        }
 
-        # Get the set of devices to delete
-        device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
-        
-        # Collect identity keys used by this account
-        identity_keys: Set[bytes] = {}
-        for device_id in device_list:
-            try:
-                identity_keys.add((await storage.load_bytes("/devices/{}/{}/identity_key".format(
-                    bare_jid,
-                    device_id
-                ))).from_just())
-            except Nothing:
-                pass
-
-        # Delete information about the individual devices
-        for device_id in device_list:
-            await storage.delete("/devices/{}/{}/namespaces".format(bare_jid, device_id))
-            await storage.delete("/devices/{}/{}/active".format(bare_jid, device_id))
-            await storage.delete("/devices/{}/{}/label".format(bare_jid, device_id))
-            await storage.delete("/devices/{}/{}/identity_key".format(bare_jid, device_id))
-
-        # Delete the device list
-        await storage.delete("/devices/{}/list".format(bare_jid))
-
-        # Delete information about the identity keys
-        for identity_key in identity_keys:
-            await storage.delete("/trust/{}/{}".format(
-                bare_jid,
-                base64.urlsafe_b64encode(identity_key).decode("ASCII")
-            ))
-
-        # Remove backend-specific data
-        for backend in self.__backends:
-            await backend.purge_bare_jid(bare_jid)
+        return {
+            namespace: None if session is None else session.sending_chain_length
+            for namespace, session
+            in sessions.items()
+        }
 
     ##############################
     # device metadata management #
@@ -1164,6 +1255,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             hypothetical) case that two or more parties selected the same pre key to initiate a session with
             this device while it was offline. When history synchronization ends, all pre keys that were kept
             around are deleted and the library returns to normal behaviour.
+        TODO: Delay staleness prevention and session completion messages in history sync mode
         
         Note:
             While in history synchronization mode, the library can process live events too.
@@ -1244,7 +1336,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
         Note:
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
-            information about the ``Plaintext`` type.
+            information about the ``PlaintextType`` type.
         """
 
         # Prepare the backend priority order list
@@ -1445,7 +1537,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             sessions = { await load_or_create_session(backend, device) for device in backend_devices }
 
             # Perform the encryption, which is mostly backend-specific.
-            content, key_material = await backend.encrypt(sessions, plaintext)
+            content, key_material = await backend.encrypt(sessions, backend.serialize_plaintext(plaintext))
 
             # Build pairs of key material and key exchange information
             keys = { (
@@ -1508,7 +1600,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
         Note:
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
-            information about the ``Plaintext`` type.
+            information about the ``PlaintextType`` type.
         """
 
         # Find the backend to handle this message
@@ -1587,13 +1679,13 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                 session = await backend.build_session_passive(device, key_exchange)
 
         # Decrypt the message
-        plaintext = await backend.decrypt(
+        plaintext = backend.deserialize_plaintext(await backend.decrypt(
             session,
             message.content,
             key_material,
             self.__max_num_per_session_skipped_keys,
             self.__max_num_per_message_skipped_keys
-        )
+        ))
 
         # Key exchanges are sent with encrypted messages for new sessions, until it is confirmed that the
         # other party has received at least one of them. Once a new session is used to decrypt a message, the
@@ -1628,11 +1720,11 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
                 await self._upload_bundle(bundle)
             
-            await self.__send_empty_message(backend, session)
+            await self.__send_empty_message(backend, session) # TODO: Defer while in history sync mode
         
         # Send an empty message if necessary to avoid staleness
         if session.receiving_chain_length >= self.__class__.HEARTBEAT_MESSAGE_TRIGGER: # TODO: Make prettier
-            await self.__send_empty_message(backend, session)
+            await self.__send_empty_message(backend, session) # TODO: Defer while in history sync mode
         
         # Return the plaintext and information about the sending device
         return (plaintext, device)
