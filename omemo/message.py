@@ -24,6 +24,8 @@ class KeyMaterial(ABC):
 class KeyExchange(ABC):
     """
     TODO
+
+    TODO: Needs equals
     """
 
     @property

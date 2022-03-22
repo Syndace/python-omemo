@@ -12,9 +12,6 @@ from .session import Session
 from .storage import Nothing, Storage
 from .types   import DeviceInformation, OMEMOException, TrustLevel
 
-# TODO: Add more machine-readable data to exceptions?
-# TODO: Should the XEP contain rules for version compat?
-
 class SessionManagerException(OMEMOException):
     """
     Parent type for all exceptions specific to :class:`SessionManager`.
@@ -40,14 +37,14 @@ class NoEligibleDevices(SessionManagerException):
     encryption, for example due to distrust or bundle downloading failures.
     """
 
-    def __init__(self, msg: str, bare_jids: Set[str]) -> None:
+    def __init__(self, bare_jids: Set[str], *args) -> None:
         """
         Args:
             bare_jids: The JIDs whose devices were not eligible. Accessible as an attribute of the returned
                 instance.
         """
 
-        super().__init__(msg)
+        super().__init__(*args)
 
         self.bare_jids = bare_jids
 
@@ -1441,9 +1438,9 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
         if len(no_eligible_devices) > 0:
             raise NoEligibleDevices(
+                no_eligible_devices,
                 "One or more of the intended recipients does not have a single active device for the loaded"
-                " backends.",
-                no_eligible_devices
+                " backends."
             )
 
         # Apply the backend priority order to the remaining devices
@@ -1513,9 +1510,9 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
         if len(no_eligible_devices) > 0:
             raise NoEligibleDevices(
+                no_eligible_devices,
                 "One or more of the intended recipients does not have a single active and trusted device for"
-                " the loaded backends.",
-                no_eligible_devices
+                " the loaded backends."
             )
 
         async def load_or_create_session(backend: Backend[PlaintextType], device: DeviceInformation) -> Session:
@@ -1708,9 +1705,8 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             # Check whether there is a session with the sending device already
             session = await backend.load_session(device.bare_jid, device.device_id)
             if session is not None:
-                # Check whether the key exchange would build the same session
-                if not session.built_by_key_exchange(key_exchange):
-                    # If the key exchange would build a new session, treat this session as non-existent
+                # If the key exchange would build a new session, treat this session as non-existent
+                if session.key_exchange != key_exchange:
                     session = None
 
             # If a new session needs to be built, do so
