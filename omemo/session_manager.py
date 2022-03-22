@@ -935,19 +935,68 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     async def __get_device_information(self, bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
         """
-        TODO
+        Internal implementation of :meth:`get_device_information` with the return value extended to include
+        bundles that were downloaded in the process.
+
+        Args:
+            bare_jid: Get information about the devices of the XMPP account belonging to this bare JID.
+
+        Returns:
+            Information about each device of `bare_jid`. The information includes the device id, the identity
+            key, the trust level, whether the device is active and, if supported by any of the backends, the
+            optional label. Returns information about all known devices, regardless of the backend they belong
+            to. In the process of gathering this information, it may be necessary to download bundles. Those
+            bundles are returned as well, so that they can be used if required immediately afterwards. This is
+            to avoid double downloading bundles during encryption/decryption flows and is purely for internal
+            use.
+        
+        Warning:
+            This method attempts to download the bundle of devices whose corresponding identity key is not
+            known yet. In case the information can not be fetched due to bundle download failures, the device
+            is not included in the returned set.
+        
+        Raises:
+            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
         storage = self.__storage
 
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
-        
-        async def load_device_information(device_id: int) -> Tuple[DeviceInformation, Optional[Bundle]]:
-            """
-            TODO
-            """
 
-            bundle: Optional[Bundle] = None
+        devices: Set[DeviceInformation] = {}
+        bundle_cache: Set[Bundle] = {}
+
+        for device_id in device_list:
+            # Load the identity key first, since this is the most likely operation to fail (due to bundle
+            # downloading errors)
+            identity_key: bytes
+            try:
+                identity_key = (await storage.load_bytes("/devices/{}/{}/identity_key".format(
+                    bare_jid,
+                    device_id
+                ))).from_just()
+            except Nothing:
+                # The identity key assigned to this device is not known yet. Fetch the bundle to find that
+                # information. Return the downloaded bundle to avoid double-fetching it if the same bundle is
+                # required for session initiation afterwards.
+                for namespace in namespaces:
+                    try:
+                        bundle = await self._download_bundle(namespace, bare_jid, device_id)
+                    except BundleDownloadFailed:
+                        pass
+                    else:
+                        bundle_cache.add(bundle)
+
+                        identity_key = bundle.identity_key
+
+                        await storage.store_bytes("/devices/{}/{}/identity_key".format(
+                            bare_jid,
+                            device_id
+                        ), identity_key)
+                        break
+                else:
+                    # Skip this device in case none of the bundles could be downloaded
+                    continue
 
             namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
                 bare_jid,
@@ -964,42 +1013,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 device_id
             ), str)).from_just()
 
-            identity_key: bytes
-            try:
-                identity_key = (await storage.load_bytes("/devices/{}/{}/identity_key".format(
-                    bare_jid,
-                    device_id
-                ))).from_just()
-            except Nothing:
-                # The identity key assigned to this device is not known yet. Fetch the bundle to find that
-                # information. Return the downloaded bundle to avoid double-fetching it if the same bundle is
-                # required for session initiation afterwards.
-                for namespace in namespaces:
-                    try:
-                        bundle = await self._download_bundle(namespace, bare_jid, device_id)
-                        break
-                    except BundleDownloadFailed:
-                        pass
-                
-                if bundle is None:
-                    raise BundleDownloadFailed(
-                        "All attempts at downloading a bundle for {}:{} failed. Attempted namespaces: {}"
-                            .format(bare_jid, device_id, namespaces)
-                    )
-
-                identity_key = bundle.identity_key
-
-                await storage.store_bytes("/devices/{}/{}/identity_key".format(
-                    bare_jid,
-                    device_id
-                ), identity_key)
-
             trust_level_name = (await storage.load_primitive("/trust/{}/{}".format(
                 bare_jid,
                 base64.urlsafe_b64encode(identity_key).decode("ASCII")
             ), str)).maybe(self.__undecided_trust_level_name)
 
-            return DeviceInformation(
+            devices.add(DeviceInformation(
                 namespaces=namespaces,
                 active=active,
                 bare_jid=bare_jid,
@@ -1007,20 +1026,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 identity_key=identity_key,
                 trust_level_name=trust_level_name,
                 label=label
-            ), bundle
-
-        devices: Set[DeviceInformation] = {}
-        bundle_cache: Set[Bundle] = {}
-
-        for device_id in device_list:
-            try:
-                device, bundle = await load_device_information(device_id)
-            except BundleDownloadFailed:
-                pass
-            else:
-                devices.add(device)
-                if bundle is not None:
-                    bundle_cache.add(bundle)
+            ))
 
         return devices, bundle_cache
 

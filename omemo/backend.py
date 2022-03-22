@@ -24,6 +24,7 @@ class KeyExchangeFailed(BackendException):
     """
 
 # TODO: Find a better way to handle Message, Bundle etc. subtypes resp. type safety
+# TODO: Maybe a serialize/deserialize method for plaintext <-> bytes?
 
 Plaintext = TypeVar("Plaintext")
 class Backend(Generic[Plaintext], metaclass=ABCMeta):
