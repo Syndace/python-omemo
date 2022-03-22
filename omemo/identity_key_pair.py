@@ -2,7 +2,7 @@ from typing import Type, TypeVar
 
 from .storage import Storage
 
-IKP = TypeVar("IKP", bound="IdentityKeyPair")
+IdentityKeyPairType = TypeVar("IdentityKeyPairType", bound="IdentityKeyPair")
 class IdentityKeyPair:
     """
     TODO: Document the transparent handling of Mont vs. Ed
@@ -18,7 +18,7 @@ class IdentityKeyPair:
         # TODO
 
     @classmethod
-    async def get(cls: Type[IKP], storage: Storage) -> IKP:
+    async def get(cls: Type[IdentityKeyPairType], storage: Storage) -> IdentityKeyPairType:
         """
         Get the identity key pair. Note that there is only ever one identity key pair. All instances of this
         class refer to the same storage locations, thus the same data.

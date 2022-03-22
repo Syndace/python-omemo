@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 class Bundle(ABC):
     """
-    TODO
+    The bundle of a device, containing the cryptographic information required for active session building.
     """
 
     @property

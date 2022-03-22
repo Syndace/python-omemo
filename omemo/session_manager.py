@@ -134,9 +134,9 @@ class MessageSendingFailed(XMPPInteractionFailed):
 
 
 # TODO: Take care of logging
-SM = TypeVar("SM", bound="SessionManager")
-Plaintext = TypeVar("Plaintext")
-class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
+SessionManagerType = TypeVar("SessionManagerType", bound="SessionManager")
+PlaintextType = TypeVar("PlaintextType")
+class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
     """
     The core of python-omemo. Manages your own key material and bundle, device lists, sessions with other
     users and much more, all while being flexibly usable with different backends and transparenlty maintaining
@@ -165,7 +165,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     def __init__(self) -> None:
         # Just the type definitions here
-        self.__backends: List[Backend[Plaintext]]
+        self.__backends: List[Backend[PlaintextType]]
         self.__storage: Storage
         self.__own_bare_jid: str
         self.__own_device_id: int
@@ -178,8 +178,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     @classmethod
     async def create(
-        cls: Type[SM],
-        backends: List[Backend[Plaintext]],
+        cls: Type[SessionManagerType],
+        backends: List[Backend[PlaintextType]],
         storage: Storage,
         own_bare_jid: str,
         initial_own_label: Optional[str],
@@ -188,7 +188,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         max_num_per_message_skipped_keys: Optional[int] = None,
         signed_pre_key_rotation_period: int = 7 * 24 * 60 * 60,
         pre_key_refill_threshold: int = 99
-    ) -> SM:
+    ) -> SessionManagerType:
         """
         Load or create OMEMO backends. This method takes care of everything regarding the initialization of
         OMEMO: generating a unique device id, uploading the bundle and adding the new device to the device
@@ -1186,7 +1186,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     # en- and decryption #
     ######################
 
-    async def __send_empty_message(self, backend: Backend[Plaintext], session: Session) -> None:
+    async def __send_empty_message(self, backend: Backend[PlaintextType], session: Session) -> None:
         """
         Internal helper to send an empty message for ratchet forwarding.
 
@@ -1205,7 +1205,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     async def encrypt(
         self,
         bare_jids: Set[str],
-        plaintext: Plaintext,
+        plaintext: PlaintextType,
         backend_priority_order: Optional[List[str]] = None
     ) -> Set[Message]:
         """
@@ -1393,7 +1393,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 no_eligible_devices
             )
 
-        async def load_or_create_session(backend: Backend[Plaintext], device: DeviceInformation) -> Session:
+        async def load_or_create_session(backend: Backend[PlaintextType], device: DeviceInformation) -> Session:
             """
             Helper to load a session for a device or create it if it doesn't exist.
 
@@ -1465,7 +1465,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         return messages
 
-    async def decrypt(self, message: Message) -> Tuple[Plaintext, DeviceInformation]:
+    async def decrypt(self, message: Message) -> Tuple[PlaintextType, DeviceInformation]:
         """
         Decrypt a message.
 

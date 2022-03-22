@@ -6,46 +6,93 @@ from .types import OMEMOException
 if TYPE_CHECKING: from .types import JSONType
 
 class StorageException(OMEMOException):
-    pass
+    """
+    Parent type for all exceptions specifically raised by methods of :class:`Storage`.
+    """
 
-# typing's Optional[A] is just an alias for Union[None, A], which means if A is a union itself that allows
-# None, the Optional[A] doesn't add anything. E.g. Optional[Optional[X]] = Optional[X] is true for any type X.
-# This Maybe class actually makes a difference between whether a value is set or not.
-V  = TypeVar("V")
-V2 = TypeVar("V2")
-M  = TypeVar("M", bound="Maybe")
+ValueType = TypeVar("ValueType")
+MappedValueType = TypeVar("MappedValueType")
+MaybeType = TypeVar("MaybeType", bound="Maybe")
 
 class Nothing(Exception):
-    pass
+    """
+    Raise by :meth:`from_just`, in case the value of the :class:`Maybe` is not set.
+    """
 
-class Maybe(Generic[V]):
+class Maybe(Generic[ValueType]):
+    """
+    typing's `Optional[A]` is just an alias for `Union[None, A]`, which means if `A` is a union itself that
+    allows `None`, the `Optional[A]` doesn't add anything. E.g. `Optional[Optional[X]] = Optional[X]` is true
+    for any type `X`. This Maybe class actually differenciates whether a value is set or not.
+    """
+
     def __init__(self):
         # Just the type definitions here
-        self.__value: V
+        self.__value: ValueType
 
     @classmethod
-    def just(cls: Type[M], value: V) -> M:
+    def just(cls: Type[MaybeType], value: ValueType) -> MaybeType:
+        """
+        Args:
+            value: The value to set.
+        
+        Returns:
+            An instance of :class:`Maybe` with a set value.
+        """
+
         self = cls()
         self.__value = value
         return self
 
     @classmethod
-    def nothing(cls: Type[M]) -> M:
+    def nothing(cls: Type[MaybeType]) -> MaybeType:
+        """
+        Returns:
+            An instance of :class:`Maybe` without a value.
+        """
+
         return cls()
 
-    def from_just(self) -> V:
+    def from_just(self) -> ValueType:
+        """
+        Returns:
+            The value stored in this :class:`Maybe`.
+        
+        Raises:
+            Nothing: if no value is set.
+        """
+
         try:
             return self.__value
         except AttributeError:
             raise Nothing("Maybe.fromJust: Nothing") # -- yuck
 
-    def maybe(self, default: V) -> V:
+    def maybe(self, default: ValueType) -> ValueType:
+        """
+        Args:
+            default: The value to return if no value is set in this :class:`Maybe`.
+        
+        Returns:
+            The value stored in the :class:`Maybe`, or the default value.
+        """
+
         try:
             return self.__value
         except AttributeError:
             return default
     
-    def fmap(self, f: Callable[[V], V2]) -> "Maybe[V2]":
+    def fmap(self, f: Callable[[ValueType], MappedValueType]) -> "Maybe[MappedValueType]":
+        """
+        Apply a mapping function to the value stored in this :class:`Maybe`, if a value is stored.
+
+        Args:
+            f: The mapping function to apply to the value stored in this :class:`Maybe`, if present.
+        
+        Returns:
+            A new :class:`Maybe`, containing either the mapped value or no value, depending on the original
+            :class:`Maybe`.
+        """
+
         try:
             value = self.__value
         except AttributeError:
@@ -53,9 +100,10 @@ class Maybe(Generic[V]):
 
         return Maybe.just(f(value))
 
-P = TypeVar("P")
-PK = TypeVar("PK")
-PV = TypeVar("PV")
+PrimitiveType = TypeVar("PrimitiveType")
+PrimitiveKeyType = TypeVar("PrimitiveKeyType")
+PrimitiveValueType = TypeVar("PrimitiveValueType")
+
 class Storage(ABC):
     """
     A simple key/value storage class with optional caching (on by default). Keys can be any Python string,
@@ -209,7 +257,7 @@ class Storage(ABC):
 
         await self.store(key, base64.urlsafe_b64encode(value).decode("ASCII"))
 
-    async def load_primitive(self, key: str, type: Type[P]) -> Maybe[P]:
+    async def load_primitive(self, key: str, type: Type[PrimitiveType]) -> Maybe[PrimitiveType]:
         """
         Variation of :meth:`load` for loading specifically primitive values.
 
@@ -224,7 +272,7 @@ class Storage(ABC):
             StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
-        def check_type(value: JSONType) -> P:
+        def check_type(value: JSONType) -> PrimitiveType:
             if isinstance(value, type):
                 return value
             raise TypeError("The value stored for key {} is not a {}: {}".format(key, type, value))
@@ -252,7 +300,7 @@ class Storage(ABC):
 
         return (await self.load(key)).fmap(check_type)
 
-    async def load_optional(self, key: str, type: Type[P]) -> Maybe[Optional[P]]:
+    async def load_optional(self, key: str, type: Type[PrimitiveType]) -> Maybe[Optional[PrimitiveType]]:
         """
         Variation of :meth:`load` for loading specifically optional primitive values.
 
@@ -267,14 +315,14 @@ class Storage(ABC):
             StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
-        def check_type(value: JSONType) -> Optional[P]:
+        def check_type(value: JSONType) -> Optional[PrimitiveType]:
             if value is None or isinstance(value, type):
                 return value
             raise TypeError("The value stored for key {} is not an optional {}: {}".format(key, type, value))
 
         return (await self.load(key)).fmap(check_type)
 
-    async def load_list(self, key: str, type: Type[P]) -> Maybe[List[P]]:
+    async def load_list(self, key: str, type: Type[PrimitiveType]) -> Maybe[List[PrimitiveType]]:
         """
         Variation of :meth:`load` for loading specifically lists of primitive values.
 
@@ -289,14 +337,19 @@ class Storage(ABC):
             StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
-        def check_type(value: JSONType) -> List[P]:
+        def check_type(value: JSONType) -> List[PrimitiveType]:
             if isinstance(value, list) and all(isinstance(element, type) for element in value):
                 return value
             raise TypeError("The value stored for key {} is not a list of {}: {}".format(key, type, value))
 
         return (await self.load(key)).fmap(check_type)
 
-    async def load_dict(self, key: str, key_type: Type[PK], value_type: Type[PV]) -> Maybe[Dict[PK, PV]]:
+    async def load_dict(
+        self,
+        key: str,
+        key_type: Type[PrimitiveKeyType],
+        value_type: Type[PrimitiveValueType]
+    ) -> Maybe[Dict[PrimitiveKeyType, PrimitiveValueType]]:
         """
         Variation of :meth:`load` for loading specifically dictionaries of primitive values.
 
@@ -312,7 +365,7 @@ class Storage(ABC):
             StorageException: If any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
-        def check_type(value: JSONType) -> Dict[PK, PV]:
+        def check_type(value: JSONType) -> Dict[PrimitiveKeyType, PrimitiveValueType]:
             if isinstance(value, dict):
                 if all(isinstance(pk, key_type) and isinstance(pv, value_type) for pk, pv in value.items()):
                     return value

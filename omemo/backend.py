@@ -26,8 +26,8 @@ class KeyExchangeFailed(BackendException):
 # TODO: Find a better way to handle Message, Bundle etc. subtypes resp. type safety
 # TODO: Maybe a serialize/deserialize method for plaintext <-> bytes?
 
-Plaintext = TypeVar("Plaintext")
-class Backend(Generic[Plaintext], metaclass=ABCMeta):
+PlaintextType = TypeVar("PlaintextType")
+class Backend(Generic[PlaintextType], metaclass=ABCMeta):
     """
     TODO
 
@@ -137,7 +137,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         raise NotImplementedError("Create a subclass of Backend and implement `build_message`.")
 
     @abstractmethod
-    async def encrypt(self, sessions: Set[Session], plaintext: Plaintext) -> Tuple[Content, Set[KeyMaterial]]:
+    async def encrypt(self, sessions: Set[Session], plaintext: PlaintextType) -> Tuple[Content, Set[KeyMaterial]]:
         """
         TODO
         """
@@ -160,7 +160,7 @@ class Backend(Generic[Plaintext], metaclass=ABCMeta):
         key_material: KeyMaterial,
         max_num_per_session_skipped_keys: int,
         max_num_per_message_skipped_keys: int
-    ) -> Plaintext:
+    ) -> PlaintextType:
         """
         TODO
         """
