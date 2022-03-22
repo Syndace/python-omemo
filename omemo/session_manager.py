@@ -57,6 +57,33 @@ class NoEligibleDevices(SessionManagerException):
 
         self.bare_jids = bare_jids
 
+class MessageNotForUs(SessionManagerException):
+    """
+    Raised by :meth:`decrypt` in case the message to decrypt does not seem to be encrypting for this device.
+    """
+
+class SenderNotFound(SessionManagerException):
+    """
+    Raised by :meth:`decrypt` in case the usual public information of the sending device could not be
+    downloaded.
+    """
+
+class SenderDistrusted(SessionManagerException):
+    """
+    Raised by :meth:`decrypt` in case the sending device is explicitly distrusted.
+    """
+
+class NoSession(SessionManagerException):
+    """
+    Raised by :meth:`decrypt` in case there is no session with the sending device, and a new session can't be
+    built either.
+    """
+
+class PublicDataInconsistency(SessionManagerException):
+    """
+    Raised by :meth:`decrypt` in case inconsistencies were found in the public data of the sending device.
+    """
+
 class UnknownNamespace(SessionManagerException):
     """
     Raised by various methods of :class:`SessionManager`, in case the namespace to perform an operation under
@@ -1178,7 +1205,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 qualifies for encryption. Either the recipient does not advertize any OMEMO-enabled devices or
                 all devices were disqualified due to missing trust or failure to download their bundles.
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
-            # TODO: Key exchange error (or nothing?); also applies to BundleDownloadFailed
+            KeyExchangeFailed: in case there is an error during the key exchange required for session
+                building. Forwarded from :meth:`build_session_active`.
+            # TODO: Remove the above two exceptions, if the decision is made to handle them internally.
 
         Note:
             The own JID is implicitly added to the set of recipients, there is no need to list it manually.
@@ -1347,7 +1376,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             
             Raises:
                 BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
-                TODO: Key exchange error
+                KeyExchangeFailed: in case there is an error during the key exchange required for session
+                    building. Forwarded from :meth:`build_session_active`.
             """
 
             session = await backend.load_session(device)
@@ -1422,7 +1452,15 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             KeyExchangeFailed: in case a new session is built while decrypting this message, and there is an
                 error during the key exchange that's part of the session building. Forwarded from
                 :meth:`~omemo.backend.Backend.build_session_passive`.
-            # TODO
+            MessageNotForUs: in case the message does not seem to be encrypted for us.
+            SenderNotFound: in case the public information about the sending device could not be found or is
+                incomplete.
+            SenderDistrusted: in case the identity key corresponding to the sending device is explicitly
+                distrusted.
+            NoSession: in case there is no session with the sending device, and the information required to
+                build a new session is not included either.
+            PublicDataInconsistency: in case there is an inconsistency in the public data of the sending
+                device, which can affect the trust status.
 
         Warning:
             Do **NOT** implement any automatic reaction to decryption failures, those automatic reactions are
@@ -1451,7 +1489,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 message.keys
             ))
         except StopIteration:
-            raise # TODO
+            raise MessageNotForUs("The message to decrypt does not contain key material for us.")
 
         # Check whether the sending device is known
         devices = await self.get_device_information(message.bare_jid)
@@ -1470,22 +1508,35 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             # specification, which is shady, thus it's not wrong to abort here either.
             device = next(filter(lambda device: device.device_id == message.device_id, devices), None)
             if device is None:
-                raise # TODO
+                raise SenderNotFound(
+                    "Couldn't find public information about the device which sent this message. I.e. the"
+                    " device either does not appear in the device list of the sending XMPP account, or the"
+                    " bundle of the sending device could not be downloaded."
+                )
 
         # Check the trust level of the sending device. Abort in case of explicit distrust.
         if self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Distrusted:
-            raise # TODO
+            raise SenderDistrusted(
+                "The identity key corresponding to the sending device is explicitly distrusted."
+            )
 
         # Handle the key exchange if available
         if key_exchange is None:
             # If there is no key exchange, a session has to exist and should be loadable
             session = await backend.load_session(device)
             if session is None:
-                raise # TODO
+                raise NoSession(
+                    "There is no session with the sending device, and key exchange information required to"
+                    " build a new session is not included in the message."
+                )
         else:
             # Check whether the identity key matches the one we know
             if key_exchange.identity_key != device.identity_key:
-                raise # TODO
+                raise PublicDataInconsistency(
+                    "There is no session with the sending device. Key exchange information to build a new"
+                    " session is included in the message, however the identity key of the key exchange"
+                    " information does not match the identity key known for the sending device."
+                )
 
             # Check whether there is a session with the sending device already
             session = await backend.load_session(device)
