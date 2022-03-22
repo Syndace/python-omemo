@@ -2,9 +2,15 @@ import enum
 from typing import Dict, NamedTuple, Optional, Protocol, Set, Type, TYPE_CHECKING, Union
 
 class OMEMOException(Exception):
-    pass
+    """
+    Parent type for all custom exceptions in this library.
+    """
 
 class DeviceInformation(NamedTuple):
+    """
+    Structure containing information about a single OMEMO device.
+    """
+
     namespaces: Set[str]
     active: Dict[str, bool]
     bare_jid: str
@@ -13,10 +19,12 @@ class DeviceInformation(NamedTuple):
     trust_level_name: str
     label: Optional[str]
 
-DeviceList = Dict[int, Optional[str]]
-
 @enum.unique
 class TrustLevel(enum.Enum):
+    """
+    The three core trust levels.
+    """
+
     Trusted    = 1
     Distrusted = 2
     Undecided  = 3

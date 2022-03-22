@@ -35,5 +35,5 @@ from .session_manager import (
 )
 
 from .storage import Maybe, Nothing, Storage, StorageException
-from .types import DeviceInformation, DeviceList, OMEMOException, TrustLevel
+from .types import DeviceInformation, OMEMOException, TrustLevel
 if TYPE_CHECKING: from .types import JSONType

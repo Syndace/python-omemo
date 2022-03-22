@@ -10,7 +10,7 @@ from .identity_key_pair import IdentityKeyPair
 from .message import Message
 from .session import Session
 from .storage import Nothing, Storage
-from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
+from .types   import DeviceInformation, OMEMOException, TrustLevel
 
 # TODO: Add missing API promised in functionality.md
 # TODO: Add more machine-readable data to exceptions?
@@ -529,13 +529,13 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    async def _upload_device_list(namespace: str, device_list: DeviceList) -> Any:
+    async def _upload_device_list(namespace: str, device_list: Dict[int, Optional[str]]) -> Any:
         """
         Upload the device list for this XMPP account.
 
         Args:
             namespace: The XML namespace to execute this operation under.
-            device_list: The device list to upload.
+            device_list: The device list to upload. Mapping from device id to optional label.
 
         Returns:
             Anything, the return value is ignored.
@@ -558,7 +558,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    async def _download_device_list(namespace: str, bare_jid: str) -> DeviceList:
+    async def _download_device_list(namespace: str, bare_jid: str) -> Dict[int, Optional[str]]:
         """
         Download the device list of a specific XMPP account.
 
@@ -567,7 +567,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             bare_jid: The bare JID of the XMPP account.
 
         Returns:
-            The list of device ids and their optional label, if available.
+            The device list as a dictionary, mapping the device ids to their optional label.
 
         Raises:
             UnkownNamespace: if the namespace is unknown.
@@ -677,7 +677,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     # device list management #
     ##########################
 
-    async def update_device_list(self, namespace: str, bare_jid: str, device_list: DeviceList) -> None:
+    async def update_device_list(
+        self,
+        namespace: str,
+        bare_jid: str,
+        device_list: Dict[int, Optional[str]]
+    ) -> None:
         """
         Update the device list of a specific bare JID, e.g. after receiving an update for the XMPP account
         from `PEP <https://xmpp.org/extensions/xep-0163.html>`__.
@@ -685,8 +690,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         Args:
             namespace: The XML namespace to execute this operation under.
             bare_jid: The bare JID of the XMPP account.
-            device_list: The updated device list. Each device list entry consists of the device id and the
-                optional label, if available.
+            device_list: The updated device list. Mapping from device id to optional label.
 
         Raises:
             UnkownNamespace: if the backend to handle the message is not currently loaded.
