@@ -166,7 +166,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         library can be used with any economy that provides similar functionality.
     """
 
-    HEARTBEAT_MESSAGE_TRIGGER = 53
+    STALENESS_MAGIC_NUMBER = 53
 
     def __init__(self) -> None:
         # Just the type definitions here
@@ -989,7 +989,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             backend.namespace
             for backend
             in self.__backends
-            if await backend.load_session(device) is not None
+            if await backend.load_session(device.bare_jid, device.device_id) is not None
         }))
 
         unsuccessful: Dict[str, OMEMOException] = {}
@@ -999,7 +999,8 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             if backend.namespace in device.namespaces:
                 try:
                     session, key_exchange = await backend.build_session_active(
-                        device,
+                        device.bare_jid,
+                        device.device_id,
                         await self._download_bundle(
                             backend.namespace,
                             device.bare_jid,
@@ -1029,7 +1030,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         """
 
         sessions = {
-            backend.namespace: await backend.load_session(device)
+            backend.namespace: await backend.load_session(device.bare_jid, device.device_id)
             for backend
             in self.__backends
             if backend.namespace in device.namespaces
@@ -1255,7 +1256,9 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             hypothetical) case that two or more parties selected the same pre key to initiate a session with
             this device while it was offline. When history synchronization ends, all pre keys that were kept
             around are deleted and the library returns to normal behaviour.
-        TODO: Delay staleness prevention and session completion messages in history sync mode
+        * Empty messages to "complete" sessions or prevent staleness are deferred until after the
+            synchronization is done. Only one empty message is sent per session when exiting the history
+            synchronization mode.
         
         Note:
             While in history synchronization mode, the library can process live events too.
@@ -1268,11 +1271,41 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         If the library is in "history synchronization mode" started by :meth:`create` or
         :meth:`before_history_sync`, calling this makes it return to normal working behaviour. Make sure to
         call this as soon as history synchronization (if any) is done.
+
+        Raises:
+            MessageSendingFailed: if one of the queued empty messages could not be sent. Forwarded from
+                :meth:`_send_message`.
         """
 
+        storage = self.__storage
+
         self.__synchronizing = False
+
+        # Delete pre keys that were hidden while in history synchronization mode
         for backend in self.__backends:
             await backend.delete_hidden_pre_keys()
+
+        # Send empty messages that were queued while in history synchronization mode
+        for backend in self.__backends:
+            # Load and delete the list of bare JIDs that have queued empty messages for this backend
+            queued_jids = set((await storage.load_list("/queue/{}".format(backend.namespace), str)).maybe([]))
+            await storage.delete("/queue/{}".format(backend.namespace))
+
+            for bare_jid in queued_jids:
+                # For each queued bare JID, load and delete the list of devices that have queued an empty
+                # message for this backend
+                queued_device_ids = set((await storage.load_list(
+                    "/queue/{}/{}".format(backend.namespace, bare_jid),
+                    int
+                )).maybe([]))
+                await storage.delete("/queue/{}/{}".format(backend.namespace, bare_jid))
+
+                for device_id in queued_device_ids:
+                    session = await backend.load_session(bare_jid, device_id)
+                    if session is not None:
+                        # It is theoretically possible that the session has been deleted after an empty
+                        # message was queued for it.
+                        await self.__send_empty_message(backend, session)
 
     ######################
     # en- and decryption #
@@ -1502,7 +1535,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                     building. Forwarded from :meth:`build_session_active`.
             """
 
-            session = await backend.load_session(device)
+            session = await backend.load_session(device.bare_jid, device.device_id)
             if session is None:
                 try:
                     bundle = next(filter(lambda bundle: (
@@ -1513,7 +1546,11 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                 except StopIteration:
                     bundle = await self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
 
-                session, key_exchange = await backend.build_session_active(device, bundle)
+                session, key_exchange = await backend.build_session_active(
+                    device.bare_jid,
+                    device.device_id,
+                    bundle
+                )
                 session.set_key_exchange(key_exchange)
 
             return session
@@ -1603,6 +1640,8 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             information about the ``PlaintextType`` type.
         """
 
+        storage = self.__storage
+
         # Find the backend to handle this message
         backend = next(filter(lambda backend: backend.namespace == message.namespace, self.__backends), None)
         if backend is None:
@@ -1651,7 +1690,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         # Handle the key exchange if available
         if key_exchange is None:
             # If there is no key exchange, a session has to exist and should be loadable
-            session = await backend.load_session(device)
+            session = await backend.load_session(device.bare_jid, device.device_id)
             if session is None:
                 raise NoSession(
                     "There is no session with the sending device, and key exchange information required to"
@@ -1667,7 +1706,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                 )
 
             # Check whether there is a session with the sending device already
-            session = await backend.load_session(device)
+            session = await backend.load_session(device.bare_jid, device.device_id)
             if session is not None:
                 # Check whether the key exchange would build the same session
                 if not session.built_by_key_exchange(key_exchange):
@@ -1676,7 +1715,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
             # If a new session needs to be built, do so
             if session is None:
-                session = await backend.build_session_passive(device, key_exchange)
+                session = await backend.build_session_passive(device.bare_jid, device.device_id, key_exchange)
 
         # Decrypt the message
         plaintext = backend.deserialize_plaintext(await backend.decrypt(
@@ -1696,8 +1735,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         # Persist the session following successful decryption
         await session.persist()
 
-        # If this message was a key exchange, take care of pre key hiding/deletion and send and empty message
-        # to forward the ratchet to "complete" the handshake.
+        # If this message was a key exchange, take care of pre key hiding/deletion.
         if key_exchange is not None:
             bundle_changed: bool
             if self.__synchronizing:
@@ -1720,11 +1758,33 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
                 await self._upload_bundle(bundle)
             
-            await self.__send_empty_message(backend, session) # TODO: Defer while in history sync mode
-        
-        # Send an empty message if necessary to avoid staleness
-        if session.receiving_chain_length >= self.__class__.HEARTBEAT_MESSAGE_TRIGGER: # TODO: Make prettier
-            await self.__send_empty_message(backend, session) # TODO: Defer while in history sync mode
+        # Send an empty message if necessary to avoid staleness and to "complete" the handshake in case this
+        # was a key exchange
+        if key_exchange is not None or session.receiving_chain_length > self.__class__.STALENESS_MAGIC_NUMBER:
+            if self.__synchronizing:
+                # Add this bare JID to the queue
+                queued_jids = set((await storage.load_list(
+                    "/queue/{}".format(session.namespace),
+                    str
+                )).maybe([]))
+
+                queued_jids.add(session.bare_jid)
+                await storage.store("/queue/{}".format(session.namespace), list(queued_jids))
+
+                # Add this device id to the queue
+                queued_device_ids = set((await storage.load_list(
+                    "/queue/{}/{}".format(session.namespace, session.bare_jid),
+                    int
+                )).maybe([]))
+
+                queued_device_ids.add(session.device_id)
+                await storage.store(
+                    "/queue/{}/{}".format(session.namespace, session.bare_jid),
+                    list(queued_device_ids)
+                )
+            else:
+                # If not in history synchronization mode, send the empty message right away
+                await self.__send_empty_message(backend, session)
         
         # Return the plaintext and information about the sending device
         return (plaintext, device)

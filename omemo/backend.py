@@ -5,7 +5,7 @@ from .bundle  import Bundle
 from .identity_key_pair import IdentityKeyPair
 from .message import Content, KeyMaterial, KeyExchange, Message
 from .session import Session
-from .types   import DeviceInformation, OMEMOException
+from .types   import OMEMOException
 
 class BackendException(OMEMOException):
     """
@@ -62,10 +62,11 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
         """
 
     @abstractmethod
-    async def load_session(self, device: DeviceInformation) -> Optional[Session]:
+    async def load_session(self, bare_jid: str, device_id: int) -> Optional[Session]:
         """
         Args:
-            device: The device whose session to load.
+            bare_jid: The bare JID the device belongs to.
+            device_id: The id of the device.
 
         Returns:
             The session associated with the device, or `None` if such a session does not exist.
@@ -76,14 +77,16 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
     @abstractmethod
     async def build_session_active(
         self,
-        device: DeviceInformation,
+        bare_jid: str,
+        device_id: int,
         bundle: Bundle
     ) -> Tuple[Session, KeyExchange]:
         """
         Actively build a session.
 
         Args:
-            device: The device to initiate the key exchange with.
+            bare_jid: The bare JID the device belongs to.
+            device_id: The id of the device.
             bundle: The bundle containing the public key material of the other device required for active
                 session building.
         
@@ -105,12 +108,18 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
         raise NotImplementedError("Create a subclass of Backend and implement `build_session_active`.")
 
     @abstractmethod
-    async def build_session_passive(self, device: DeviceInformation, key_exchange: KeyExchange) -> Session:
+    async def build_session_passive(
+        self,
+        bare_jid: str,
+        device_id: int,
+        key_exchange: KeyExchange
+    ) -> Session:
         """
         Passively build a session.
 
         Args:
-            device: The device which actively initiated the key exchange.
+            bare_jid: The bare JID the device belongs to.
+            device_id: The id of the device.
             key_exchange: Key exchange information for the passive session building.
         
         Returns:

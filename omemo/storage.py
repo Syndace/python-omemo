@@ -110,8 +110,8 @@ class Storage(ABC):
     values any JSON-serializable structure.
 
     Warning:
-        Writing operations must be performed right away, before returning from the method. Writing operations
-        must not be cached or otherwise deferred.
+        Writing (and deletion) operations must be performed right away, before returning from the method. Such
+        operations must not be cached or otherwise deferred.
     
     Warning:
         All parameters must be treated as immutable unless explicitly noted otherwise.
