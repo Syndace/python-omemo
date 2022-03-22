@@ -13,22 +13,14 @@ from .storage import Nothing, Storage
 from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
 
 # TODO: Add missing API promised in functionality.md
+# TODO: Add more machine-readable data to exceptions?
 
 class SessionManagerException(OMEMOException):
     """
     Parent type for all exceptions specific to :class:`SessionManager`.
     """
 
-class XMPPInteractionFailed(SessionManagerException):
-    """
-    Parent type for all exceptions related to network/XMPP interactions.
-    """
 
-class UnknownTrustLevel(SessionManagerException):
-    """
-    Raised by :meth:`_evaluate_custom_trust_level` if the custom trust level name to evaluate is unknown.
-    Indirectly raised by the encryption and decryption flows.
-    """
 
 class TrustDecisionFailed(SessionManagerException):
     """
@@ -59,6 +51,8 @@ class NoEligibleDevices(SessionManagerException):
 
         self.bare_jids = bare_jids
 
+
+
 class MessageNotForUs(SessionManagerException):
     """
     Raised by :meth:`decrypt` in case the message to decrypt does not seem to be encrypting for this device.
@@ -86,10 +80,25 @@ class PublicDataInconsistency(SessionManagerException):
     Raised by :meth:`decrypt` in case inconsistencies were found in the public data of the sending device.
     """
 
+
+
+class UnknownTrustLevel(SessionManagerException):
+    """
+    Raised by :meth:`_evaluate_custom_trust_level` if the custom trust level name to evaluate is unknown.
+    Indirectly raised by the encryption and decryption flows.
+    """
+
 class UnknownNamespace(SessionManagerException):
     """
     Raised by various methods of :class:`SessionManager`, in case the namespace to perform an operation under
     is not known or the corresponding backend is not currently loaded.
+    """
+
+
+
+class XMPPInteractionFailed(SessionManagerException):
+    """
+    Parent type for all exceptions related to network/XMPP interactions.
     """
 
 class BundleUploadFailed(XMPPInteractionFailed):
@@ -121,6 +130,8 @@ class MessageSendingFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`_send_message`, and indirectly by various methods of :class:`SessionManager`.
     """
+
+
 
 # TODO: Take care of logging
 SM = TypeVar("SM", bound="SessionManager")
@@ -1223,7 +1234,6 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
             KeyExchangeFailed: in case there is an error during the key exchange required for session
                 building. Forwarded from :meth:`build_session_active`.
-            # TODO: Remove the above two exceptions, if the decision is made to handle them internally.
 
         Note:
             The own JID is implicitly added to the set of recipients, there is no need to list it manually.
@@ -1417,6 +1427,7 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # - Device-scope failures: bundle download and key exchange failures
         # - Library-scope failures: storage failures
         # - Anything else?
+        # Also don't forget to adjust the excepions in the documentation after the decision is made.
         messages: Set[Message] = {}
         for backend in self.__backends:
             # Find the devices to encrypt for using this backend

@@ -9,12 +9,21 @@ from .message import Content, KeyExchange, KeyMaterial, Message
 
 from .session_manager import (
     SessionManagerException,
-    XMPPInteractionFailed,
-    UnknownTrustLevel,
+
     TrustDecisionFailed,
     StillUndecided,
     NoEligibleDevices,
+
+    MessageNotForUs,
+    SenderNotFound,
+    SenderDistrusted,
+    NoSession,
+    PublicDataInconsistency,
+
+    UnknownTrustLevel,
     UnknownNamespace,
+
+    XMPPInteractionFailed,
     BundleUploadFailed,
     BundleDownloadFailed,
     BundleDeletionFailed,
