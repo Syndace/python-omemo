@@ -12,6 +12,8 @@ from .session import Session
 from .storage import Nothing, Storage
 from .types   import DeviceInformation, DeviceList, OMEMOException, TrustLevel
 
+# TODO: Add missing API promised in functionality.md
+
 class SessionManagerException(OMEMOException):
     """
     Parent type for all exceptions specific to :class:`SessionManager`.
@@ -879,10 +881,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                     )
                     session.set_key_exchange(key_exchange)
 
-                    content, key_material = await backend.encrypt_empty(session)
-                    message = backend.build_message(content, { (key_material, key_exchange) })
-                    await self._send_message(message)
-                    await session.persist()
+                    # Send the notification message
+                    await self.__send_empty_message(backend, session)
                 except OMEMOException as e:
                     unsuccessful[backend.namespace] = e
 
@@ -1170,6 +1170,22 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
     ######################
     # en- and decryption #
     ######################
+
+    async def __send_empty_message(self, backend: Backend[Plaintext], session: Session) -> None:
+        """
+        Internal helper to send an empty message for ratchet forwarding.
+
+        Args:
+            backend: The backend to encrypt the message with.
+            session: The session to encrypt the message with.
+        
+        Raises:
+            MessageSendingFailed: if the message could not be sent. Forwarded from :meth:`_send_message`.
+        """
+
+        content, key_material = await backend.encrypt_empty(session)
+        await self._send_message(backend.build_message(content, { (key_material, session.key_exchange) }))
+        await session.persist()
 
     async def encrypt(
         self,
@@ -1461,6 +1477,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                 build a new session is not included either.
             PublicDataInconsistency: in case there is an inconsistency in the public data of the sending
                 device, which can affect the trust status.
+            MessageSendingFailed: if an attempt to send an empty OMEMO message failed. Forwarded from
+                :meth:`_send_message`.
 
         Warning:
             Do **NOT** implement any automatic reaction to decryption failures, those automatic reactions are
@@ -1469,6 +1487,9 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
 
         Note:
             If the trust level of the sender evaluates to undecided, the message is decrypted.
+        
+        Note:
+            May send empty OMEMO messages to "complete" key exchanges or prevent staleness.
 
         Note:
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
@@ -1568,7 +1589,8 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
         # Persist the session following successful decryption
         await session.persist()
 
-        # If this message was a key exchange, take care of pre key hiding/deletion as the last step.
+        # If this message was a key exchange, take care of pre key hiding/deletion and send and empty message
+        # to forward the ratchet to "complete" the handshake.
         if key_exchange is not None:
             bundle_changed: bool
             if self.__synchronizing:
@@ -1590,8 +1612,12 @@ class SessionManager(Generic[Plaintext], metaclass=ABCMeta):
                     )
 
                 await self._upload_bundle(bundle)
+            
+            await self.__send_empty_message(backend, session)
         
-        # TODO: Empty messages for session completion and staleness prevention
-
+        # Send an empty message if necessary to avoid staleness
+        if session.receiving_chain_length >= self.__class__.HEARTBEAT_MESSAGE_TRIGGER: # TODO: Make prettier
+            await self.__send_empty_message(backend, session)
+        
         # Return the plaintext and information about the sending device
         return (plaintext, device)

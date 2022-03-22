@@ -78,3 +78,12 @@ class Session(ABC):
 
         # TODO: Could this just be KeyExchange.__eq__?
         pass
+
+    @property
+    @abstractmethod
+    def receiving_chain_length(self) -> int:
+        """
+        TODO
+        """
+
+        pass
