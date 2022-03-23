@@ -1004,7 +1004,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                             device.device_id
                         )
                     )
-                    session.set_key_exchange(key_exchange)
+                    session.key_exchange = key_exchange
 
                     # Send the notification message
                     await self.__send_empty_message(backend, session)
@@ -1322,7 +1322,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
         content, key_material = await backend.encrypt_empty(session)
         await self._send_message(backend.build_message(content, { (key_material, session.key_exchange) }))
-        await session.persist()
+        await backend.store_session(session)
 
     async def encrypt(
         self,
@@ -1548,7 +1548,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                     device.device_id,
                     bundle
                 )
-                session.set_key_exchange(key_exchange)
+                session.key_exchange = key_exchange
 
             return session
 
@@ -1587,7 +1587,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
             # Persist the sessions as the final step
             for session in sessions:
-                await session.persist()
+                await backend.store_session(session)
 
         return messages
 
@@ -1712,6 +1712,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             # If a new session needs to be built, do so
             if session is None:
                 session = await backend.build_session_passive(device.bare_jid, device.device_id, key_exchange)
+                session.key_exchange = key_exchange
 
         # Decrypt the message
         plaintext = backend.deserialize_plaintext(await backend.decrypt(
@@ -1726,10 +1727,10 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         # other party has received at least one of them. Once a new session is used to decrypt a message, the
         # other party is confirmed to have received at least one of the key exchanges, so the data can be
         # safely deleted.
-        session.delete_key_exchange()
+        session.key_exchange = None
 
         # Persist the session following successful decryption
-        await session.persist()
+        await backend.store_session(session)
 
         # If this message was a key exchange, take care of pre key hiding/deletion.
         if key_exchange is not None:

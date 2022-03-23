@@ -1,20 +1,28 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Optional
 
 from .message import KeyExchange
 
-# TODO: Move "complex" API to Backend and add documentation about the motivation for doing that
 class Session(ABC):
     """
-    TODO
+    Class representing an OMEMO session. Used to encrypt/decrypt key material for/from a single
+    recipient/sender device in a perfectly forwared secure manner.
 
     Warning:
-        Changes to a session may only be persisted when :meth:`persist` is called.
+        Changes to a session may only be persisted when :meth:`store_session` is called.
     
     Warning:
         Multiple sessions for the same device can exist in memory, however only one session per device can
         exist in storage. Which one of the in-memory sessions is persisted in storage is controlled by calling
-        the :meth:`persist` method.
+        the :meth:`store_session` method.
+    
+    Note:
+        The API of the :class:`Session` class was intentionally kept thin. All "complex" interactions with
+        session objects happen via methods of :class:`Backend`. This allows backend implementors to have the
+        :class:`Session` class be a simple "stupid" data holding structure type, while all of the more complex
+        logic is located in the implementation of the :class:`Backend` class itself. Backend implementations
+        are obviously free to implement logic on their respective :class:`Session` implementations and forward
+        calls to them from the :class:`Backend` methods.
     """
 
     @property
@@ -37,53 +45,52 @@ class Session(ABC):
     def identity_key(self) -> bytes:
         pass
 
-    @abstractmethod
-    async def persist(self) -> Any:
-        """
-        TODO
-        """
-
-        pass
-
     @property
     @abstractmethod
     def key_exchange(self) -> Optional[KeyExchange]:
         """
-        TODO
+        This property allows associating some key exchange information with a session. This can either be the
+        key exchange information received during passive session building, or the key exchange information
+        created as part of active session building. The key exchange information is needed by the protocol for
+        stability reasons, to make sure that all sides can build the session, even if messages are lost or
+        received out of order.
+
+        Returns:
+            The key exchange information associated with this session, or `None`.
+        
+        Note:
+            The core library (i.e. :class:`SessionManager`) takes care of setting this property, backend
+            implementors only have to care about loading and storing the value in :meth:`load_session` and
+            :meth:`store_session`.
         """
 
-        pass
-
+    @key_exchange.setter
     @abstractmethod
-    def set_key_exchange(self, key_exchange: KeyExchange) -> Any:
+    def key_exchange(self, value: Optional[KeyExchange]) -> None:
         """
-        TODO
-        """
+        Override the key exchange information associated with this session.
 
-        pass
-
-    @abstractmethod
-    def delete_key_exchange(self) -> Any:
+        Args:
+            value: The key exchange information to associate with this session, or `None`.
+        
+        Note:
+            The core library (i.e. :class:`SessionManager`) takes care of setting this property, backend
+            implementors only have to care about loading and storing the value in :meth:`load_session` and
+            :meth:`store_session`.
         """
-        TODO
-        """
-
-        pass
 
     @property
     @abstractmethod
     def receiving_chain_length(self) -> int:
         """
-        TODO
+        Returns:
+            The length of the receiving chain, used for own staleness detection.
         """
-
-        pass
 
     @property
     @abstractmethod
     def sending_chain_length(self) -> int:
         """
-        TODO
+        Returns:
+            The length of the sending chain, used for staleness detection of other devices.
         """
-
-        pass

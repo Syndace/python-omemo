@@ -70,9 +70,34 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
 
         Returns:
             The session associated with the device, or `None` if such a session does not exist.
+
+        Warning:
+            Multiple sessions for the same device can exist in memory, however only one session per device can
+            exist in storage. Which one of the in-memory sessions is persisted in storage is controlled by
+            calling the :meth:`store_session` method.
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `load_session`.")
+
+    @abstractmethod
+    async def store_session(self, session: Session) -> Any:
+        """
+        Store a session, overwriting any previously stored session for the bare JID and device id this session
+        belongs to.
+
+        Args:
+            session: The session to store.
+
+        Returns:
+            Anything, the return value is ignored.
+
+        Warning:
+            Multiple sessions for the same device can exist in memory, however only one session per device can
+            exist in storage. Which one of the in-memory sessions is persisted in storage is controlled by
+            calling this method.
+        """
+
+        raise NotImplementedError("Create a subclass of Backend and implement `store_session`.")
 
     @abstractmethod
     async def build_session_active(
