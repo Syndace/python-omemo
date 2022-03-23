@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import base64
+import copy
 from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, TYPE_CHECKING
 
 from .types import OMEMOException
@@ -24,6 +25,9 @@ class Maybe(Generic[ValueType]):
     typing's `Optional[A]` is just an alias for `Union[None, A]`, which means if `A` is a union itself that
     allows `None`, the `Optional[A]` doesn't add anything. E.g. `Optional[Optional[X]] = Optional[X]` is true
     for any type `X`. This Maybe class actually differenciates whether a value is set or not.
+
+    All incoming and outgoing values or cloned using :func:`copy.deepcopy`, such that values stored in a Maybe
+    instance are not affected by outside application logic.
     """
 
     def __init__(self):
@@ -41,7 +45,7 @@ class Maybe(Generic[ValueType]):
         """
 
         self = cls()
-        self.__value = value
+        self.__value = copy.deepcopy(value)
         return self
 
     @classmethod
@@ -63,7 +67,7 @@ class Maybe(Generic[ValueType]):
         """
 
         try:
-            return self.__value
+            return copy.deepcopy(self.__value)
         except AttributeError:
             raise Nothing("Maybe.fromJust: Nothing") # -- yuck
 
@@ -73,11 +77,11 @@ class Maybe(Generic[ValueType]):
             default: The value to return if no value is set in this :class:`Maybe`.
         
         Returns:
-            The value stored in the :class:`Maybe`, or the default value.
+            The value stored in the :class:`Maybe`, or the default value, which is returned by reference.
         """
 
         try:
-            return self.__value
+            return copy.deepcopy(self.__value)
         except AttributeError:
             return default
     
@@ -94,7 +98,7 @@ class Maybe(Generic[ValueType]):
         """
 
         try:
-            value = self.__value
+            value = copy.deepcopy(self.__value)
         except AttributeError:
             return Maybe.nothing()
 
@@ -116,7 +120,9 @@ class Storage(ABC):
     Warning:
         All parameters must be treated as immutable unless explicitly noted otherwise.
     
-    TODO: Probably needs a bunch of copy.deepcopy to decouple instances.
+    Note:
+        The :class:`Maybe` type performs the additional job of cloning stored and returned values, which
+        essential to decouple the cached values from the application logic.
     """
 
     def __init__(self, disable_cache: bool = False):
