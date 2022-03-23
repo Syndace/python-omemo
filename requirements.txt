@@ -1,3 +1,5 @@
-X3DH>=1.0.0,<2
-DoubleRatchet>=1.0.0,<2
 cryptography>=3.3.2,<37
+DoubleRatchet>=1.0.0,<2
+libnacl>=1.7.2,<2
+XEdDSA>=1.0.0,<2
+X3DH>=1.0.0,<2

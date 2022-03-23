@@ -19,8 +19,8 @@ install:
 - python -m pip --version
 - python -m pip install --upgrade pytest pytest-asyncio pylint
 - if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade mypy; fi
-- if [   $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography==3.3.2 packaging==20.9; fi
-- if [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography        packaging; fi
+- if [   $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography==3.3.2 libnacl==1.7.2; fi
+- if [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography        libnacl; fi
 - python -m pip install .
 
 script:

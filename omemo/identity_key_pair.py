@@ -1,6 +1,24 @@
-from typing import Type, TypeVar
+import enum
+from typing import Optional, Type, TypeVar
 
-from .storage import Storage
+from .storage import Nothing, Storage
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+import libnacl
+from xeddsa import XEdDSA25519
+
+@enum.unique
+class IdentityKeyPairVariation(enum.Enum):
+    """
+    The three variations of identity key pairs supported by :class:`IdentityKeyPair`.
+    """
+
+    Curve25519    = 1
+    Ed25519Seed   = 2
+    Ed25519Scalar = 3
 
 IdentityKeyPairType = TypeVar("IdentityKeyPairType", bound="IdentityKeyPair")
 class IdentityKeyPair:
@@ -32,6 +50,10 @@ class IdentityKeyPair:
         backend-specific.
     """
 
+    def __init__(self) -> None:
+        # Just the type definitions here
+        self.__identity_key: XEdDSA25519
+
     @property
     def identity_key(self) -> bytes:
         """
@@ -39,7 +61,7 @@ class IdentityKeyPair:
             The public part of the identity key pair, in Ed25519 format.
         """
 
-        # TODO
+        return self.__identity_key.mont_pub_to_ed_pub(self.__identity_key.mont_pub)
 
     @classmethod
     async def get(cls: Type[IdentityKeyPairType], storage: Storage) -> IdentityKeyPairType:
@@ -57,16 +79,71 @@ class IdentityKeyPair:
             locations, thus the same data.
         """
 
-        # TODO
+        self = cls()
 
-    def sign(self, message: bytes) -> bytes:
+        try:
+            ikp_type = IdentityKeyPairVariation((await storage.load_primitive("/ikp/type", int)).from_just())
+        except Nothing:
+            # If there's no private key in storage, generate and store a new seed-based Ed25519 private key
+            await storage.store("/ikp/key", Ed25519PrivateKey.generate().private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+
+            # Set and store the identity key pair type accordingly
+            ikp_type = IdentityKeyPairVariation.Ed25519Seed
+            await storage.store("/ikp/type", ikp_type.value)
+
+        key = (await storage.load_bytes("/ikp/key")).from_just()
+
+        if ikp_type is IdentityKeyPairVariation.Ed25519Seed:
+            # In case of a seed-based Ed25519 private key, generate and extract the private scalar
+            key = libnacl.crypto_sign_seed_keypair(key)[1]
+            # TODO: https://github.com/Syndace/python-x3dh/blob/stable/x3dh/state.py#L593 is probably broken
+
+        # Let XEdDSA handle the rest
+        self.__identity_key = XEdDSA25519(key)
+
+        return self
+
+    def sign(self, message: bytes, nonce: Optional[bytes]) -> bytes:
         """
-        TODO
+        Sign a message using this identity key pair.
+
+        Args:
+            message: The message to sign.
+            nonce: The nonce to use while signing. If omitted or set to None, a nonce is generated.
+
+        Returns:
+            The signature of the message, not including the message itself.
         """
 
-    def verify(self, message: bytes, signature: bytes) -> bool:
+        return self.__identity_key.sign(message, nonce)
+
+    @staticmethod
+    def verify(message: bytes, signature: bytes, identity_key: bytes) -> bool:
         """
-        TODO
+        Verify a signature.
+
+        Args:
+            message: The signed message.
+            signature: The signature.
+            identity_key: The identity key that allegedly signed the message.
+
+        Returns:
+            Whether the signature is valid.
         """
 
-    # TODO: X25519 functionality
+        try:
+            Ed25519PublicKey.from_public_bytes(identity_key).verify(signature, message)
+            return True
+        except InvalidSignature:
+            return False
+
+    def diffie_hellman(self, other_identity_key: bytes) -> bytes:
+        return X25519PrivateKey.from_private_bytes(self.__identity_key.mont_priv).exchange(
+            X25519PublicKey.from_public_bytes(libnacl.crypto_sign_ed25519_pk_to_curve25519(
+                other_identity_key
+            ))
+        )
