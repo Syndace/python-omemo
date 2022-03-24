@@ -1,8 +1,8 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 import base64
 import itertools
 import secrets
-from typing import Any, cast, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, cast
 
 from .backend import Backend
 from .bundle  import Bundle
@@ -37,7 +37,7 @@ class NoEligibleDevices(SessionManagerException):
     encryption, for example due to distrust or bundle downloading failures.
     """
 
-    def __init__(self, bare_jids: Set[str], *args) -> None:
+    def __init__(self, bare_jids: Set[str], *args: object) -> None:
         """
         Args:
             bare_jids: The JIDs whose devices were not eligible. Accessible as an attribute of the returned
@@ -131,9 +131,9 @@ class MessageSendingFailed(XMPPInteractionFailed):
 
 
 # TODO: Take care of logging
-SessionManagerType = TypeVar("SessionManagerType", bound="SessionManager")
+SessionManagerType = TypeVar("SessionManagerType", bound="SessionManager[Any]")
 PlaintextType = TypeVar("PlaintextType")
-class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
+class SessionManager(ABC, Generic[PlaintextType]):
     """
     The core of python-omemo. Manages your own key material and bundle, device lists, sessions with other
     users and much more, all while being flexibly usable with different backends and transparenlty maintaining
@@ -354,13 +354,13 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             await storage.store("/devices/{}/{}/namespaces".format(
                 self.__own_bare_jid,
                 self.__own_device_id
-            ), loaded_namespaces)
+            ), list(loaded_namespaces))
 
             # Set the device active for all loaded namespaces
             await storage.store("/devices/{}/{}/active".format(
                 self.__own_bare_jid,
                 self.__own_device_id
-            ), { namespace: True for namespace in loaded_namespaces })
+            ), list({ namespace: True for namespace in loaded_namespaces }))
 
             # Take care of the initialization of newly added backends
             for backend in self.__backends:
@@ -437,7 +437,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         await self.__storage.store("/devices/{}/{}/namespaces".format(
             self.__own_bare_jid,
             self.__own_device_id
-        ), device.namespaces)
+        ), list(device.namespaces))
 
         await self.__storage.store("/devices/{}/{}/active".format(
             self.__own_bare_jid,
@@ -472,7 +472,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
         
         # Collect identity keys used by this account
-        identity_keys: Set[bytes] = {}
+        identity_keys: Set[bytes] = set()
         for device_id in device_list:
             try:
                 identity_keys.add((await storage.load_bytes("/devices/{}/{}/identity_key".format(
@@ -851,13 +851,16 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             active = (await storage.load_dict("/devices/{}/{}/active".format(
                 bare_jid,
                 device_id
-            ), str, bool)).from_just()
+            ), bool)).from_just()
 
             if device_id in device_list:
                 # Add the namespace if required
                 if namespace not in namespaces:
                     namespaces.add(namespace)
-                    await storage.store("/devices/{}/{}/namespaces".format(bare_jid, device_id), namespaces)
+                    await storage.store("/devices/{}/{}/namespaces".format(
+                        bare_jid,
+                        device_id
+                    ), list(namespaces))
                 
                 # Update the status if required
                 if namespace not in active or active[namespace] == False:
@@ -1004,7 +1007,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                             device.device_id
                         )
                     )
-                    session.key_exchange = key_exchange
+                    session.set_key_exchange(key_exchange)
 
                     # Send the notification message
                     await self.__send_empty_message(backend, session)
@@ -1134,12 +1137,17 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
 
         device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
 
-        devices: Set[DeviceInformation] = {}
-        bundle_cache: Set[Bundle] = {}
+        devices: Set[DeviceInformation] = set()
+        bundle_cache: Set[Bundle] = set()
 
         for device_id in device_list:
-            # Load the identity key first, since this is the most likely operation to fail (due to bundle
-            # downloading errors)
+            namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
+                bare_jid,
+                device_id
+            ), str)).from_just())
+            
+            # Load the identity key as soon as possible, since this is the most likely operation to fail (due
+            # to bundle downloading errors)
             identity_key: bytes
             try:
                 identity_key = (await storage.load_bytes("/devices/{}/{}/identity_key".format(
@@ -1169,15 +1177,10 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                     # Skip this device in case none of the bundles could be downloaded
                     continue
 
-            namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
-                bare_jid,
-                device_id
-            ), str)).from_just())
-
             active = (await storage.load_dict("/devices/{}/{}/active".format(
                 bare_jid,
                 device_id
-            ), str, bool)).from_just()
+            ), bool)).from_just()
 
             label = (await storage.load_optional("/devices/{}/{}/label".format(
                 bare_jid,
@@ -1216,7 +1219,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         all_own_devices = await self.get_device_information(self.__own_bare_jid)
         other_own_devices = set(filter(lambda dev: dev.device_id != self.__own_device_id, all_own_devices))
 
-        return next(all_own_devices - other_own_devices), other_own_devices
+        return next(iter(all_own_devices - other_own_devices)), other_own_devices
 
     @staticmethod
     def format_identity_key(identity_key: bytes) -> List[str]:
@@ -1321,7 +1324,13 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         """
 
         content, key_material = await backend.encrypt_empty(session)
-        await self._send_message(backend.build_message(content, { (key_material, session.key_exchange) }))
+        await self._send_message(Message(
+            backend.namespace,
+            self.__own_bare_jid,
+            self.__own_device_id,
+            content,
+            { (key_material, session.key_exchange) }
+        ))
         await backend.store_session(session)
 
     async def encrypt(
@@ -1444,10 +1453,10 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             )
 
         # Apply the backend priority order to the remaining devices
-        devices = { device._replace(namespaces={ next(sorted(
+        devices = { device._replace(namespaces={ sorted(
             filter(lambda namespace: device.active[namespace], device.namespaces),
             key=effective_backend_priority_order.index
-        )) }) for device in devices }
+        )[0] }) for device in devices }
 
         # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
         # the remaining devices)
@@ -1548,7 +1557,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
                     device.device_id,
                     bundle
                 )
-                session.key_exchange = key_exchange
+                session.set_key_exchange(key_exchange)
 
             return session
 
@@ -1558,10 +1567,13 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         # - Library-scope failures: storage failures
         # - Anything else?
         # Also don't forget to adjust the excepions in the documentation after the decision is made.
-        messages: Set[Message] = {}
+        messages: Set[Message] = set()
         for backend in self.__backends:
             # Find the devices to encrypt for using this backend
-            backend_devices = set(filter(lambda device: device.namespaces[0] == backend.namespace, devices))
+            backend_devices = set(filter(
+                lambda device: next(iter(device.namespaces)) == backend.namespace,
+                devices
+            ))
 
             # Skip this backend if there isn't a single recipient device using it
             if len(backend_devices) == 0:
@@ -1583,7 +1595,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             ) for session in sessions }
 
             # Build the message from content, key material and key exchange information
-            messages.add(backend.build_message(content, keys))
+            messages.add(Message(backend.namespace, self.__own_bare_jid, self.__own_device_id, content, keys))
 
             # Persist the sessions as the final step
             for session in sessions:
@@ -1712,7 +1724,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
             # If a new session needs to be built, do so
             if session is None:
                 session = await backend.build_session_passive(device.bare_jid, device.device_id, key_exchange)
-                session.key_exchange = key_exchange
+                session.set_key_exchange(key_exchange)
 
         # Decrypt the message
         plaintext = backend.deserialize_plaintext(await backend.decrypt(
@@ -1727,7 +1739,7 @@ class SessionManager(Generic[PlaintextType], metaclass=ABCMeta):
         # other party has received at least one of them. Once a new session is used to decrypt a message, the
         # other party is confirmed to have received at least one of the key exchanges, so the data can be
         # safely deleted.
-        session.key_exchange = None
+        session.set_key_exchange(None)
 
         # Persist the session following successful decryption
         await backend.store_session(session)

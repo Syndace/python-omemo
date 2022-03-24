@@ -1,9 +1,9 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any, Generic, Optional, Set, Tuple, TypeVar
 
 from .bundle  import Bundle
 from .identity_key_pair import IdentityKeyPair
-from .message import Content, KeyMaterial, KeyExchange, Message
+from .message import Content, KeyMaterial, KeyExchange
 from .session import Session
 from .types   import OMEMOException
 
@@ -28,10 +28,10 @@ class TooManySkippedMessageKeys(BackendException):
     Raise by :meth:`decrypt` if a message skips more message keys than allowed.
     """
 
-# TODO: Find a better way to handle type safety of Message, Bundle, Session etc.
+# TODO: How to type this strongly..
 
 PlaintextType = TypeVar("PlaintextType")
-class Backend(Generic[PlaintextType], metaclass=ABCMeta):
+class Backend(ABC, Generic[PlaintextType]):
     """
     The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
     version to the core library. Refer to the documentation page for details about the concept and a guide on
@@ -41,12 +41,12 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
     encrypt/decrypt methods. This can for example be a stanze type for backend implementations utilizing
     `SCE <https://xmpp.org/extensions/xep-0420.html>`__.
 
+    Warning:
+        All parameters must be treated as immutable unless explicitly noted otherwise.
+
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
         listed explicitly.
-    
-    Warning:
-        All parameters must be treated as immutable unless explicitly noted otherwise.
 
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
@@ -163,23 +163,6 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `build_session_passive`.")
-
-    @abstractmethod
-    def build_message(
-        self,
-        content: Content,
-        keys: Set[Tuple[KeyMaterial, Optional[KeyExchange]]]
-    ) -> Message:
-        """
-        Args:
-            content: The content of the message.
-            keys: A set containing one pair of key material and key exchange information per recipient.
-
-        Returns:
-            A message instance, bundling the given content, key material and key exchanges.
-        """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `build_message`.")
     
     @abstractmethod
     def serialize_plaintext(self, plaintext: PlaintextType) -> bytes:
@@ -198,7 +181,11 @@ class Backend(Generic[PlaintextType], metaclass=ABCMeta):
         raise NotImplementedError("Create a subclass of Backend and implement `serialize_plaintext`.")
 
     @abstractmethod
-    async def encrypt(self, sessions: Set[Session], plaintext: bytes) -> Tuple[Content, Set[KeyMaterial]]:
+    async def encrypt(
+        self,
+        sessions: Set[Session],
+        plaintext: bytes
+    ) -> Tuple[Content, Set[KeyMaterial]]:
         """
         Encrypt some plaintext symmetrically, and encrypt the corresponding key material once with each
         session.

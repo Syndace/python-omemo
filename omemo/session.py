@@ -64,11 +64,11 @@ class Session(ABC):
             :meth:`store_session`.
         """
 
-    @key_exchange.setter
     @abstractmethod
-    def key_exchange(self, value: Optional[KeyExchange]) -> None:
+    def set_key_exchange(self, value: Optional[KeyExchange]) -> None:
         """
-        Override the key exchange information associated with this session.
+        Override the key exchange information associated with this session. Setter for the `key_exchange`
+        property.
 
         Args:
             value: The key exchange information to associate with this session, or `None`.
@@ -77,6 +77,10 @@ class Session(ABC):
             The core library (i.e. :class:`SessionManager`) takes care of setting this property, backend
             implementors only have to care about loading and storing the value in :meth:`load_session` and
             :meth:`store_session`.
+        
+        Info:
+            Not an actual setter, since mypy doesn't support abstract setters:
+            `GitHub issue <https://github.com/python/mypy/issues/4165>`__
         """
 
     @property

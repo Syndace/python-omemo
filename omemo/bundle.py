@@ -26,15 +26,15 @@ class Bundle(ABC):
         pass
 
     @abstractmethod
-    def __eq__(self, other: "Bundle") -> bool:
+    def __eq__(self, other: object) -> bool:
         """
-        Check for equality of two Bundle instances.
+        Check an object for equality with this Bundle instance.
 
         Args:
-            other: The bundle to compare this instance with.
+            other: The object to compare to this instance.
 
         Returns:
-            Whether the contents of the bundle are equal.
+            Whether the other object is a bundle with the same contents as this instance.
 
         Note:
             The order in which pre keys are included in the bundles does not matter.

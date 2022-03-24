@@ -1,5 +1,5 @@
 import enum
-from typing import Dict, NamedTuple, Optional, Protocol, Set, Type, TYPE_CHECKING, Union
+from typing import Dict, List, Mapping, NamedTuple, Optional, Set, Union
 
 class OMEMOException(Exception):
     """
@@ -29,6 +29,7 @@ class TrustLevel(enum.Enum):
     Distrusted = 2
     Undecided  = 3
 
+"""
 # Thanks @vanburgerberg - https://github.com/python/typing/issues/182
 if TYPE_CHECKING:
     class JSONArray(list[JSONType], Protocol):  # type: ignore
@@ -38,3 +39,10 @@ if TYPE_CHECKING:
         __class__: Type[dict[str, JSONType]]  # type: ignore
 
     JSONType = Union[None, float, int, str, bool, JSONArray, JSONObject]
+"""
+
+# Sadly @vanburgerberg's solution doesn't seem to like Dict[str, bool], thus for now an incomplete JSON
+# type with finite levels of depth.
+JSONType2 = Union[None, float, int, str, bool]
+JSONType1 = Union[None, float, int, str, bool, List[JSONType2], Mapping[str, JSONType2]]
+JSONType = Union[None, float, int, str, bool, List[JSONType1], Mapping[str, JSONType1]]

@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Union, List
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages # type: ignore
 
 source_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "omemo")
 

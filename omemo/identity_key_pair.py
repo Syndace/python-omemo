@@ -85,7 +85,7 @@ class IdentityKeyPair:
             ikp_type = IdentityKeyPairVariation((await storage.load_primitive("/ikp/type", int)).from_just())
         except Nothing:
             # If there's no private key in storage, generate and store a new seed-based Ed25519 private key
-            await storage.store("/ikp/key", Ed25519PrivateKey.generate().private_bytes(
+            await storage.store_bytes("/ikp/key", Ed25519PrivateKey.generate().private_bytes(
                 encoding=serialization.Encoding.Raw,
                 format=serialization.PrivateFormat.Raw,
                 encryption_algorithm=serialization.NoEncryption()
@@ -142,6 +142,7 @@ class IdentityKeyPair:
             return False
 
     def diffie_hellman(self, other_identity_key: bytes) -> bytes:
+        assert self.__identity_key.mont_priv is not None
         return X25519PrivateKey.from_private_bytes(self.__identity_key.mont_priv).exchange(
             X25519PublicKey.from_public_bytes(libnacl.crypto_sign_ed25519_pk_to_curve25519(
                 other_identity_key

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import base64
 import copy
-from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, TYPE_CHECKING
+from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, TYPE_CHECKING, cast
 
 from .types import OMEMOException
 if TYPE_CHECKING: from .types import JSONType
@@ -13,7 +13,7 @@ class StorageException(OMEMOException):
 
 ValueType = TypeVar("ValueType")
 MappedValueType = TypeVar("MappedValueType")
-MaybeType = TypeVar("MaybeType", bound="Maybe")
+MaybeType = TypeVar("MaybeType", bound="Maybe[Any]")
 
 class Nothing(Exception):
     """
@@ -30,7 +30,7 @@ class Maybe(Generic[ValueType]):
     instance are not affected by outside application logic.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Just the type definitions here
         self.__value: ValueType
 
@@ -104,9 +104,7 @@ class Maybe(Generic[ValueType]):
 
         return Maybe.just(f(value))
 
-PrimitiveType = TypeVar("PrimitiveType")
-PrimitiveKeyType = TypeVar("PrimitiveKeyType")
-PrimitiveValueType = TypeVar("PrimitiveValueType")
+PrimitiveType = TypeVar("PrimitiveType", None, float, int, str, bool)
 
 class Storage(ABC):
     """
@@ -200,19 +198,15 @@ class Storage(ABC):
             The loaded value, if it exists.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_load`.
         """
 
-        try:
+        if self.__cache is not None and key in self.__cache:
             return self.__cache[key]
-        except (TypeError, KeyError):
-            pass
 
         value = await self._load(key)
-        try:
+        if self.__cache is not None:
             self.__cache[key] = value
-        except TypeError:
-            pass
         return value
 
     async def store(self, key: str, value: JSONType) -> None:
@@ -224,15 +218,13 @@ class Storage(ABC):
             value: The value to store under the given key.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_store`.
         """
 
         await self._store(key, value)
 
-        try:
+        if self.__cache is not None:
             self.__cache[key] = Maybe.just(value)
-        except TypeError:
-            pass
 
     async def delete(self, key: str) -> None:
         """
@@ -242,16 +234,14 @@ class Storage(ABC):
             key: The key identifying the value to delete.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
-                Do not raise if the key doesn't exist.
+            StorageException: if any kind of storage operation failed. Does not raise if the key doesn't
+                exist. Forwarded from :meth:`_delete`.
         """
 
         await self._delete(key)
 
-        try:
+        if self.__cache is not None:
             self.__cache[key] = Maybe.nothing()
-        except TypeError:
-            pass
 
     async def store_bytes(self, key: str, value: bytes) -> None:
         """
@@ -262,7 +252,7 @@ class Storage(ABC):
             value: The value to store under the given key.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_store`.
         """
 
         await self.store(key, base64.urlsafe_b64encode(value).decode("ASCII"))
@@ -279,7 +269,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_load`.
         """
 
         def check_type(value: JSONType) -> PrimitiveType:
@@ -300,7 +290,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_load`.
         """
 
         def check_type(value: JSONType) -> bytes:
@@ -322,7 +312,7 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_load`.
         """
 
         def check_type(value: JSONType) -> Optional[PrimitiveType]:
@@ -344,12 +334,12 @@ class Storage(ABC):
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_load`.
         """
 
         def check_type(value: JSONType) -> List[PrimitiveType]:
             if isinstance(value, list) and all(isinstance(element, type) for element in value):
-                return value
+                return cast(List[PrimitiveType], value)
             raise TypeError("The value stored for key {} is not a list of {}: {}".format(key, type, value))
 
         return (await self.load(key)).fmap(check_type)
@@ -357,34 +347,26 @@ class Storage(ABC):
     async def load_dict(
         self,
         key: str,
-        key_type: Type[PrimitiveKeyType],
-        value_type: Type[PrimitiveValueType]
-    ) -> Maybe[Dict[PrimitiveKeyType, PrimitiveValueType]]:
+        type: Type[PrimitiveType]
+    ) -> Maybe[Dict[str, PrimitiveType]]:
         """
         Variation of :meth:`load` for loading specifically dictionaries of primitive values.
 
         Args:
             key: The key identifying the value.
-            key_type: The primitive type of the dictionary keys.
-            value_type: The primitive type of the dictionary values.
+            type: The primitive type of the dictionary values.
         
         Returns:
             The loaded and type-checked value, if it exists.
         
         Raises:
-            StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
+            StorageException: if any kind of storage operation failed. Forwarded from :meth:`_load`.
         """
 
-        def check_type(value: JSONType) -> Dict[PrimitiveKeyType, PrimitiveValueType]:
-            if isinstance(value, dict):
-                if all(isinstance(pk, key_type) and isinstance(pv, value_type) for pk, pv in value.items()):
-                    return value
+        def check_type(value: JSONType) -> Dict[str, PrimitiveType]:
+            if isinstance(value, dict) and all(isinstance(v, type) for v in value.values()):
+                    return cast(Dict[str, PrimitiveType], value)
 
-            raise TypeError("The value stored for key {} is not a dict of {} / {}: {}".format(
-                key,
-                key_type,
-                value_type,
-                value
-            ))
+            raise TypeError("The value stored for key {} is not a dict of {}: {}".format(key, type, value))
 
         return (await self.load(key)).fmap(check_type)
