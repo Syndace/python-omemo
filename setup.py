@@ -2,7 +2,7 @@
 import os
 from typing import Dict, Union, List
 
-from setuptools import setup, find_packages # type: ignore
+from setuptools import setup, find_packages  # type: ignore
 
 source_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "omemo")
 
@@ -51,21 +51,21 @@ del project["categories"]
 del project["year"]
 
 setup(
-    version = version["short"],
-    long_description = long_description,
-    long_description_content_type = "text/markdown",
-    license = "MIT",
-    packages = find_packages(),
-    install_requires = [
+    version=version["short"],
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    license="MIT",
+    packages=find_packages(),
+    install_requires=[
         "cryptography>=3.3.2,<37",
         "DoubleRatchet>=1.0.0,<2",
         "libnacl>=1.7.2,<2",
         "XEdDSA>=1.0.0,<2",
         "X3DH>=1.0.0,<2"
     ],
-    python_requires = ">=3.7,<4",
-    include_package_data = True,
-    zip_safe = False,
-    classifiers = classifiers,
+    python_requires=">=3.7,<4",
+    include_package_data=True,
+    zip_safe=False,
+    classifiers=classifiers,
     **project
 )

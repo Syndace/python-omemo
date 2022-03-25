@@ -16,7 +16,7 @@ env:
 install:
 - python -m pip install --upgrade pip setuptools wheel
 - python -m pip --version
-- python -m pip install --upgrade pytest pytest-asyncio pylint
+- python -m pip install --upgrade pytest pytest-asyncio pylint flake8
 - if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade mypy; fi
 - if [   $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography==3.3.2 libnacl==1.7.2; fi
 - if [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography        libnacl; fi
@@ -32,4 +32,6 @@ script:
 - python -m pylint tests/*.py
 - python -m pylint examples/*.py
 - python -m pylint setup.py
+- python -m flake8 omemo/
+- python -m flake8 setup.py
 - python -m pytest

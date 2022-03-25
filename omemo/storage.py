@@ -5,19 +5,23 @@ from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, 
 
 from .types import JSONType, OMEMOException
 
-class StorageException(OMEMOException): # pylint: disable=unused-variable
+
+class StorageException(OMEMOException):
     """
     Parent type for all exceptions specifically raised by methods of :class:`Storage`.
     """
+
 
 ValueTypeT = TypeVar("ValueTypeT")
 MappedValueTypeT = TypeVar("MappedValueTypeT")
 MaybeTypeT = TypeVar("MaybeTypeT", bound="Maybe[Any]")
 
+
 class Nothing(Exception):
     """
     Raise by :meth:`from_just`, in case the value of the :class:`Maybe` is not set.
     """
+
 
 class Maybe(Generic[ValueTypeT]):
     """
@@ -69,7 +73,7 @@ class Maybe(Generic[ValueTypeT]):
             return copy.deepcopy(self.__value)
         except AttributeError:
             # pylint: disable=raise-missing-from
-            raise Nothing("Maybe.fromJust: Nothing") # -- yuck
+            raise Nothing("Maybe.fromJust: Nothing")  # -- yuck
 
     def maybe(self, default: ValueTypeT) -> ValueTypeT:
         """
@@ -104,9 +108,11 @@ class Maybe(Generic[ValueTypeT]):
 
         return Maybe.just(function(value))
 
+
 PrimitiveTypeT = TypeVar("PrimitiveTypeT", None, float, int, str, bool)
 
-class Storage(ABC): # pylint: disable=unused-variable
+
+class Storage(ABC):
     """
     A simple key/value storage class with optional caching (on by default). Keys can be any Python string,
     values any JSON-serializable structure.
@@ -374,3 +380,11 @@ class Storage(ABC): # pylint: disable=unused-variable
             raise TypeError(f"The value stored for key {key} is not a dict of {primitive}: {value}")
 
         return (await self.load(key)).fmap(check_type)
+
+
+__all__ = [  # pylint: disable=unused-variable
+    StorageException.__name__,
+    Nothing.__name__,
+    Maybe.__name__,
+    Storage.__name__
+]

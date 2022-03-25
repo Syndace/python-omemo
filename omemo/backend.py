@@ -1,18 +1,23 @@
 from abc import ABC, abstractmethod
 from typing import Any, Generic, Optional, Set, Tuple, TypeVar
 
-from .bundle  import Bundle
+from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
 from .message import Content, KeyMaterial, KeyExchange
 from .session import Session
-from .types   import OMEMOException
+from .types import OMEMOException
+
+
+# TODO: How to type this strongly..
+
 
 class BackendException(OMEMOException):
     """
     Parent type for all exceptions specific to :class:`Backend`.
     """
 
-class KeyExchangeFailed(BackendException): # pylint: disable=unused-variable
+
+class KeyExchangeFailed(BackendException):
     """
     Raised by :meth:`build_session_active` and :meth:`build_session_passive` in case of an error during the
     processing of a key exchange for session building. Known error conditions are:
@@ -23,15 +28,17 @@ class KeyExchangeFailed(BackendException): # pylint: disable=unused-variable
     Additional backend-specific error conditions might exist.
     """
 
-class TooManySkippedMessageKeys(BackendException): # pylint: disable=unused-variable
+
+class TooManySkippedMessageKeys(BackendException):
     """
     Raise by :meth:`decrypt` if a message skips more message keys than allowed.
     """
 
-# TODO: How to type this strongly..
 
 PlaintextTypeT = TypeVar("PlaintextTypeT")
-class Backend(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-variable
+
+
+class Backend(ABC, Generic[PlaintextTypeT]):
     """
     The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
     version to the core library. Refer to the documentation page for details about the concept and a guide on
@@ -401,3 +408,11 @@ class Backend(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-variable
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `purge_bare_jid`.")
+
+
+__all__ = [  # pylint: disable=unused-variable
+    Backend.__name__,
+    BackendException.__name__,
+    KeyExchangeFailed.__name__,
+    TooManySkippedMessageKeys.__name__
+]

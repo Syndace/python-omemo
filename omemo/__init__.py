@@ -1,6 +1,8 @@
+# Could populate __all__ here, however since the sole purpose of this __init__.py is reexporting, it's easier
+# to silence the linters and rely on the default __all__
 # pylint: disable=unused-variable
 from .version import __version__
-from .project import   project
+from .project import project
 
 from .backend import Backend, BackendException, KeyExchangeFailed, TooManySkippedMessageKeys
 from .bundle import Bundle

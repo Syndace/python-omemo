@@ -5,12 +5,13 @@ import secrets
 from typing import Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, cast
 
 from .backend import Backend
-from .bundle  import Bundle
+from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
 from .message import KeyExchange, Message
 from .session import Session
 from .storage import Nothing, Storage
-from .types   import DeviceInformation, OMEMOException, TrustLevel
+from .types import DeviceInformation, OMEMOException, TrustLevel
+
 
 class SessionManagerException(OMEMOException):
     """
@@ -18,18 +19,19 @@ class SessionManagerException(OMEMOException):
     """
 
 
-
-class TrustDecisionFailed(SessionManagerException): # pylint: disable=unused-variable
+class TrustDecisionFailed(SessionManagerException):
     """
     Raised by :meth:`_make_trust_decision` if the trust decisions that were queried somehow failed. Indirectly
     raised by the encryption flow.
     """
+
 
 class StillUndecided(SessionManagerException):
     """
     Raised by :meth:`encrypt` in case there are still undecided devices after a trust decision was queried via
     :meth:`_make_trust_decision`.
     """
+
 
 class NoEligibleDevices(SessionManagerException):
     """
@@ -49,11 +51,11 @@ class NoEligibleDevices(SessionManagerException):
         self.bare_jids = bare_jids
 
 
-
 class MessageNotForUs(SessionManagerException):
     """
     Raised by :meth:`decrypt` in case the message to decrypt does not seem to be encrypting for this device.
     """
+
 
 class SenderNotFound(SessionManagerException):
     """
@@ -61,10 +63,12 @@ class SenderNotFound(SessionManagerException):
     downloaded.
     """
 
+
 class SenderDistrusted(SessionManagerException):
     """
     Raised by :meth:`decrypt` in case the sending device is explicitly distrusted.
     """
+
 
 class NoSession(SessionManagerException):
     """
@@ -72,18 +76,19 @@ class NoSession(SessionManagerException):
     built either.
     """
 
+
 class PublicDataInconsistency(SessionManagerException):
     """
     Raised by :meth:`decrypt` in case inconsistencies were found in the public data of the sending device.
     """
 
 
-
-class UnknownTrustLevel(SessionManagerException): # pylint: disable=unused-variable
+class UnknownTrustLevel(SessionManagerException):
     """
     Raised by :meth:`_evaluate_custom_trust_level` if the custom trust level name to evaluate is unknown.
     Indirectly raised by the encryption and decryption flows.
     """
+
 
 class UnknownNamespace(SessionManagerException):
     """
@@ -92,48 +97,54 @@ class UnknownNamespace(SessionManagerException):
     """
 
 
-
 class XMPPInteractionFailed(SessionManagerException):
     """
     Parent type for all exceptions related to network/XMPP interactions.
     """
 
-class BundleUploadFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
+
+class BundleUploadFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`_upload_bundle`, and indirectly by various methods of :class:`SessionManager`.
     """
+
 
 class BundleDownloadFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`_download_bundle`, and indirectly by various methods of :class:`SessionManager`.
     """
 
-class BundleDeletionFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
+
+class BundleDeletionFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`_delete_bundle`, and indirectly by :meth:`purge_backend`.
     """
 
-class DeviceListUploadFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
+
+class DeviceListUploadFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`_upload_device_list`, and indirectly by various methods of :class:`SessionManager`.
     """
 
-class DeviceListDownloadFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
+
+class DeviceListDownloadFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`_download_device_list`, and indirectly by various methods of :class:`SessionManager`.
     """
 
-class MessageSendingFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
+
+class MessageSendingFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`_send_message`, and indirectly by various methods of :class:`SessionManager`.
     """
 
 
-
 # TODO: Take care of logging
 SessionManagerTypeT = TypeVar("SessionManagerTypeT", bound="SessionManager[Any]")
 PlaintextTypeT = TypeVar("PlaintextTypeT")
-class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-variable
+
+
+class SessionManager(ABC, Generic[PlaintextTypeT]):
     """
     The core of python-omemo. Manages your own key material and bundle, device lists, sessions with other
     users and much more, all while being flexibly usable with different backends and transparenlty maintaining
@@ -280,7 +291,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-var
             raise ValueError("Pre key refill threshold out of allowed range.")
 
         self = cls()
-        self.__backends = list(backends) # Copy to make sure the original is not modified
+        self.__backends = list(backends)  # Copy to make sure the original is not modified
         self.__storage = storage
         self.__own_bare_jid = own_bare_jid
         self.__undecided_trust_level_name = undecided_trust_level_name
@@ -665,7 +676,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-var
 
         raise NotImplementedError("Create a subclass of SessionManager and implement `_upload_device_list`.")
 
-
     @staticmethod
     @abstractmethod
     async def _download_device_list(namespace: str, bare_jid: str) -> Dict[int, Optional[str]]:
@@ -824,9 +834,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-var
         new_devices = new_device_list - old_device_list
 
         # If the device list is for this JID and a loaded backend, make sure this device is included
-        if (bare_jid == self.__own_bare_jid and
-            namespace in { backend.namespace for backend in self.__backends } and
-            self.__own_device_id not in new_device_list):
+        if (
+            bare_jid == self.__own_bare_jid
+            and namespace in { backend.namespace for backend in self.__backends }
+            and self.__own_device_id not in new_device_list
+        ):
             # Add this device to the device list and publish it
             device_list[self.__own_device_id] = (await storage.load_optional(
                 f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/label",
@@ -1215,7 +1227,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-var
         ik_hex_string = identity_key.hex()
         group_size = 8
 
-        return [ ik_hex_string[i : i + group_size] for i in range(0, len(ik_hex_string), group_size) ]
+        return [ ik_hex_string[i:i + group_size] for i in range(0, len(ik_hex_string), group_size) ]
 
     ###########################
     # history synchronization #
@@ -1543,9 +1555,9 @@ class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-var
             if session is None:
                 try:
                     bundle = next(filter(lambda bundle: (
-                        bundle.namespace == backend.namespace and
-                        bundle.bare_jid == device.bare_jid and
-                        bundle.device_id == device.device_id
+                        bundle.namespace == backend.namespace
+                        and bundle.bare_jid == device.bare_jid
+                        and bundle.device_id == device.device_id
                     ), bundle_cache))
                 except StopIteration:
                     bundle = await self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
@@ -1832,3 +1844,31 @@ class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-var
 
         # Return the plaintext and information about the sending device
         return (plaintext, device)
+
+
+__all__ = [  # pylint: disable=unused-variable
+    SessionManagerException.__name__,
+
+    TrustDecisionFailed.__name__,
+    StillUndecided.__name__,
+    NoEligibleDevices.__name__,
+
+    MessageNotForUs.__name__,
+    SenderNotFound.__name__,
+    SenderDistrusted.__name__,
+    NoSession.__name__,
+    PublicDataInconsistency.__name__,
+
+    UnknownTrustLevel.__name__,
+    UnknownNamespace.__name__,
+
+    XMPPInteractionFailed.__name__,
+    BundleUploadFailed.__name__,
+    BundleDownloadFailed.__name__,
+    BundleDeletionFailed.__name__,
+    DeviceListUploadFailed.__name__,
+    DeviceListDownloadFailed.__name__,
+    MessageSendingFailed.__name__,
+
+    SessionManager.__name__
+]

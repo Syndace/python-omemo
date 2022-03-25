@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
-class Bundle(ABC): # pylint: disable=unused-variable
+
+class Bundle(ABC):
     """
     The bundle of a device, containing the cryptographic information required for active session building.
     """
@@ -43,3 +44,8 @@ class Bundle(ABC): # pylint: disable=unused-variable
         Note:
             The order in which pre keys are included in the bundles does not matter.
         """
+
+
+__all__ = [  # pylint: disable=unused-variable
+    Bundle.__name__
+]

@@ -23,7 +23,7 @@ from project import project     as __project
 
 project   = __project["name"]
 author    = __project["author"]
-copyright = "{}, {}".format(__project["year"], __project["author"])
+copyright = f"{__project['year']}, {__project['author']}"
 
 # The short X.Y version
 version = __version["short"]
@@ -65,8 +65,8 @@ html_static_path = [ "_static" ]
 private_name_regex = re.compile(r"^_\w+__")
 def autodoc_skip_member_handler(app, what, name, obj, skip, options):
     """
-    A very simple handler for the autodoc-skip-member event that skips everything
-    "private", aka starting with double underscores. Everything else is left untouched.
+    A very simple handler for the autodoc-skip-member event that skips everything "private", aka starting with
+    double underscores. Everything else is left untouched.
     """
 
     if private_name_regex.match(name):

@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import NamedTuple, Optional, Set, Tuple
 
+
 class Content(ABC):
     """
     The encrypted content of an OMEMO-encrypted message. Contains for example the ciphertext, but can contain
     other backend-specific data that is shared between all recipients.
     """
+
 
 class KeyMaterial(ABC):
     """
@@ -25,6 +27,7 @@ class KeyMaterial(ABC):
     def device_id(self) -> int:
         # pylint: disable=missing-function-docstring
         pass
+
 
 class KeyExchange(ABC):
     """
@@ -51,7 +54,8 @@ class KeyExchange(ABC):
             intention is to find out whether both KeyExchange instances would build the same session.
         """
 
-class Message(NamedTuple): # pylint: disable=unused-variable
+
+class Message(NamedTuple):
     # pylint: disable=invalid-name
     """
     Simple structure representing an OMEMO-encrypted message.
@@ -62,3 +66,11 @@ class Message(NamedTuple): # pylint: disable=unused-variable
     device_id: int
     content: Content
     keys: Set[Tuple[KeyMaterial, Optional[KeyExchange]]]
+
+
+__all__ = [  # pylint: disable=unused-variable
+    Content.__name__,
+    KeyExchange.__name__,
+    KeyMaterial.__name__,
+    Message.__name__
+]

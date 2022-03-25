@@ -10,18 +10,22 @@ from xeddsa import XEdDSA25519
 
 from .storage import Nothing, Storage
 
+
 @enum.unique
 class IdentityKeyPairVariation(enum.Enum):
     """
     The three variations of identity key pairs supported by :class:`IdentityKeyPair`.
     """
 
-    CURVE25519     = 1
-    ED25519_SEED   = 2
+    CURVE25519 = 1
+    ED25519_SEED = 2
     ED25519_SCALAR = 3
 
+
 IdentityKeyPairTypeT = TypeVar("IdentityKeyPairTypeT", bound="IdentityKeyPair")
-class IdentityKeyPair: # pylint: disable=unused-variable
+
+
+class IdentityKeyPair:
     """
     The identity key pair associated to this device, shared by all backends.
 
@@ -157,3 +161,8 @@ class IdentityKeyPair: # pylint: disable=unused-variable
                 other_identity_key
             ))
         )
+
+
+__all__ = [  # pylint: disable=unused-variable
+    IdentityKeyPair.__name__
+]

@@ -3,7 +3,8 @@ from typing import Optional
 
 from .message import KeyExchange
 
-class Session(ABC): # pylint: disable=unused-variable
+
+class Session(ABC):
     """
     Class representing an OMEMO session. Used to encrypt/decrypt key material for/from a single
     recipient/sender device in a perfectly forwared secure manner.
@@ -102,3 +103,8 @@ class Session(ABC): # pylint: disable=unused-variable
         Returns:
             The length of the sending chain, used for staleness detection of other devices.
         """
+
+
+__all__ = [  # pylint: disable=unused-variable
+    Session.__name__
+]

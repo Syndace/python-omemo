@@ -1,12 +1,14 @@
 import enum
 from typing import Dict, List, Mapping, NamedTuple, Optional, Set, Union
 
-class OMEMOException(Exception): # pylint: disable=unused-variable
+
+class OMEMOException(Exception):
     """
     Parent type for all custom exceptions in this library.
     """
 
-class DeviceInformation(NamedTuple): # pylint: disable=unused-variable
+
+class DeviceInformation(NamedTuple):
     # pylint: disable=invalid-name
     """
     Structure containing information about a single OMEMO device.
@@ -20,15 +22,17 @@ class DeviceInformation(NamedTuple): # pylint: disable=unused-variable
     trust_level_name: str
     label: Optional[str]
 
+
 @enum.unique
-class TrustLevel(enum.Enum): # pylint: disable=unused-variable
+class TrustLevel(enum.Enum):
     """
     The three core trust levels.
     """
 
-    TRUSTED    = 1
+    TRUSTED = 1
     DISTRUSTED = 2
-    UNDECIDED  = 3
+    UNDECIDED = 3
+
 
 # # Thanks @vanburgerberg - https://github.com/python/typing/issues/182
 # if TYPE_CHECKING:
@@ -44,4 +48,12 @@ class TrustLevel(enum.Enum): # pylint: disable=unused-variable
 # type with finite levels of depth.
 Primitives = Union[None, float, int, str, bool]
 JSONType1 = Union[Primitives, List[Primitives], Mapping[str, Primitives]]
-JSONType = Union[Primitives, List[JSONType1], Mapping[str, JSONType1]] # pylint: disable=unused-variable
+JSONType = Union[Primitives, List[JSONType1], Mapping[str, JSONType1]]
+
+
+__all__ = [  # pylint: disable=unused-variable
+    DeviceInformation.__name__,
+    "JSONType",
+    OMEMOException.__name__,
+    TrustLevel.__name__
+]
