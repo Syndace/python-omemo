@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-class Bundle(ABC):
+class Bundle(ABC): # pylint: disable=unused-variable
     """
     The bundle of a device, containing the cryptographic information required for active session building.
     """
@@ -8,21 +8,25 @@ class Bundle(ABC):
     @property
     @abstractmethod
     def namespace(self) -> str:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def bare_jid(self) -> str:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def device_id(self) -> int:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def identity_key(self) -> bytes:
+        # pylint: disable=missing-function-docstring
         pass
 
     @abstractmethod

@@ -1,8 +1,6 @@
 import enum
 from typing import Optional, Type, TypeVar
 
-from .storage import Nothing, Storage
-
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -10,18 +8,20 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 import libnacl
 from xeddsa import XEdDSA25519
 
+from .storage import Nothing, Storage
+
 @enum.unique
 class IdentityKeyPairVariation(enum.Enum):
     """
     The three variations of identity key pairs supported by :class:`IdentityKeyPair`.
     """
 
-    Curve25519    = 1
-    Ed25519Seed   = 2
-    Ed25519Scalar = 3
+    CURVE25519     = 1
+    ED25519_SEED   = 2
+    ED25519_SCALAR = 3
 
-IdentityKeyPairType = TypeVar("IdentityKeyPairType", bound="IdentityKeyPair")
-class IdentityKeyPair:
+IdentityKeyPairTypeT = TypeVar("IdentityKeyPairTypeT", bound="IdentityKeyPair")
+class IdentityKeyPair: # pylint: disable=unused-variable
     """
     The identity key pair associated to this device, shared by all backends.
 
@@ -64,7 +64,7 @@ class IdentityKeyPair:
         return self.__identity_key.mont_pub_to_ed_pub(self.__identity_key.mont_pub)
 
     @classmethod
-    async def get(cls: Type[IdentityKeyPairType], storage: Storage) -> IdentityKeyPairType:
+    async def get(cls: Type[IdentityKeyPairTypeT], storage: Storage) -> IdentityKeyPairTypeT:
         """
         Get the identity key pair.
 
@@ -92,15 +92,14 @@ class IdentityKeyPair:
             ))
 
             # Set and store the identity key pair type accordingly
-            ikp_type = IdentityKeyPairVariation.Ed25519Seed
+            ikp_type = IdentityKeyPairVariation.ED25519_SEED
             await storage.store("/ikp/type", ikp_type.value)
 
         key = (await storage.load_bytes("/ikp/key")).from_just()
 
-        if ikp_type is IdentityKeyPairVariation.Ed25519Seed:
+        if ikp_type is IdentityKeyPairVariation.ED25519_SEED:
             # In case of a seed-based Ed25519 private key, generate and extract the private scalar
-            key = libnacl.crypto_sign_seed_keypair(key)[1]
-            # TODO: https://github.com/Syndace/python-x3dh/blob/stable/x3dh/state.py#L593 is probably broken
+            key = libnacl.crypto_sign_ed25519_sk_to_curve25519(libnacl.crypto_sign_seed_keypair(key)[1])
 
         # Let XEdDSA handle the rest
         self.__identity_key = XEdDSA25519(key)
@@ -142,6 +141,16 @@ class IdentityKeyPair:
             return False
 
     def diffie_hellman(self, other_identity_key: bytes) -> bytes:
+        """
+        Perform Diffie-Hellman key agreement.
+
+        Args:
+            other_identity_key: The identity key of the other party.
+
+        Returns:
+            The shared secret.
+        """
+
         assert self.__identity_key.mont_priv is not None
         return X25519PrivateKey.from_private_bytes(self.__identity_key.mont_priv).exchange(
             X25519PublicKey.from_public_bytes(libnacl.crypto_sign_ed25519_pk_to_curve25519(

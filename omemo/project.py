@@ -1,3 +1,4 @@
+# pylint: disable=unused-variable
 project = {
     "name"         : "OMEMO",
     "description"  : "A Python implementation of the OMEMO Multi-End Message and Object Encryption protocol.",

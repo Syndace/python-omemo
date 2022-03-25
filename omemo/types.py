@@ -1,12 +1,13 @@
 import enum
 from typing import Dict, List, Mapping, NamedTuple, Optional, Set, Union
 
-class OMEMOException(Exception):
+class OMEMOException(Exception): # pylint: disable=unused-variable
     """
     Parent type for all custom exceptions in this library.
     """
 
-class DeviceInformation(NamedTuple):
+class DeviceInformation(NamedTuple): # pylint: disable=unused-variable
+    # pylint: disable=invalid-name
     """
     Structure containing information about a single OMEMO device.
     """
@@ -20,29 +21,27 @@ class DeviceInformation(NamedTuple):
     label: Optional[str]
 
 @enum.unique
-class TrustLevel(enum.Enum):
+class TrustLevel(enum.Enum): # pylint: disable=unused-variable
     """
     The three core trust levels.
     """
 
-    Trusted    = 1
-    Distrusted = 2
-    Undecided  = 3
+    TRUSTED    = 1
+    DISTRUSTED = 2
+    UNDECIDED  = 3
 
-"""
-# Thanks @vanburgerberg - https://github.com/python/typing/issues/182
-if TYPE_CHECKING:
-    class JSONArray(list[JSONType], Protocol):  # type: ignore
-        __class__: Type[list[JSONType]]  # type: ignore
-
-    class JSONObject(dict[str, JSONType], Protocol):  # type: ignore
-        __class__: Type[dict[str, JSONType]]  # type: ignore
-
-    JSONType = Union[None, float, int, str, bool, JSONArray, JSONObject]
-"""
+# # Thanks @vanburgerberg - https://github.com/python/typing/issues/182
+# if TYPE_CHECKING:
+#     class JSONArray(list[JSONType], Protocol):  # type: ignore
+#         __class__: Type[list[JSONType]]  # type: ignore
+#
+#     class JSONObject(dict[str, JSONType], Protocol):  # type: ignore
+#         __class__: Type[dict[str, JSONType]]  # type: ignore
+#
+#     JSONType = Union[None, float, int, str, bool, JSONArray, JSONObject]
 
 # Sadly @vanburgerberg's solution doesn't seem to like Dict[str, bool], thus for now an incomplete JSON
 # type with finite levels of depth.
-JSONType2 = Union[None, float, int, str, bool]
-JSONType1 = Union[None, float, int, str, bool, List[JSONType2], Mapping[str, JSONType2]]
-JSONType = Union[None, float, int, str, bool, List[JSONType1], Mapping[str, JSONType1]]
+Primitives = Union[None, float, int, str, bool]
+JSONType1 = Union[Primitives, List[Primitives], Mapping[str, Primitives]]
+JSONType = Union[Primitives, List[JSONType1], Mapping[str, JSONType1]] # pylint: disable=unused-variable

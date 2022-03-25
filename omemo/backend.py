@@ -12,7 +12,7 @@ class BackendException(OMEMOException):
     Parent type for all exceptions specific to :class:`Backend`.
     """
 
-class KeyExchangeFailed(BackendException):
+class KeyExchangeFailed(BackendException): # pylint: disable=unused-variable
     """
     Raised by :meth:`build_session_active` and :meth:`build_session_passive` in case of an error during the
     processing of a key exchange for session building. Known error conditions are:
@@ -23,15 +23,15 @@ class KeyExchangeFailed(BackendException):
     Additional backend-specific error conditions might exist.
     """
 
-class TooManySkippedMessageKeys(BackendException):
+class TooManySkippedMessageKeys(BackendException): # pylint: disable=unused-variable
     """
     Raise by :meth:`decrypt` if a message skips more message keys than allowed.
     """
 
 # TODO: How to type this strongly..
 
-PlaintextType = TypeVar("PlaintextType")
-class Backend(ABC, Generic[PlaintextType]):
+PlaintextTypeT = TypeVar("PlaintextTypeT")
+class Backend(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-variable
     """
     The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
     version to the core library. Refer to the documentation page for details about the concept and a guide on
@@ -114,11 +114,11 @@ class Backend(ABC, Generic[PlaintextType]):
             device_id: The id of the device.
             bundle: The bundle containing the public key material of the other device required for active
                 session building.
-        
+
         Returns:
             The newly built session and the key exchange information required by the other device to complete
             the passive part of session building.
-        
+
         Raises:
             KeyExchangeFailed: in case of failure related to the key exchange required for session building.
 
@@ -146,11 +146,11 @@ class Backend(ABC, Generic[PlaintextType]):
             bare_jid: The bare JID the device belongs to.
             device_id: The id of the device.
             key_exchange: Key exchange information for the passive session building.
-        
+
         Returns:
             The newly built session. Note that the pre key used to initiate this session must somehow be
             associated with the session, such that :meth:`hide_pre_key` and :meth:`delete_pre_key` can work.
-        
+
         Raises:
             KeyExchangeFailed: in case of failure related to the key exchange required for session building.
 
@@ -163,13 +163,13 @@ class Backend(ABC, Generic[PlaintextType]):
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `build_session_passive`.")
-    
+
     @abstractmethod
-    def serialize_plaintext(self, plaintext: PlaintextType) -> bytes:
+    def serialize_plaintext(self, plaintext: PlaintextTypeT) -> bytes:
         """
         Args:
             plaintext: The plaintext to serialize.
-        
+
         Returns:
             The plaintext serialized to bytes.
 
@@ -193,7 +193,7 @@ class Backend(ABC, Generic[PlaintextType]):
         Args:
             sessions: The sessions to encrypt the key material with.
             plaintext: The serialized plaintext to encrypt symmetrically.
-        
+
         Returns:
             The symmetrically encrypted plaintext, and a set containing the encrypted key material for each
             sessions.
@@ -209,7 +209,7 @@ class Backend(ABC, Generic[PlaintextType]):
 
         Args:
             session: The session to encrypt the key material for the empty message with.
-        
+
         Returns:
             The symmetrically encrypted empty content, and the encrypted key material.
         """
@@ -217,11 +217,11 @@ class Backend(ABC, Generic[PlaintextType]):
         raise NotImplementedError("Create a subclass of Backend and implement `encrypt_empty`.")
 
     @abstractmethod
-    def deserialize_plaintext(self, plaintext: bytes) -> PlaintextType:
+    def deserialize_plaintext(self, plaintext: bytes) -> PlaintextTypeT:
         """
         Args:
             plaintext: The serialized plaintext as bytes.
-        
+
         Returns:
             The deserialized plaintext.
 
@@ -255,11 +255,11 @@ class Backend(ABC, Generic[PlaintextType]):
 
         Returns:
             The decrypted, yet serialized plaintext.
-        
+
         Raises:
             TooManySkippedMessageKeys: if the number of message keys skipped by this message exceeds the upper
                 limit enforced by `max_num_per_message_skipped_keys`.
-        
+
         Note:
             When the maximum number of skipped message keys for this session, given by
             `max_num_per_session_skipped_keys`, is exceeded, old skipped message keys are deleted to make
@@ -267,7 +267,7 @@ class Backend(ABC, Generic[PlaintextType]):
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `decrypt`.")
-    
+
     @abstractmethod
     async def signed_pre_key_age(self) -> int:
         """
@@ -353,7 +353,7 @@ class Backend(ABC, Generic[PlaintextType]):
 
         Args:
             num_pre_keys: The number of pre keys to generate.
-        
+
         Returns:
             Anything, the return value is ignored.
         """
@@ -370,7 +370,7 @@ class Backend(ABC, Generic[PlaintextType]):
 
         Returns:
             The bundle containing public information about the cryptographic state of this backend.
-            
+
         Warning:
             Do not include pre keys hidden by :meth:`hide_pre_key` in the bundle!
         """

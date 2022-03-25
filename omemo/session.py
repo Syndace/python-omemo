@@ -3,19 +3,19 @@ from typing import Optional
 
 from .message import KeyExchange
 
-class Session(ABC):
+class Session(ABC): # pylint: disable=unused-variable
     """
     Class representing an OMEMO session. Used to encrypt/decrypt key material for/from a single
     recipient/sender device in a perfectly forwared secure manner.
 
     Warning:
         Changes to a session may only be persisted when :meth:`store_session` is called.
-    
+
     Warning:
         Multiple sessions for the same device can exist in memory, however only one session per device can
         exist in storage. Which one of the in-memory sessions is persisted in storage is controlled by calling
         the :meth:`store_session` method.
-    
+
     Note:
         The API of the :class:`Session` class was intentionally kept thin. All "complex" interactions with
         session objects happen via methods of :class:`Backend`. This allows backend implementors to have the
@@ -28,21 +28,25 @@ class Session(ABC):
     @property
     @abstractmethod
     def namespace(self) -> str:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def bare_jid(self) -> str:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def device_id(self) -> int:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def identity_key(self) -> bytes:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
@@ -57,7 +61,7 @@ class Session(ABC):
 
         Returns:
             The key exchange information associated with this session, or `None`.
-        
+
         Note:
             The core library (i.e. :class:`SessionManager`) takes care of setting this property, backend
             implementors only have to care about loading and storing the value in :meth:`load_session` and
@@ -72,12 +76,12 @@ class Session(ABC):
 
         Args:
             value: The key exchange information to associate with this session, or `None`.
-        
+
         Note:
             The core library (i.e. :class:`SessionManager`) takes care of setting this property, backend
             implementors only have to care about loading and storing the value in :meth:`load_session` and
             :meth:`store_session`.
-        
+
         Info:
             Not an actual setter, since mypy doesn't support abstract setters:
             `GitHub issue <https://github.com/python/mypy/issues/4165>`__

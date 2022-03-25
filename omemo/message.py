@@ -17,11 +17,13 @@ class KeyMaterial(ABC):
     @property
     @abstractmethod
     def bare_jid(self) -> str:
+        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def device_id(self) -> int:
+        # pylint: disable=missing-function-docstring
         pass
 
 class KeyExchange(ABC):
@@ -33,6 +35,7 @@ class KeyExchange(ABC):
     @property
     @abstractmethod
     def identity_key(self) -> bytes:
+        # pylint: disable=missing-function-docstring
         pass
 
     @abstractmethod
@@ -48,7 +51,8 @@ class KeyExchange(ABC):
             intention is to find out whether both KeyExchange instances would build the same session.
         """
 
-class Message(NamedTuple):
+class Message(NamedTuple): # pylint: disable=unused-variable
+    # pylint: disable=invalid-name
     """
     Simple structure representing an OMEMO-encrypted message.
     """

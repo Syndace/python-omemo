@@ -1,3 +1,4 @@
+# pylint: disable=exec-used
 import os
 from typing import Dict, Union, List
 
@@ -6,16 +7,16 @@ from setuptools import setup, find_packages # type: ignore
 source_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "omemo")
 
 version_scope: Dict[str, Dict[str, str]] = {}
-with open(os.path.join(source_root, "version.py")) as f:
+with open(os.path.join(source_root, "version.py"), encoding="utf-8") as f:
     exec(f.read(), version_scope)
 version = version_scope["__version__"]
 
 project_scope: Dict[str, Dict[str, Union[str, List[str]]]] = {}
-with open(os.path.join(source_root, "project.py")) as f:
+with open(os.path.join(source_root, "project.py"), encoding="utf-8") as f:
     exec(f.read(), project_scope)
 project = project_scope["project"]
 
-with open("README.md") as f:
+with open("README.md", encoding="utf-8") as f:
     long_description = f.read()
 
 classifiers = [

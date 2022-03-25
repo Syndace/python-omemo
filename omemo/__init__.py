@@ -1,5 +1,4 @@
-from typing import TYPE_CHECKING
-
+# pylint: disable=unused-variable
 from .version import __version__
 from .project import   project
 
@@ -30,10 +29,9 @@ from .session_manager import (
     DeviceListUploadFailed,
     DeviceListDownloadFailed,
     MessageSendingFailed,
-    
+
     SessionManager
 )
 
 from .storage import Maybe, Nothing, Storage, StorageException
-from .types import DeviceInformation, OMEMOException, TrustLevel
-if TYPE_CHECKING: from .types import JSONType
+from .types import DeviceInformation, JSONType, OMEMOException, TrustLevel

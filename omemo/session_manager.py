@@ -7,7 +7,7 @@ from typing import Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar
 from .backend import Backend
 from .bundle  import Bundle
 from .identity_key_pair import IdentityKeyPair
-from .message import Message
+from .message import KeyExchange, Message
 from .session import Session
 from .storage import Nothing, Storage
 from .types   import DeviceInformation, OMEMOException, TrustLevel
@@ -19,7 +19,7 @@ class SessionManagerException(OMEMOException):
 
 
 
-class TrustDecisionFailed(SessionManagerException):
+class TrustDecisionFailed(SessionManagerException): # pylint: disable=unused-variable
     """
     Raised by :meth:`_make_trust_decision` if the trust decisions that were queried somehow failed. Indirectly
     raised by the encryption flow.
@@ -79,7 +79,7 @@ class PublicDataInconsistency(SessionManagerException):
 
 
 
-class UnknownTrustLevel(SessionManagerException):
+class UnknownTrustLevel(SessionManagerException): # pylint: disable=unused-variable
     """
     Raised by :meth:`_evaluate_custom_trust_level` if the custom trust level name to evaluate is unknown.
     Indirectly raised by the encryption and decryption flows.
@@ -98,7 +98,7 @@ class XMPPInteractionFailed(SessionManagerException):
     Parent type for all exceptions related to network/XMPP interactions.
     """
 
-class BundleUploadFailed(XMPPInteractionFailed):
+class BundleUploadFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
     """
     Raised by :meth:`_upload_bundle`, and indirectly by various methods of :class:`SessionManager`.
     """
@@ -108,22 +108,22 @@ class BundleDownloadFailed(XMPPInteractionFailed):
     Raised by :meth:`_download_bundle`, and indirectly by various methods of :class:`SessionManager`.
     """
 
-class BundleDeletionFailed(XMPPInteractionFailed):
+class BundleDeletionFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
     """
     Raised by :meth:`_delete_bundle`, and indirectly by :meth:`purge_backend`.
     """
 
-class DeviceListUploadFailed(XMPPInteractionFailed):
+class DeviceListUploadFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
     """
     Raised by :meth:`_upload_device_list`, and indirectly by various methods of :class:`SessionManager`.
     """
 
-class DeviceListDownloadFailed(XMPPInteractionFailed):
+class DeviceListDownloadFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
     """
     Raised by :meth:`_download_device_list`, and indirectly by various methods of :class:`SessionManager`.
     """
 
-class MessageSendingFailed(XMPPInteractionFailed):
+class MessageSendingFailed(XMPPInteractionFailed): # pylint: disable=unused-variable
     """
     Raised by :meth:`_send_message`, and indirectly by various methods of :class:`SessionManager`.
     """
@@ -131,9 +131,9 @@ class MessageSendingFailed(XMPPInteractionFailed):
 
 
 # TODO: Take care of logging
-SessionManagerType = TypeVar("SessionManagerType", bound="SessionManager[Any]")
-PlaintextType = TypeVar("PlaintextType")
-class SessionManager(ABC, Generic[PlaintextType]):
+SessionManagerTypeT = TypeVar("SessionManagerTypeT", bound="SessionManager[Any]")
+PlaintextTypeT = TypeVar("PlaintextTypeT")
+class SessionManager(ABC, Generic[PlaintextTypeT]): # pylint: disable=unused-variable
     """
     The core of python-omemo. Manages your own key material and bundle, device lists, sessions with other
     users and much more, all while being flexibly usable with different backends and transparenlty maintaining
@@ -149,25 +149,27 @@ class SessionManager(ABC, Generic[PlaintextType]):
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
         listed explicitly.
-    
+
     Note:
         All parameters are treated as immutable unless explicitly noted otherwise.
 
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
         Ed25519 format. Otherwise, "identity key pair" is explicitly used to refer to the full key pair.
-    
+
     Note:
         The library was designed for use as part of an XMPP library/client. The API is shaped for XMPP and
         comments/documentation contain references to XEPs and other XMPP-specific nomenclature. However, the
         library can be used with any economy that provides similar functionality.
     """
 
+    DEVICE_ID_MIN = 1
+    DEVICE_ID_MAX = 2 ** 31 - 1
     STALENESS_MAGIC_NUMBER = 53
 
     def __init__(self) -> None:
         # Just the type definitions here
-        self.__backends: List[Backend[PlaintextType]]
+        self.__backends: List[Backend[PlaintextTypeT]]
         self.__storage: Storage
         self.__own_bare_jid: str
         self.__own_device_id: int
@@ -180,8 +182,8 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
     @classmethod
     async def create(
-        cls: Type[SessionManagerType],
-        backends: List[Backend[PlaintextType]],
+        cls: Type[SessionManagerTypeT],
+        backends: List[Backend[PlaintextTypeT]],
         storage: Storage,
         own_bare_jid: str,
         initial_own_label: Optional[str],
@@ -190,7 +192,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
         max_num_per_message_skipped_keys: Optional[int] = None,
         signed_pre_key_rotation_period: int = 7 * 24 * 60 * 60,
         pre_key_refill_threshold: int = 99
-    ) -> SessionManagerType:
+    ) -> SessionManagerTypeT:
         """
         Load or create OMEMO backends. This method takes care of everything regarding the initialization of
         OMEMO: generating a unique device id, uploading the bundle and adding the new device to the device
@@ -206,7 +208,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
                 the backends.
             undecided_trust_level_name: The name of the custom trust level to initialize the trust level with
                 when a new device is first encoutered. :meth:`_evaluate_custom_trust_level` should evaluate
-                this custom trust level to ``TrustLevel.Undecided``.
+                this custom trust level to ``TrustLevel.UNDECIDED``.
             max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep around per
                 session. Once the maximum is reached, old message keys are deleted to make space for newer
                 ones.
@@ -261,20 +263,20 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         if len({ backend.namespace for backend in backends }) != len(backends):
             raise ValueError("Multiple backends that handle the same namespace were passed.")
-        
+
         if max_num_per_message_skipped_keys == 0 and max_num_per_session_skipped_keys != 0:
             raise ValueError(
                 "The number of allowed per-message skipped keys must be nonzero if the number of per-session"
                 " skipped keys to keep is nonzero."
             )
-        
+
         if max_num_per_message_skipped_keys or 0 > max_num_per_session_skipped_keys:
             raise ValueError(
                 "The number of allowed per-message skipped keys must not be greater than the number of"
                 " per-session skipped keys to keep."
             )
-        
-        if not (25 <= pre_key_refill_threshold <= 99):
+
+        if not 25 <= pre_key_refill_threshold <= 99:
             raise ValueError("Pre key refill threshold out of allowed range.")
 
         self = cls()
@@ -295,7 +297,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
             # First run.
 
             # Fetch the device lists for this bare JID for all loaded backends.
-            device_ids = cast(Set[int], {}).union(*{
+            device_ids = cast(Set[int], set()).union(*{
                 set((await self._download_device_list(backend.namespace, self.__own_bare_jid)).keys())
                 for backend
                 in self.__backends
@@ -303,34 +305,35 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
             # Generate a new device id for this device, making sure that it doesn't clash with any of the
             # existing device ids.
-            DEVICE_ID_MIN = 1
-            DEVICE_ID_MAX = 2 ** 31 - 1
-
             self.__own_device_id = next(filter(
                 lambda device_id: device_id not in device_ids,
-                (secrets.randbelow(DEVICE_ID_MAX - DEVICE_ID_MIN) + DEVICE_ID_MIN for _ in itertools.count())
+                (
+                    secrets.randbelow(cls.DEVICE_ID_MAX - cls.DEVICE_ID_MIN) + cls.DEVICE_ID_MIN
+                    for _
+                    in itertools.count()
+                )
             ))
 
             # Store the device information for this device
-            await storage.store("/devices/{}/{}/namespaces".format(
-                self.__own_bare_jid,
-                self.__own_device_id
-            ), [ backend.namespace for backend in self.__backends ])
+            await storage.store(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
+                [ backend.namespace for backend in self.__backends ]
+            )
 
-            await storage.store("/devices/{}/{}/active".format(
-                self.__own_bare_jid,
-                self.__own_device_id
-            ), { backend.namespace: True for backend in self.__backends })
+            await storage.store(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
+                { backend.namespace: True for backend in self.__backends }
+            )
 
-            await storage.store("/devices/{}/{}/label".format(
-                self.__own_bare_jid,
-                self.__own_device_id
-            ), initial_own_label)
+            await storage.store(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/label",
+                initial_own_label
+            )
 
-            await storage.store_bytes("/devices/{}/{}/identity_key".format(
-                self.__own_bare_jid,
-                self.__own_device_id
-            ), self.__identity_key_pair.identity_key)
+            await storage.store_bytes(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/identity_key",
+                self.__identity_key_pair.identity_key
+            )
 
             # Publish the bundles for all backends
             for backend in self.__backends:
@@ -344,23 +347,23 @@ class SessionManager(ABC, Generic[PlaintextType]):
             # being added to the lists and the lists republished.
             for backend in self.__backends:
                 await self.refresh_device_list(backend.namespace, self.__own_bare_jid)
-        
+
         # If there a mismatch between loaded and active namespaces, look for changes in the loaded backends.
         device, _ = await self.get_own_device_information()
         loaded_namespaces = { backend.namespace for backend in self.__backends }
         active_namespaces = device.namespaces
         if loaded_namespaces != active_namespaces:
             # Store the updated list of loaded namespaces
-            await storage.store("/devices/{}/{}/namespaces".format(
-                self.__own_bare_jid,
-                self.__own_device_id
-            ), list(loaded_namespaces))
+            await storage.store(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
+                list(loaded_namespaces)
+            )
 
             # Set the device active for all loaded namespaces
-            await storage.store("/devices/{}/{}/active".format(
-                self.__own_bare_jid,
-                self.__own_device_id
-            ), list({ namespace: True for namespace in loaded_namespaces }))
+            await storage.store(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
+                list({ namespace: True for namespace in loaded_namespaces })
+            )
 
             # Take care of the initialization of newly added backends
             for backend in self.__backends:
@@ -375,7 +378,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
                     # Trigger a refresh of the own device list of the new backend, this will result in this
                     # device being added to the lists and the lists republished.
                     await self.refresh_device_list(backend.namespace, self.__own_bare_jid)
-            
+
             # Perform cleanup of removed backends
             for namespace in active_namespaces - loaded_namespaces:
                 await self.purge_backend(namespace)
@@ -412,7 +415,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         Warning:
             Make sure to unsubscribe from updates to all device lists before calling this method.
-        
+
         Note:
             If the backend-specific offline data is not purged, the backend can be loaded again at a later
             point and the online data can be restored. This is what happens when a backend that was previously
@@ -434,15 +437,15 @@ class SessionManager(ABC, Generic[PlaintextType]):
         device.namespaces.remove(namespace)
         device.active.pop(namespace, None)
 
-        await self.__storage.store("/devices/{}/{}/namespaces".format(
-            self.__own_bare_jid,
-            self.__own_device_id
-        ), list(device.namespaces))
+        await self.__storage.store(
+            f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
+            list(device.namespaces)
+        )
 
-        await self.__storage.store("/devices/{}/{}/active".format(
-            self.__own_bare_jid,
-            self.__own_device_id
-        ), device.active)
+        await self.__storage.store(
+            f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
+            device.active
+        )
 
         # If the backend is currently loaded, remove it from the list of loaded backends
         purged_backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends), None)
@@ -469,40 +472,38 @@ class SessionManager(ABC, Generic[PlaintextType]):
         storage = self.__storage
 
         # Get the set of devices to delete
-        device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
-        
+        device_list = set((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
+
         # Collect identity keys used by this account
         identity_keys: Set[bytes] = set()
         for device_id in device_list:
             try:
-                identity_keys.add((await storage.load_bytes("/devices/{}/{}/identity_key".format(
-                    bare_jid,
-                    device_id
-                ))).from_just())
+                identity_keys.add((await storage.load_bytes(
+                    f"/devices/{bare_jid}/{device_id}/identity_key"
+                )).from_just())
             except Nothing:
                 pass
 
         # Delete information about the individual devices
         for device_id in device_list:
-            await storage.delete("/devices/{}/{}/namespaces".format(bare_jid, device_id))
-            await storage.delete("/devices/{}/{}/active".format(bare_jid, device_id))
-            await storage.delete("/devices/{}/{}/label".format(bare_jid, device_id))
-            await storage.delete("/devices/{}/{}/identity_key".format(bare_jid, device_id))
+            await storage.delete(f"/devices/{bare_jid}/{device_id}/namespaces")
+            await storage.delete(f"/devices/{bare_jid}/{device_id}/active")
+            await storage.delete(f"/devices/{bare_jid}/{device_id}/label")
+            await storage.delete(f"/devices/{bare_jid}/{device_id}/identity_key")
 
         # Delete the device list
-        await storage.delete("/devices/{}/list".format(bare_jid))
+        await storage.delete(f"/devices/{bare_jid}/list")
 
         # Delete information about the identity keys
         for identity_key in identity_keys:
-            await storage.delete("/trust/{}/{}".format(
-                bare_jid,
-                base64.urlsafe_b64encode(identity_key).decode("ASCII")
-            ))
+            await storage.delete(
+                f"/trust/{bare_jid}/{base64.urlsafe_b64encode(identity_key).decode('ASCII')}"
+            )
 
         # Remove backend-specific data
         for backend in self.__backends:
             await backend.purge_bare_jid(bare_jid)
-    
+
     async def ensure_data_consistency(self) -> None:
         """
         Ensure that the online data for all loaded backends is consistent with the offline data. Refreshes
@@ -663,7 +664,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
         """
 
         raise NotImplementedError("Create a subclass of SessionManager and implement `_upload_device_list`.")
-        
+
 
     @staticmethod
     @abstractmethod
@@ -701,9 +702,9 @@ class SessionManager(ABC, Generic[PlaintextType]):
         """
         Evaluate a custom trust level to one of the three core trust levels:
 
-        * `Trusted`: This device is trusted, encryption/decryption of messages to/from it is allowed.
-        * `Distrusted`: This device is explicitly *not* trusted, do not encrypt/decrypt messages to/from it.
-        * `Undecided`: A trust decision is yet to be made. It is not clear whether it is okay to
+        * `TRUSTED`: This device is trusted, encryption/decryption of messages to/from it is allowed.
+        * `DISTRUSTED`: This device is explicitly *not* trusted, do not encrypt/decrypt messages to/from it.
+        * `UNDECIDED`: A trust decision is yet to be made. It is not clear whether it is okay to
             encrypt messages to it, however decrypting messages from it is allowed.
 
         Args:
@@ -718,7 +719,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         Note:
             This method should be "stupid", i.e. only implementing a simple mapping from custom trust levels
-            to core trust levels, without any side effects. 
+            to core trust levels, without any side effects.
         """
 
         raise NotImplementedError(
@@ -761,7 +762,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
         * Automatic handshake completion, by responding to incoming key exchanges.
         * Automatic heartbeat messages to forward the ratchet if many messages were received without a
             (manual) response, to assure forward secrecy (aka staleness prevention). The number of messages
-            required to trigger this behaviour is hardcoded in ``SessionManager.HEARTBEAT_MESSAGE_TRIGGER``.
+            required to trigger this behaviour is hardcoded in ``SessionManager.STALENESS_MAGIC_NUMBER``.
         * Automatic session initiation if an encrypted message is received but no session exists for that
             device.
         * Backend-dependent session healing mechanisms.
@@ -812,15 +813,13 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         # This isn't strictly necessary, but good for consistency
         if namespace not in { backend.namespace for backend in self.__backends }:
-            raise UnknownNamespace("The backend hanlding the namespace {} is not currently loaded.".format(
-                namespace
-            ))
+            raise UnknownNamespace(f"The backend hanlding the namespace {namespace} is not currently loaded.")
 
         # Copy to make sure the original is not modified
         device_list = dict(device_list)
 
         new_device_list = set(device_list.keys())
-        old_device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
+        old_device_list = set((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
 
         new_devices = new_device_list - old_device_list
 
@@ -829,67 +828,58 @@ class SessionManager(ABC, Generic[PlaintextType]):
             namespace in { backend.namespace for backend in self.__backends } and
             self.__own_device_id not in new_device_list):
             # Add this device to the device list and publish it
-            device_list[self.__own_device_id] = (await storage.load_optional("/devices/{}/{}/label".format(
-                self.__own_bare_jid,
-                self.__own_device_id
-            ), str)).from_just()
+            device_list[self.__own_device_id] = (await storage.load_optional(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/label",
+                str
+            )).from_just()
             await self._upload_device_list(namespace, device_list)
 
         # Add new device information entries for new devices
         for device_id in new_devices:
-            await storage.store("/devices/{}/{}/namespaces".format(bare_jid, device_id), [ namespace ])
-            await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), { namespace: True })
-            await storage.store("/devices/{}/{}/label".format(bare_jid, device_id), device_list[device_id])
+            await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", [ namespace ])
+            await storage.store(f"/devices/{bare_jid}/{device_id}/active", { namespace: True })
+            await storage.store(f"/devices/{bare_jid}/{device_id}/label", device_list[device_id])
 
         # Update namespaces, label and status for previously known devices
         for device_id in old_device_list:
-            namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
-                bare_jid,
-                device_id
-            ), str)).from_just())
+            namespaces = set((await storage.load_list(
+                f"/devices/{bare_jid}/{device_id}/namespaces",
+                str
+            )).from_just())
 
-            active = (await storage.load_dict("/devices/{}/{}/active".format(
-                bare_jid,
-                device_id
-            ), bool)).from_just()
+            active = (await storage.load_dict(f"/devices/{bare_jid}/{device_id}/active", bool)).from_just()
 
             if device_id in device_list:
                 # Add the namespace if required
                 if namespace not in namespaces:
                     namespaces.add(namespace)
-                    await storage.store("/devices/{}/{}/namespaces".format(
-                        bare_jid,
-                        device_id
-                    ), list(namespaces))
-                
+                    await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", list(namespaces))
+
                 # Update the status if required
-                if namespace not in active or active[namespace] == False:
+                if namespace not in active or active[namespace] is False:
                     active[namespace] = True
-                    await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), active)
+                    await storage.store(f"/devices/{bare_jid}/{device_id}/active", active)
 
                 # Update the label if required. Even though loading the value first isn't strictly required,
                 # it is done under the assumption that loading values is cheaper than writing.
-                label = (await storage.load_optional("/devices/{}/{}/label".format(
-                    bare_jid,
-                    device_id
-                ), str)).from_just()
+                label = (await storage.load_optional(
+                    f"/devices/{bare_jid}/{device_id}/label",
+                    str
+                )).from_just()
 
                 if device_list[device_id] != label:
-                    await storage.store("/devices/{}/{}/label".format(
-                        bare_jid,
-                        device_id
-                    ), device_list[device_id])
+                    await storage.store(f"/devices/{bare_jid}/{device_id}/label", device_list[device_id])
             else:
                 # Update the status if required
                 if namespace in namespaces:
-                    if active[namespace] == True:
+                    if active[namespace] is True:
                         active[namespace] = False
-                        await storage.store("/devices/{}/{}/active".format(bare_jid, device_id), active)
+                        await storage.store(f"/devices/{bare_jid}/{device_id}/active", active)
 
         # If there are unknown devices in the new device list, update the list of known devices. Do this as
         # the last step to ensure data consistency.
         if len(new_devices) > 0:
-            await storage.store("/devices/{}/list".format(bare_jid), list(new_device_list | old_device_list))
+            await storage.store(f"/devices/{bare_jid}/list", list(new_device_list | old_device_list))
 
     async def refresh_device_list(self, namespace: str, bare_jid: str) -> None:
         """
@@ -928,10 +918,10 @@ class SessionManager(ABC, Generic[PlaintextType]):
             trust_level_name: The custom trust level to set for the identity key.
         """
 
-        await self.__storage.store("/trust/{}/{}".format(
-            bare_jid,
-            base64.urlsafe_b64encode(identity_key).decode("ASCII")
-        ), trust_level_name)
+        await self.__storage.store(
+            f"/trust/{bare_jid}/{base64.urlsafe_b64encode(identity_key).decode('ASCII')}",
+            trust_level_name
+        )
 
     ######################
     # session management #
@@ -945,7 +935,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         Args:
             device: The device whose sessions to replace.
-        
+
         Returns:
             Information about exceptions that happened during session replacement attempts. A mapping from the
             namespace of the backend for which the replacement failed, to the reason of failure. If the reason
@@ -958,7 +948,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
             notification message for the recipient is lost or heavily delayed, the recipient may not know
             about the new session and keep using the old one. Only use this method to attempt replacement of
             sessions that already seem broken. Do not attempt to replace healthy sessions.
-        
+
         Warning:
             This method does not optimize towards minimizing network usage. One notification message is sent
             per session to replace, the notifications are not bundled. This is to minimize the negative impact
@@ -1015,7 +1005,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
                     unsuccessful[backend.namespace] = e
 
         return unsuccessful
-    
+
     async def get_sending_chain_length(self, device: DeviceInformation) -> Dict[str, Optional[int]]:
         """
         Get the sending chain lengths of all sessions with a device. Can be used for external staleness
@@ -1023,7 +1013,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         Args:
             device: The device.
-        
+
         Returns:
             A mapping from namespace to sending chain length. `None` for the sending chain length implies that
             there is no session with the device for that backend.
@@ -1064,10 +1054,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
         """
 
         # Store the new label
-        await self.__storage.store("/devices/{}/{}/label".format(
-            self.__own_bare_jid,
-            self.__own_device_id
-        ), own_label)
+        await self.__storage.store(f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/label", own_label)
 
         # For each loaded backend, upload an updated device list including the new label
         for backend in self.__backends:
@@ -1094,12 +1081,12 @@ class SessionManager(ABC, Generic[PlaintextType]):
             `PEP <https://xmpp.org/extensions/xep-0163.html>`__ updates are correctly fed to
             :meth:`update_device_list`. A manual update of a device list can be triggered using
             :meth:`refresh_device_list` if needed.
-        
+
         Warning:
             This method attempts to download the bundle of devices whose corresponding identity key is not
             known yet. In case the information can not be fetched due to bundle download failures, the device
             is not included in the returned set.
-        
+
         Raises:
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
@@ -1123,37 +1110,36 @@ class SessionManager(ABC, Generic[PlaintextType]):
             bundles are returned as well, so that they can be used if required immediately afterwards. This is
             to avoid double downloading bundles during encryption/decryption flows and is purely for internal
             use.
-        
+
         Warning:
             This method attempts to download the bundle of devices whose corresponding identity key is not
             known yet. In case the information can not be fetched due to bundle download failures, the device
             is not included in the returned set.
-        
+
         Raises:
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
         storage = self.__storage
 
-        device_list = set((await storage.load_list("/devices/{}/list".format(bare_jid), int)).maybe([]))
+        device_list = set((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
 
         devices: Set[DeviceInformation] = set()
         bundle_cache: Set[Bundle] = set()
 
         for device_id in device_list:
-            namespaces = set((await storage.load_list("/devices/{}/{}/namespaces".format(
-                bare_jid,
-                device_id
-            ), str)).from_just())
-            
+            namespaces = set((await storage.load_list(
+                f"/devices/{bare_jid}/{device_id}/namespaces",
+                str
+            )).from_just())
+
             # Load the identity key as soon as possible, since this is the most likely operation to fail (due
             # to bundle downloading errors)
             identity_key: bytes
             try:
-                identity_key = (await storage.load_bytes("/devices/{}/{}/identity_key".format(
-                    bare_jid,
-                    device_id
-                ))).from_just()
+                identity_key = (await storage.load_bytes(
+                    f"/devices/{bare_jid}/{device_id}/identity_key"
+                )).from_just()
             except Nothing:
                 # The identity key assigned to this device is not known yet. Fetch the bundle to find that
                 # information. Return the downloaded bundle to avoid double-fetching it if the same bundle is
@@ -1168,29 +1154,22 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
                         identity_key = bundle.identity_key
 
-                        await storage.store_bytes("/devices/{}/{}/identity_key".format(
-                            bare_jid,
-                            device_id
-                        ), identity_key)
+                        await storage.store_bytes(
+                            f"/devices/{bare_jid}/{device_id}/identity_key",
+                            identity_key
+                        )
                         break
                 else:
                     # Skip this device in case none of the bundles could be downloaded
                     continue
 
-            active = (await storage.load_dict("/devices/{}/{}/active".format(
-                bare_jid,
-                device_id
-            ), bool)).from_just()
+            active = (await storage.load_dict(f"/devices/{bare_jid}/{device_id}/active", bool)).from_just()
+            label = (await storage.load_optional(f"/devices/{bare_jid}/{device_id}/label", str)).from_just()
 
-            label = (await storage.load_optional("/devices/{}/{}/label".format(
-                bare_jid,
-                device_id
-            ), str)).from_just()
-
-            trust_level_name = (await storage.load_primitive("/trust/{}/{}".format(
-                bare_jid,
-                base64.urlsafe_b64encode(identity_key).decode("ASCII")
-            ), str)).maybe(self.__undecided_trust_level_name)
+            trust_level_name = (await storage.load_primitive(
+                f"/trust/{bare_jid}/{base64.urlsafe_b64encode(identity_key).decode('ASCII')}",
+                str
+            )).maybe(self.__undecided_trust_level_name)
 
             devices.add(DeviceInformation(
                 namespaces=namespaces,
@@ -1259,7 +1238,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
         * Empty messages to "complete" sessions or prevent staleness are deferred until after the
             synchronization is done. Only one empty message is sent per session when exiting the history
             synchronization mode.
-        
+
         Note:
             While in history synchronization mode, the library can process live events too.
         """
@@ -1288,17 +1267,17 @@ class SessionManager(ABC, Generic[PlaintextType]):
         # Send empty messages that were queued while in history synchronization mode
         for backend in self.__backends:
             # Load and delete the list of bare JIDs that have queued empty messages for this backend
-            queued_jids = set((await storage.load_list("/queue/{}".format(backend.namespace), str)).maybe([]))
-            await storage.delete("/queue/{}".format(backend.namespace))
+            queued_jids = set((await storage.load_list(f"/queue/{backend.namespace}", str)).maybe([]))
+            await storage.delete(f"/queue/{backend.namespace}")
 
             for bare_jid in queued_jids:
                 # For each queued bare JID, load and delete the list of devices that have queued an empty
                 # message for this backend
                 queued_device_ids = set((await storage.load_list(
-                    "/queue/{}/{}".format(backend.namespace, bare_jid),
+                    f"/queue/{backend.namespace}/{bare_jid}",
                     int
                 )).maybe([]))
-                await storage.delete("/queue/{}/{}".format(backend.namespace, bare_jid))
+                await storage.delete(f"/queue/{backend.namespace}/{bare_jid}")
 
                 for device_id in queued_device_ids:
                     session = await backend.load_session(bare_jid, device_id)
@@ -1311,14 +1290,14 @@ class SessionManager(ABC, Generic[PlaintextType]):
     # en- and decryption #
     ######################
 
-    async def __send_empty_message(self, backend: Backend[PlaintextType], session: Session) -> None:
+    async def __send_empty_message(self, backend: Backend[PlaintextTypeT], session: Session) -> None:
         """
         Internal helper to send an empty message for ratchet forwarding.
 
         Args:
             backend: The backend to encrypt the message with.
             session: The session to encrypt the message with.
-        
+
         Raises:
             MessageSendingFailed: if the message could not be sent. Forwarded from :meth:`_send_message`.
         """
@@ -1336,7 +1315,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
     async def encrypt(
         self,
         bare_jids: Set[str],
-        plaintext: PlaintextType,
+        plaintext: PlaintextTypeT,
         backend_priority_order: Optional[List[str]] = None
     ) -> Set[Message]:
         """
@@ -1375,29 +1354,27 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         Note:
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
-            information about the ``PlaintextType`` type.
+            information about the ``PlaintextTypeT`` type.
         """
 
         # Prepare the backend priority order list
-        effective_backend_priority_order: List[str]
         available_namespaces = [ backend.namespace for backend in self.__backends ]
 
-        if backend_priority_order is None:
-            effective_backend_priority_order = available_namespaces
-        else:
+        if backend_priority_order is not None:
             unavailable_namespaces = set(backend_priority_order) - set(available_namespaces)
             if len(unavailable_namespaces) > 0:
                 raise UnknownNamespace(
-                    "One or more unavailable namespaces were passed in the backend priority order list: {}"
-                        .format(unavailable_namespaces)
+                    f"One or more unavailable namespaces were passed in the backend priority order list:"
+                    f" {unavailable_namespaces}"
                 )
 
-            effective_backend_priority_order = backend_priority_order
+        effective_backend_priority_order = \
+            available_namespaces if backend_priority_order is None else backend_priority_order
 
         # Add the own bare JID to the list of recipients.
         # Copy to make sure the original is not modified.
         bare_jids = set(bare_jids) | { self.__own_bare_jid }
-        
+
         # Load the device information of all recipients
         def is_valid_recipient_device(device: DeviceInformation) -> bool:
             """
@@ -1409,7 +1386,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
             Args:
                 device: The device to check.
-            
+
             Returns:
                 Whether the device is a valid recipient for this encryption operation or not.
             """
@@ -1434,10 +1411,10 @@ class SessionManager(ABC, Generic[PlaintextType]):
         # the publicly available device list and the recipient devices used here are consistent.
         tmp = { await self.__get_device_information(bare_jid) for bare_jid in bare_jids }
 
-        devices = cast(Set[DeviceInformation], {}).union(*(devices for devices, _ in tmp))
+        devices = cast(Set[DeviceInformation], set()).union(*(devices for devices, _ in tmp))
         devices = set(filter(is_valid_recipient_device, devices))
 
-        bundle_cache = cast(Set[Bundle], {}).union(*(bundle_cache for _, bundle_cache in tmp))
+        bundle_cache = cast(Set[Bundle], set()).union(*(bundle_cache for _, bundle_cache in tmp))
 
         # Check for recipients without a single active device
         no_eligible_devices = set(filter(
@@ -1453,10 +1430,31 @@ class SessionManager(ABC, Generic[PlaintextType]):
             )
 
         # Apply the backend priority order to the remaining devices
-        devices = { device._replace(namespaces={ sorted(
-            filter(lambda namespace: device.active[namespace], device.namespaces),
-            key=effective_backend_priority_order.index
-        )[0] }) for device in devices }
+        def apply_backend_priorty_order(
+            device: DeviceInformation,
+            backend_priorty_order: List[str]
+        ) -> DeviceInformation:
+            """
+            Apply the backend priority order to the namespaces of a device.
+
+            Args:
+                device: The devices whose namespaces to adjust.
+                backend_priority_order: The backend priority order given as a list of namespaces. Lower index
+                    means higher priority.
+
+            Returns:
+                A copy of the device, with the namespaces adjusted. The set of supported namespaces contains
+                only one namespace - the one with highest priority that is supported by the device.
+            """
+
+            return device._replace(namespaces={ sorted(
+                { namespace for namespace in device.namespaces if device.active[namespace] },
+                key=backend_priorty_order.index
+            )[0] })
+
+        devices = {
+            apply_backend_priorty_order(device, effective_backend_priority_order) for device in devices
+        }
 
         # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
         # the remaining devices)
@@ -1466,13 +1464,13 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
             Args:
                 device: A device.
-            
+
             Returns:
                 Whether the trust status of this device is undecided, i.e. whether the custom trust level
-                assigned to the identity key used by this device evaluates to `TrustLevel.Undecided`.
+                assigned to the identity key used by this device evaluates to `TrustLevel.UNDECIDED`.
             """
 
-            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Undecided
+            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.UNDECIDED
 
         def is_trusted(device: DeviceInformation) -> bool:
             """
@@ -1480,33 +1478,30 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
             Args:
                 device: A device.
-            
+
             Returns:
                 Whether the trust status of this device is trusted, i.e. whether the custom trust level
-                assigned to the identity key used by this device evaluates to `TrustLevel.Trusted`.
+                assigned to the identity key used by this device evaluates to `TrustLevel.TRUSTED`.
             """
-        
-            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Trusted
-        
+
+            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.TRUSTED
+
         undecided_devices = set(filter(is_undecided, devices))
         if len(undecided_devices) > 0:
             await self._make_trust_decision(undecided_devices)
 
             # Update to the new trust levels
             devices = { device._replace(trust_level_name=(await self.__storage.load_primitive(
-                "/trust/{}/{}".format(
-                    device.bare_jid,
-                    base64.urlsafe_b64encode(device.identity_key).decode("ASCII")
-                ),
+                f"/trust/{device.bare_jid}/{base64.urlsafe_b64encode(device.identity_key).decode('ASCII')}",
                 str
             )).maybe(self.__undecided_trust_level_name)) for device in devices }
 
         # Make sure the trust status of all previously undecided devices has been decided on
         undecided_devices = set(filter(is_undecided, devices))
         if len(undecided_devices) > 0:
-            raise StillUndecided("The trust status of one or more devices has not been decided on: {}".format(
-                undecided_devices
-            ))
+            raise StillUndecided(
+                f"The trust status of one or more devices has not been decided on: {undecided_devices}"
+            )
 
         # Keep only trusted devices
         devices = set(filter(is_trusted, devices))
@@ -1524,17 +1519,20 @@ class SessionManager(ABC, Generic[PlaintextType]):
                 " the loaded backends."
             )
 
-        async def load_or_create_session(backend: Backend[PlaintextType], device: DeviceInformation) -> Session:
+        async def load_or_create_session(
+            backend: Backend[PlaintextTypeT],
+            device: DeviceInformation
+        ) -> Session:
             """
             Helper to load a session for a device or create it if it doesn't exist.
 
             Args:
                 backend: The backend to load/create this session with.
                 device: The device to load/create this session with.
-            
+
             Returns:
                 The loaded or newly created session.
-            
+
             Raises:
                 BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
                 KeyExchangeFailed: in case there is an error during the key exchange required for session
@@ -1570,10 +1568,9 @@ class SessionManager(ABC, Generic[PlaintextType]):
         messages: Set[Message] = set()
         for backend in self.__backends:
             # Find the devices to encrypt for using this backend
-            backend_devices = set(filter(
-                lambda device: next(iter(device.namespaces)) == backend.namespace,
-                devices
-            ))
+            backend_devices = {
+                device for device in devices if next(iter(device.namespaces)) == backend.namespace
+            }
 
             # Skip this backend if there isn't a single recipient device using it
             if len(backend_devices) == 0:
@@ -1583,13 +1580,12 @@ class SessionManager(ABC, Generic[PlaintextType]):
             sessions = { await load_or_create_session(backend, device) for device in backend_devices }
 
             # Perform the encryption, which is mostly backend-specific.
-            content, key_material = await backend.encrypt(sessions, backend.serialize_plaintext(plaintext))
+            content, key_materials = await backend.encrypt(sessions, backend.serialize_plaintext(plaintext))
 
             # Build pairs of key material and key exchange information
             keys = { (
-                next(filter(
-                    lambda km: km.bare_jid == session.bare_jid and km.device_id == session.device_id,
-                    key_material
+                next(key_material for key_material in key_materials if (
+                    key_material.bare_jid == session.bare_jid and key_material.device_id == session.device_id
                 )),
                 session.key_exchange
             ) for session in sessions }
@@ -1603,7 +1599,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         return messages
 
-    async def decrypt(self, message: Message) -> Tuple[PlaintextType, DeviceInformation]:
+    async def decrypt(self, message: Message) -> Tuple[PlaintextTypeT, DeviceInformation]:
         """
         Decrypt a message.
 
@@ -1640,13 +1636,13 @@ class SessionManager(ABC, Generic[PlaintextType]):
 
         Note:
             If the trust level of the sender evaluates to undecided, the message is decrypted.
-        
+
         Note:
             May send empty OMEMO messages to "complete" key exchanges or prevent staleness.
 
         Note:
             Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
-            information about the ``PlaintextType`` type.
+            information about the ``PlaintextTypeT`` type.
         """
 
         storage = self.__storage
@@ -1654,9 +1650,9 @@ class SessionManager(ABC, Generic[PlaintextType]):
         # Find the backend to handle this message
         backend = next(filter(lambda backend: backend.namespace == message.namespace, self.__backends), None)
         if backend is None:
-            raise UnknownNamespace("Backend corresponding to namespace {} is not currently loaded.".format(
-                message.namespace
-            ))
+            raise UnknownNamespace(
+                f"Backend corresponding to namespace {message.namespace} is not currently loaded."
+            )
 
         # Check if there is key material for us
         try:
@@ -1665,6 +1661,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
                 message.keys
             ))
         except StopIteration:
+            # pylint: disable=raise-missing-from
             raise MessageNotForUs("The message to decrypt does not contain key material for us.")
 
         # Check whether the sending device is known
@@ -1682,7 +1679,7 @@ class SessionManager(ABC, Generic[PlaintextType]):
             # This time, if the device is still not found, abort. This is not strictly required - the message
             # could be decrypted anyway. However, it would mean the sending device is not complying with the
             # specification, which is shady, thus it's not wrong to abort here either.
-            device = next(filter(lambda device: device.device_id == message.device_id, devices), None)
+            device = next((device for device in devices if device.device_id == message.device_id), None)
             if device is None:
                 raise SenderNotFound(
                     "Couldn't find public information about the device which sent this message. I.e. the"
@@ -1691,13 +1688,25 @@ class SessionManager(ABC, Generic[PlaintextType]):
                 )
 
         # Check the trust level of the sending device. Abort in case of explicit distrust.
-        if self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.Distrusted:
+        if self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.DISTRUSTED:
             raise SenderDistrusted(
                 "The identity key corresponding to the sending device is explicitly distrusted."
             )
 
         # Handle the key exchange if available
-        if key_exchange is None:
+        async def load_session(backend: Backend[PlaintextTypeT], device: DeviceInformation) -> Session:
+            """
+            Args:
+                backend: The backend to load the session from.
+                device: The device whose session to load.
+
+            Returns:
+                The session.
+
+            Raises:
+                NoSession: in case there is no session with the device in storage.
+            """
+
             # If there is no key exchange, a session has to exist and should be loadable
             session = await backend.load_session(device.bare_jid, device.device_id)
             if session is None:
@@ -1705,7 +1714,30 @@ class SessionManager(ABC, Generic[PlaintextType]):
                     "There is no session with the sending device, and key exchange information required to"
                     " build a new session is not included in the message."
                 )
-        else:
+            return session
+
+        async def handle_key_exchange(
+            backend: Backend[PlaintextTypeT],
+            device: DeviceInformation,
+            key_exchange: KeyExchange
+        ) -> Session:
+            """
+            Args:
+                backend: The backend to handle the key exchange with.
+                device: The device which sent the key exchange information.
+                key_exchange: The key exchange information.
+
+            Returns:
+                A session that was built using the key exchange information, either now or in the past.
+
+            Raises:
+                PublicDataInconsistency: if the identity key that's part of the key exchange information
+                    doesn't match the identity key in the bundle of the device.
+                KeyExchangeFailed: in case a new session needed to be built, and there was an error during the
+                    key exchange that's part of the session building. Forwarded from
+                    :meth:`~omemo.backend.Backend.build_session_passive`.
+            """
+
             # Check whether the identity key matches the one we know
             if key_exchange.identity_key != device.identity_key:
                 raise PublicDataInconsistency(
@@ -1725,6 +1757,15 @@ class SessionManager(ABC, Generic[PlaintextType]):
             if session is None:
                 session = await backend.build_session_passive(device.bare_jid, device.device_id, key_exchange)
                 session.set_key_exchange(key_exchange)
+
+            return session
+
+        # Inline if for type safety and pylint satisfaction.
+        session = (
+            await load_session(backend, device)
+            if key_exchange is None else
+            await handle_key_exchange(backend, device, key_exchange)
+        )
 
         # Decrypt the message
         plaintext = backend.deserialize_plaintext(await backend.decrypt(
@@ -1766,34 +1807,28 @@ class SessionManager(ABC, Generic[PlaintextType]):
                     )
 
                 await self._upload_bundle(bundle)
-            
+
         # Send an empty message if necessary to avoid staleness and to "complete" the handshake in case this
         # was a key exchange
         if key_exchange is not None or session.receiving_chain_length > self.__class__.STALENESS_MAGIC_NUMBER:
             if self.__synchronizing:
                 # Add this bare JID to the queue
-                queued_jids = set((await storage.load_list(
-                    "/queue/{}".format(session.namespace),
-                    str
-                )).maybe([]))
+                queued_jids = set((await storage.load_list(f"/queue/{session.namespace}", str)).maybe([]))
 
                 queued_jids.add(session.bare_jid)
-                await storage.store("/queue/{}".format(session.namespace), list(queued_jids))
+                await storage.store(f"/queue/{session.namespace}", list(queued_jids))
 
                 # Add this device id to the queue
                 queued_device_ids = set((await storage.load_list(
-                    "/queue/{}/{}".format(session.namespace, session.bare_jid),
+                    f"/queue/{session.namespace}/{session.bare_jid}",
                     int
                 )).maybe([]))
 
                 queued_device_ids.add(session.device_id)
-                await storage.store(
-                    "/queue/{}/{}".format(session.namespace, session.bare_jid),
-                    list(queued_device_ids)
-                )
+                await storage.store(f"/queue/{session.namespace}/{session.bare_jid}", list(queued_device_ids))
             else:
                 # If not in history synchronization mode, send the empty message right away
                 await self.__send_empty_message(backend, session)
-        
+
         # Return the plaintext and information about the sending device
         return (plaintext, device)
