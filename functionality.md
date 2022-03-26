@@ -1,4 +1,4 @@
-# Functionality/Use Cases
+# Functionality/Use Cases #
 
 - [x] the maximum number of skipped message keys to keep around per session is configurable
     - [x] the default is set to 1000
