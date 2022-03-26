@@ -30,6 +30,7 @@ class IdentityKeyPair:
     The identity key pair associated to this device, shared by all backends.
 
     There are following requirements for the identity key pair:
+
     * It must be able to create and verify Ed25519-compatible signatures.
     * It must be able to perform X25519-compatible Diffie-Hellman key agreements.
 
@@ -38,6 +39,7 @@ class IdentityKeyPair:
     the other, with caveats.
 
     This class can handle three variations of key pairs:
+
     * Curve25519 key pairs
     * Ed25519 key pairs, where a seed to derive the private scalar is the private key
     * Ed25519 key pairs, where the private scalar is the private key

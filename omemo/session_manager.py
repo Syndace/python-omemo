@@ -21,22 +21,22 @@ class SessionManagerException(OMEMOException):
 
 class TrustDecisionFailed(SessionManagerException):
     """
-    Raised by :meth:`_make_trust_decision` if the trust decisions that were queried somehow failed. Indirectly
-    raised by the encryption flow.
+    Raised by :meth:`SessionManager._make_trust_decision` if the trust decisions that were queried somehow
+    failed. Indirectly raised by the encryption flow.
     """
 
 
 class StillUndecided(SessionManagerException):
     """
-    Raised by :meth:`encrypt` in case there are still undecided devices after a trust decision was queried via
-    :meth:`_make_trust_decision`.
+    Raised by :meth:`SessionManager.encrypt` in case there are still undecided devices after a trust decision
+    was queried via :meth:`SessionManager._make_trust_decision`.
     """
 
 
 class NoEligibleDevices(SessionManagerException):
     """
-    Raised by :meth:`encrypt` in case none of the devices of one or more recipient are eligible for
-    encryption, for example due to distrust or bundle downloading failures.
+    Raised by :meth:`SessionManager.encrypt` in case none of the devices of one or more recipient are eligible
+    for encryption, for example due to distrust or bundle downloading failures.
     """
 
     def __init__(self, bare_jids: Set[str], *args: object) -> None:
@@ -53,40 +53,42 @@ class NoEligibleDevices(SessionManagerException):
 
 class MessageNotForUs(SessionManagerException):
     """
-    Raised by :meth:`decrypt` in case the message to decrypt does not seem to be encrypting for this device.
+    Raised by :meth:`SessionManager.decrypt` in case the message to decrypt does not seem to be encrypting for
+    this device.
     """
 
 
 class SenderNotFound(SessionManagerException):
     """
-    Raised by :meth:`decrypt` in case the usual public information of the sending device could not be
-    downloaded.
+    Raised by :meth:`SessionManager.decrypt` in case the usual public information of the sending device could
+    not be downloaded.
     """
 
 
 class SenderDistrusted(SessionManagerException):
     """
-    Raised by :meth:`decrypt` in case the sending device is explicitly distrusted.
+    Raised by :meth:`SessionManager.decrypt` in case the sending device is explicitly distrusted.
     """
 
 
 class NoSession(SessionManagerException):
     """
-    Raised by :meth:`decrypt` in case there is no session with the sending device, and a new session can't be
-    built either.
+    Raised by :meth:`SessionManager.decrypt` in case there is no session with the sending device, and a new
+    session can't be built either.
     """
 
 
 class PublicDataInconsistency(SessionManagerException):
     """
-    Raised by :meth:`decrypt` in case inconsistencies were found in the public data of the sending device.
+    Raised by :meth:`SessionManager.decrypt` in case inconsistencies were found in the public data of the
+    sending device.
     """
 
 
 class UnknownTrustLevel(SessionManagerException):
     """
-    Raised by :meth:`_evaluate_custom_trust_level` if the custom trust level name to evaluate is unknown.
-    Indirectly raised by the encryption and decryption flows.
+    Raised by :meth:`SessionManager._evaluate_custom_trust_level` if the custom trust level name to evaluate
+    is unknown. Indirectly raised by the encryption and decryption flows.
     """
 
 
@@ -105,37 +107,42 @@ class XMPPInteractionFailed(SessionManagerException):
 
 class BundleUploadFailed(XMPPInteractionFailed):
     """
-    Raised by :meth:`_upload_bundle`, and indirectly by various methods of :class:`SessionManager`.
+    Raised by :meth:`SessionManager._upload_bundle`, and indirectly by various methods of
+    :class:`SessionManager`.
     """
 
 
 class BundleDownloadFailed(XMPPInteractionFailed):
     """
-    Raised by :meth:`_download_bundle`, and indirectly by various methods of :class:`SessionManager`.
+    Raised by :meth:`SessionManager._download_bundle`, and indirectly by various methods of
+    :class:`SessionManager`.
     """
 
 
 class BundleDeletionFailed(XMPPInteractionFailed):
     """
-    Raised by :meth:`_delete_bundle`, and indirectly by :meth:`purge_backend`.
+    Raised by :meth:`SessionManager._delete_bundle`, and indirectly by :meth:`SessionManager.purge_backend`.
     """
 
 
 class DeviceListUploadFailed(XMPPInteractionFailed):
     """
-    Raised by :meth:`_upload_device_list`, and indirectly by various methods of :class:`SessionManager`.
+    Raised by :meth:`SessionManager._upload_device_list`, and indirectly by various methods of
+    :class:`SessionManager`.
     """
 
 
 class DeviceListDownloadFailed(XMPPInteractionFailed):
     """
-    Raised by :meth:`_download_device_list`, and indirectly by various methods of :class:`SessionManager`.
+    Raised by :meth:`SessionManager._download_device_list`, and indirectly by various methods of
+    :class:`SessionManager`.
     """
 
 
 class MessageSendingFailed(XMPPInteractionFailed):
     """
-    Raised by :meth:`_send_message`, and indirectly by various methods of :class:`SessionManager`.
+    Raised by :meth:`SessionManager._send_message`, and indirectly by various methods of
+    :class:`SessionManager`.
     """
 
 
@@ -219,7 +226,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 the backends.
             undecided_trust_level_name: The name of the custom trust level to initialize the trust level with
                 when a new device is first encoutered. :meth:`_evaluate_custom_trust_level` should evaluate
-                this custom trust level to ``TrustLevel.UNDECIDED``.
+                this custom trust level to :attr:`~omemo.types.TrustLevel.UNDECIDED`.
             max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep around per
                 session. Once the maximum is reached, old message keys are deleted to make space for newer
                 ones.
@@ -411,8 +418,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         Purge a backend, removing both the online data (bundle, device list entry) and the offline data that
         belongs to this backend. Note that the backend-specific offline data can only be purged if the
         respective backend is currently loaded. This backend-specific removal can be triggered manually at any
-        time by calling the :meth:`purge` method of the respecfive backend. If the backend to purge is
-        currently loaded, the method will unload it.
+        time by calling the :meth:`~omemo.backend.Backend.purge` method of the respecfive backend. If the
+        backend to purge is currently loaded, the method will unload it.
 
         Args:
             namespace: The XML namespace managed by the backend to purge.
@@ -474,7 +481,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         """
         Delete all data corresponding to an XMPP account. This includes the device list, trust information and
         all sessions across all loaded backends. The backend-specific data can be removed at any time by
-        calling the :meth:`purge_bare_jid` method of the respective backend.
+        calling the :meth:`~omemo.backend.Backend.purge_bare_jid` method of the respective backend.
 
         Args:
             bare_jid: Delete all data corresponding to this bare JID.
@@ -604,7 +611,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             The bundle.
 
         Raises:
-            UnkownNamespace: if the namespace is unknown.
+            UnknownNamespace: if the namespace is unknown.
             BundleDownloadFailed: if the download failed. Feel free to raise a subclass instead.
 
         Note:
@@ -632,7 +639,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             Anything, the return value is ignored.
 
         Raises:
-            UnkownNamespace: if the namespace is unknown.
+            UnknownNamespace: if the namespace is unknown.
             BundleDeletionFailed: if the deletion failed. Feel free to raise a subclass instead.
 
         Note:
@@ -662,7 +669,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             Anything, the return value is ignored.
 
         Raises:
-            UnkownNamespace: if the namespace is unknown.
+            UnknownNamespace: if the namespace is unknown.
             DeviceListUploadFailed: if the upload failed. Feel free to raise a subclass instead.
 
         Note:
@@ -690,7 +697,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             The device list as a dictionary, mapping the device ids to their optional label.
 
         Raises:
-            UnkownNamespace: if the namespace is unknown.
+            UnknownNamespace: if the namespace is unknown.
             DeviceListDownloadFailed: if the download failed. Feel free to raise a subclass instead.
 
         Note:
@@ -712,10 +719,12 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         """
         Evaluate a custom trust level to one of the three core trust levels:
 
-        * `TRUSTED`: This device is trusted, encryption/decryption of messages to/from it is allowed.
-        * `DISTRUSTED`: This device is explicitly *not* trusted, do not encrypt/decrypt messages to/from it.
-        * `UNDECIDED`: A trust decision is yet to be made. It is not clear whether it is okay to
-            encrypt messages to it, however decrypting messages from it is allowed.
+        * :attr:`~omemo.types.TrustLevel.TRUSTED`: This device is trusted, encryption/decryption of messages
+          to/from it is allowed.
+        * :attr:`~omemo.types.TrustLevel.DISTRUSTED`: This device is explicitly *not* trusted, do not
+          encrypt/decrypt messages to/from it.
+        * :attr:`~omemo.types.TrustLevel.UNDECIDED`: A trust decision is yet to be made. It is not clear
+          whether it is okay to encrypt messages to it, however decrypting messages from it is allowed.
 
         Args:
             trust_level_name: The name of the custom trust level to translate.
@@ -771,10 +780,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         * Automatic handshake completion, by responding to incoming key exchanges.
         * Automatic heartbeat messages to forward the ratchet if many messages were received without a
-            (manual) response, to assure forward secrecy (aka staleness prevention). The number of messages
-            required to trigger this behaviour is hardcoded in ``SessionManager.STALENESS_MAGIC_NUMBER``.
+          (manual) response, to assure forward secrecy (aka staleness prevention). The number of messages
+          required to trigger this behaviour is hardcoded in :attr:`STALENESS_MAGIC_NUMBER`.
         * Automatic session initiation if an encrypted message is received but no session exists for that
-            device.
+          device.
         * Backend-dependent session healing mechanisms.
         * Backend-dependent empty messages to notify other devices about potentially "broken" sessions.
 
@@ -813,7 +822,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             device_list: The updated device list. Mapping from device id to optional label.
 
         Raises:
-            UnkownNamespace: if the backend to handle the message is not currently loaded.
+            UnknownNamespace: if the backend to handle the message is not currently loaded.
             DeviceListUploadFailed: if a device list upload failed. An upload can happen if the device list
                 update is for the own bare JID and does not include the own device. Forwarded from
                 :meth:`_upload_device_list`.
@@ -902,7 +911,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             bare_jid: The bare JID of the XMPP account.
 
         Raises:
-            UnkownNamespace: if the namespace is unknown.
+            UnknownNamespace: if the namespace is unknown.
             DeviceListDownloadFailed: if the device list download failed. Forwarded from
                 :meth:`_download_device_list`.
             DeviceListUploadFailed: if a device list upload failed. An upload can happen if the device list
@@ -951,8 +960,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         Returns:
             Information about exceptions that happened during session replacement attempts. A mapping from the
             namespace of the backend for which the replacement failed, to the reason of failure. If the reason
-            is a :class:`StorageException`, there is a high change that the session was left in an
-            inconsistent state. Other reasons imply that the session replacement failed before having any
+            is a :class:`~omemo.storage.StorageException`, there is a high change that the session was left in
+            an inconsistent state. Other reasons imply that the session replacement failed before having any
             effect on the state of either side.
 
         Warning:
@@ -1243,13 +1252,14 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         synchronization mode has no effect.
 
         Internally, the library does the following things differently during history synchronization:
+
         * Pre keys are kept around during history synchronization, to account for the (hopefully rather
-            hypothetical) case that two or more parties selected the same pre key to initiate a session with
-            this device while it was offline. When history synchronization ends, all pre keys that were kept
-            around are deleted and the library returns to normal behaviour.
+          hypothetical) case that two or more parties selected the same pre key to initiate a session with
+          this device while it was offline. When history synchronization ends, all pre keys that were kept
+          around are deleted and the library returns to normal behaviour.
         * Empty messages to "complete" sessions or prevent staleness are deferred until after the
-            synchronization is done. Only one empty message is sent per session when exiting the history
-            synchronization mode.
+          synchronization is done. Only one empty message is sent per session when exiting the history
+          synchronization mode.
 
         Note:
             While in history synchronization mode, the library can process live events too.
@@ -1359,7 +1369,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 all devices were disqualified due to missing trust or failure to download their bundles.
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
             KeyExchangeFailed: in case there is an error during the key exchange required for session
-                building. Forwarded from :meth:`build_session_active`.
+                building. Forwarded from :meth:`~omemo.backend.Backend.build_session_active`.
 
         Note:
             The own JID is implicitly added to the set of recipients, there is no need to list it manually.
@@ -1479,7 +1489,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
             Returns:
                 Whether the trust status of this device is undecided, i.e. whether the custom trust level
-                assigned to the identity key used by this device evaluates to `TrustLevel.UNDECIDED`.
+                assigned to the identity key used by this device evaluates to
+                :attr:`~omemo.types.TrustLevel.UNDECIDED`.
             """
 
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.UNDECIDED
@@ -1493,7 +1504,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
             Returns:
                 Whether the trust status of this device is trusted, i.e. whether the custom trust level
-                assigned to the identity key used by this device evaluates to `TrustLevel.TRUSTED`.
+                assigned to the identity key used by this device evaluates to
+                :attr:`~omemo.types.TrustLevel.TRUSTED`.
             """
 
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.TRUSTED
@@ -1623,7 +1635,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             information about the device that sent the message.
 
         Raises:
-            UnkownNamespace: if the backend to handle the message is not currently loaded.
+            UnknownNamespace: if the backend to handle the message is not currently loaded.
             UnknownTrustLevel: if an unknown custom trust level name is encountered. Forwarded from
                 :meth:`_evaluate_custom_trust_level`.
             KeyExchangeFailed: in case a new session is built while decrypting this message, and there is an

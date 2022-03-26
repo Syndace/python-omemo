@@ -19,11 +19,12 @@ class BackendException(OMEMOException):
 
 class KeyExchangeFailed(BackendException):
     """
-    Raised by :meth:`build_session_active` and :meth:`build_session_passive` in case of an error during the
-    processing of a key exchange for session building. Known error conditions are:
-    - The bundle does not contain and pre keys (active session building)
-    - The signature of the signed pre key could not be verified (active session building)
-    - An unkown (signed) pre key was referred to (passive session building)
+    Raised by :meth:`Backend.build_session_active` and :meth:`Backend.build_session_passive` in case of an
+    error during the processing of a key exchange for session building. Known error conditions are:
+
+    * The bundle does not contain and pre keys (active session building)
+    * The signature of the signed pre key could not be verified (active session building)
+    * An unkown (signed) pre key was referred to (passive session building)
 
     Additional backend-specific error conditions might exist.
     """
@@ -31,7 +32,7 @@ class KeyExchangeFailed(BackendException):
 
 class TooManySkippedMessageKeys(BackendException):
     """
-    Raise by :meth:`decrypt` if a message skips more message keys than allowed.
+    Raised by :meth:`Backend.decrypt` if a message skips more message keys than allowed.
     """
 
 
@@ -41,8 +42,8 @@ PlaintextTypeT = TypeVar("PlaintextTypeT")
 class Backend(ABC, Generic[PlaintextTypeT]):
     """
     The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
-    version to the core library. Refer to the documentation page for details about the concept and a guide on
-    building your own backend. TODO: Linkify
+    version to the core library. Refer to the documentation page :ref:`writing_a_backend` for details about
+    the concept and a guide on building your own backend.
 
     The plaintext generic can be used to choose a convenient type for the plaintext passed/received from the
     encrypt/decrypt methods. This can for example be a stanze type for backend implementations utilizing
@@ -132,9 +133,9 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         Warning:
             This method may be called for a device which already has a session. In that case, the original
             session must remain in storage and must remain loadable via :meth:`load_session`. Only upon
-            calling :meth:`persist` on the new session, the old session must be overwritten with the new one.
-            In summary, multiple sessions for the same device can exist in memory, while only one session per
-            device can exist in storage, which can be controlled using the :meth:`persist` method.
+            calling :meth:`store_session`, the old session must be overwritten with the new one. In summary,
+            multiple sessions for the same device can exist in memory, while only one session per device can
+            exist in storage, which can be controlled using the :meth:`store_session` method.
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `build_session_active`.")
@@ -164,9 +165,9 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         Warning:
             This method may be called for a device which already has a session. In that case, the original
             session must remain in storage and must remain loadable via :meth:`load_session`. Only upon
-            calling :meth:`persist` on the new session, the old session must be overwritten with the new one.
-            In summary, multiple sessions for the same device can exist in memory, while only one session per
-            device can exist in storage, which can be controlled using the :meth:`persist` method.
+            calling :meth:`store_session`, the old session must be overwritten with the new one. In summary,
+            multiple sessions for the same device can exist in memory, while only one session per device can
+            exist in storage, which can be controlled using the :meth:`store_session` method.
         """
 
         raise NotImplementedError("Create a subclass of Backend and implement `build_session_passive`.")

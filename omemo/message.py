@@ -54,6 +54,15 @@ class KeyExchange(ABC):
             intention is to find out whether both KeyExchange instances would build the same session.
         """
 
+    @abstractmethod
+    def __hash__(self) -> int:
+        """
+        Hash this instance in a manner that is consistent with :meth:`__eq__`.
+
+        Returns:
+            An integer value representing this instance.
+        """
+
 
 class Message(NamedTuple):
     # pylint: disable=invalid-name

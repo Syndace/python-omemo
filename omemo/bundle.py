@@ -45,6 +45,15 @@ class Bundle(ABC):
             The order in which pre keys are included in the bundles does not matter.
         """
 
+    @abstractmethod
+    def __hash__(self) -> int:
+        """
+        Hash this instance in a manner that is consistent with :meth:`__eq__`.
+
+        Returns:
+            An integer value representing this instance.
+        """
+
 
 __all__ = [  # pylint: disable=unused-variable
     Bundle.__name__

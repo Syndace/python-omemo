@@ -10,7 +10,6 @@
 # directories to sys.path here. If the directory is relative to the documentation root,
 # use os.path.abspath to make it absolute, like shown here.
 import os
-import re
 import sys
 
 this_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -62,14 +61,34 @@ html_static_path = [ "_static" ]
 
 # -- Autodoc Member Skipping -------------------------------------------------------------
 
-private_name_regex = re.compile(r"^_\w+__")
 def autodoc_skip_member_handler(app, what, name, obj, skip, options):
-    """
-    A very simple handler for the autodoc-skip-member event that skips everything "private", aka starting with
-    double underscores. Everything else is left untouched.
-    """
+    # Skip private members, i.e. those that start with double underscores but do not end in underscores
+    if name.startswith("__") and not name.endswith("_"):
+        return True
 
-    if private_name_regex.match(name):
+    # Could be achieved using exclude-members, but this is more comfy
+    if name in {
+        "__abstractmethods__",
+        "__annotations__",
+        "__dict__",
+        "__getnewargs__",
+        "__module__",
+        "__new__",
+        "__orig_bases__",
+        "__parameters__",
+        "__repr__",
+        "__slots__",
+        "__weakref__",
+        "_abc_impl",
+        "_asdict",
+        "_field_defaults",
+        "_fields",
+        "_make",
+        "_replace"
+    }: return True
+
+    # Skip __init__s without documentation. Those are just used for type hints.
+    if name == "__init__" and obj.__doc__ is None:
         return True
 
     return None

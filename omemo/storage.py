@@ -19,7 +19,7 @@ MaybeTypeT = TypeVar("MaybeTypeT", bound="Maybe[Any]")
 
 class Nothing(Exception):
     """
-    Raise by :meth:`from_just`, in case the value of the :class:`Maybe` is not set.
+    Raise by :meth:`Maybe.from_just`, in case the value of the :class:`Maybe` is not set.
     """
 
 
