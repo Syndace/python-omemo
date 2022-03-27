@@ -5,11 +5,9 @@
 
 # python-omemo #
 
-TODO: Technically, double ratchet isn't used by the core library.
-
 A Python implementation of the [OMEMO Multi-End Message and Object Encryption protocol](https://xmpp.org/extensions/xep-0384.html).
 
-This library combines [python-x3dh](https://github.com/Syndace/python-x3dh) and [python-doubleratchet](https://github.com/Syndace/python-doubleratchet) with XMPP-specific functionality to offer a complete implementation of [XEP-0384](https://xmpp.org/extensions/xep-0384.html). python-omemo supports different versions of the specification through so-called backends. One backend for OMEMO in the `urn:xmpp:omemo:1` namespace is shipped with python-omemo. A backend for (legacy) OMEMO in the `eu.siacs.conversations.axolotl` namespace is available as a separate package: [python-omemo-backend-legacy](https://github.com/Syndace/python-omemo-backend-legacy). Multiple backends can be loaded and used at the same time, the library manages their coexistence transparently.
+A complete implementation of [XEP-0384](https://xmpp.org/extensions/xep-0384.html) on protocol-level, i.e. more than just the cryptography. python-omemo supports different versions of the specification through so-called backends. One backend for OMEMO in the `urn:xmpp:omemo:1` namespace is shipped with python-omemo. A backend for (legacy) OMEMO in the `eu.siacs.conversations.axolotl` namespace is available as a separate package: [python-omemo-backend-legacy](https://github.com/Syndace/python-omemo-backend-legacy). Multiple backends can be loaded and used at the same time, the library manages their coexistence transparently.
 
 ## Installation ##
 
@@ -31,6 +29,6 @@ $ pytest
 
 ## Getting Started ##
 
-Refer to the documentation on [readthedocs.io](https://python-omemo.readthedocs.io/en/latest/), or build/view it locally in the `docs/` directory.
+Refer to the documentation on [readthedocs.io](https://python-omemo.readthedocs.io/en/latest/), or build/view it locally in the `docs/` directory. To build the docs locally, install the requirements listed in `docs/requirements.txt`, e.g. using `pip install -r docs/requirements.txt`, and then run `make html` from within the `docs/` directory. The documentation can then be found in `docs/_build/html/`.
 
 The `functionality.md` file contains an overview of supported functionality/use cases, mostly targeted at developers.

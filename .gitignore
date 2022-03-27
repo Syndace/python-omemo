@@ -1,11 +1,8 @@
-.eggs/
-build/
 dist/
 OMEMO.egg-info/
 
-*.pyc
+__pycache__/
 .pytest_cache/
 .mypy_cache/
 
 docs/_build/
-examples/*/

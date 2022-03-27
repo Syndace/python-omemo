@@ -8,9 +8,6 @@ from .session import Session
 from .types import OMEMOException
 
 
-# TODO: How to type this strongly..
-
-
 class BackendException(OMEMOException):
     """
     Parent type for all exceptions specific to :class:`Backend`.
@@ -59,6 +56,23 @@ class Backend(ABC, Generic[PlaintextTypeT]):
     Note:
         All usages of "identity key" in the public API refer to the public part of the identity key pair in
         Ed25519 format. Otherwise, "identity key pair" is explicitly used to refer to the full key pair.
+
+    Note:
+        For backend implementors: as part of your backend implementation, you are expected to subclass various
+        abstract base classes like :class:`~omemo.session.Session`, :class:`~omemo.message.Content`,
+        :class:`~omemo.message.KeyMaterial` and :class:`~omemo.message.KeyExchange`. Whenever any of these
+        abstract base types appears in a method signature of the :class:`Backend` class, what's actually meant
+        is an instance of your respective subclass. This is not correctly expressed through the type system,
+        since I couldn't think of a clean way to do so. Adding generics for every single of these types seemed
+        not worth the effort. For now, the recommended way to deal with this type inaccuray is to assert the
+        types of the affected method parameters, for example::
+
+            async def store_session(self, session: Session) -> Any:
+                assert isinstance(session, MySessionImpl)
+
+                ...
+
+        Doing so tells mypy how to deal with the situation. These assertions should never fail.
     """
 
     @property

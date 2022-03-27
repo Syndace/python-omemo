@@ -8,6 +8,6 @@ python-omemo only ships the core functionality common to all versions of `XEP-03
 Compatibility Between Backends
 ==============================
 
-Only the identity key used by X3DH is relevant for compatibility between the backends, and all versions of the OMEMO specification ensure compatibility of the identity key. Other parts of the X3DH bundle and Double Ratchet sessions are specific to the backend and compatibility is neither possible nor required. Thus, the identity key is managed by the core library, while everything else is managed by the backends.
+Only the identity key used by the `X3DH key agreement scheme <https://www.signal.org/docs/specifications/x3dh/>`_ is relevant for compatibility between the backends, and all versions of the OMEMO specification ensure compatibility of the identity key. Other parts of the X3DH bundle and `Double Ratchet <https://www.signal.org/docs/specifications/doubleratchet/>`_ sessions are specific to the backend and compatibility is neither possible nor required. Thus, the identity key is managed by the core library, while everything else is managed by the backends.
 
 TODO
