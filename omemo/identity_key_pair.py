@@ -25,6 +25,7 @@ class IdentityKeyPairVariation(enum.Enum):
 IdentityKeyPairTypeT = TypeVar("IdentityKeyPairTypeT", bound="IdentityKeyPair")
 
 
+# TODO: Logging
 class IdentityKeyPair:
     """
     The identity key pair associated to this device, shared by all backends.

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import base64
 import itertools
+import logging
 import secrets
 from typing import Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, cast
 
@@ -146,7 +147,6 @@ class MessageSendingFailed(XMPPInteractionFailed):
     """
 
 
-# TODO: Take care of logging
 SessionManagerTypeT = TypeVar("SessionManagerTypeT", bound="SessionManager[Any]")
 PlaintextTypeT = TypeVar("PlaintextTypeT")
 
@@ -184,6 +184,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
     DEVICE_ID_MIN = 1
     DEVICE_ID_MAX = 2 ** 31 - 1
     STALENESS_MAGIC_NUMBER = 53
+    LOG_TAG = "omemo.core"
 
     def __init__(self) -> None:
         # Just the type definitions here
@@ -297,6 +298,21 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         if not 25 <= pre_key_refill_threshold <= 99:
             raise ValueError("Pre key refill threshold out of allowed range.")
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Preparing library core.\n"
+            f"\tcls={cls}\n"
+            f"\tbackends={backends}\n"
+            f"\tbackend namespaces={[ backend.namespace for backend in backends ]}\n"
+            f"\tstorage={storage}\n"
+            f"\town_bare_jid={own_bare_jid}\n"
+            f"\tinitial_own_label={initial_own_label}\n"
+            f"\tundecided_trust_level_name={undecided_trust_level_name}\n"
+            f"\tmax_num_per_session_skipped_keys={max_num_per_session_skipped_keys}\n"
+            f"\tmax_num_per_message_skipped_keys={max_num_per_message_skipped_keys}\n"
+            f"\tsigned_pre_key_rotation_period={signed_pre_key_rotation_period}\n"
+            f"\tpre_key_refill_threshold={pre_key_refill_threshold}"
+        )
+
         self = cls()
         self.__backends = list(backends)  # Copy to make sure the original is not modified
         self.__storage = storage
@@ -311,8 +327,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         try:
             self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).from_just()
+            logging.getLogger(SessionManager.LOG_TAG).debug(f"Device id from storage: {self.__own_device_id}")
         except Nothing:
             # First run.
+            logging.getLogger(SessionManager.LOG_TAG).info("First run.")
 
             # Fetch the device lists for this bare JID for all loaded backends.
             device_ids = cast(Set[int], set()).union(*{
@@ -331,6 +349,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     in itertools.count()
                 )
             ))
+            logging.getLogger(SessionManager.LOG_TAG).debug(f"Generated device id: {self.__own_device_id}")
 
             # Store the device information for this device
             await storage.store(
@@ -371,6 +390,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         loaded_namespaces = { backend.namespace for backend in self.__backends }
         active_namespaces = device.namespaces
         if loaded_namespaces != active_namespaces:
+            logging.getLogger(SessionManager.LOG_TAG).info(
+                "The list of backends loaded now differs from the list of backends that were loaded last run:"
+                f" {loaded_namespaces} vs. {active_namespaces} (now vs. previous run)"
+            )
+
             # Store the updated list of loaded namespaces
             await storage.store(
                 f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
@@ -403,13 +427,19 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         # Perform age check and rotation of the signed pre key
         for backend in self.__backends:
-            if await backend.signed_pre_key_age() > signed_pre_key_rotation_period:
+            signed_pre_key_age = await backend.signed_pre_key_age()
+            logging.getLogger(SessionManager.LOG_TAG).debug(f"Signed pre key age: {signed_pre_key_age}")
+            if signed_pre_key_age > signed_pre_key_rotation_period:
                 await backend.rotate_signed_pre_key(self.__identity_key_pair)
                 await self._upload_bundle(await backend.bundle(
                     self.__own_bare_jid,
                     self.__own_device_id,
                     self.__identity_key_pair.identity_key
                 ))
+
+        logging.getLogger(SessionManager.LOG_TAG).info(
+            "Library core prepared, entering history synchronization mode."
+        )
 
         return self
 
@@ -440,6 +470,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             loaded is omitted from :meth:`create`.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).warning(f"Purging backend {namespace}")
+
         # First half of online data removal: remove this device from the device list. This has to be the first
         # step for consistency reasons.
         device_list = await self._download_device_list(namespace, self.__own_bare_jid)
@@ -452,7 +484,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         # Synchronize the offline device list with the online information
         device, _ = await self.get_own_device_information()
-        device.namespaces.remove(namespace)
+        device.namespaces.discard(namespace)
         device.active.pop(namespace, None)
 
         await self.__storage.store(
@@ -470,12 +502,23 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         self.__backends = list(filter(lambda backend: backend.namespace != namespace, self.__backends))
 
         # Remaining backend-specific offline data removal
-        if purged_backend is not None:
+        if purged_backend is None:
+            logging.getLogger(SessionManager.LOG_TAG).info(
+                "The backend to purge is not currently loaded. Not purging backend-specific data,"
+                " only online data."
+            )
+        else:
+            logging.getLogger(SessionManager.LOG_TAG).info(
+                "The backend to purge is currently loaded. Purging backend-specific offline data in addition"
+                " to the online data."
+            )
             await purged_backend.purge()
 
         # Second half of online data removal: delete the bundle of this device. This step has low priority,
         # thus done last.
         await self._delete_bundle(namespace, self.__own_device_id)
+
+        logging.getLogger(SessionManager.LOG_TAG).info(f"Backend {namespace} purged.")
 
     async def purge_bare_jid(self, bare_jid: str) -> None:
         """
@@ -486,6 +529,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         Args:
             bare_jid: Delete all data corresponding to this bare JID.
         """
+
+        logging.getLogger(SessionManager.LOG_TAG).warning(f"Purging bare JID {bare_jid}")
 
         storage = self.__storage
 
@@ -522,6 +567,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         for backend in self.__backends:
             await backend.purge_bare_jid(bare_jid)
 
+        logging.getLogger(SessionManager.LOG_TAG).info(
+            f"Bare JID {bare_jid} purged from library core data and backend-specific data of all currently"
+            " loaded backends."
+        )
+
     async def ensure_data_consistency(self) -> None:
         """
         Ensure that the online data for all loaded backends is consistent with the offline data. Refreshes
@@ -542,6 +592,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             scenarios/at regular intervals too.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).info("Ensuring data consistency.")
+
         for backend in self.__backends:
             await self.refresh_device_list(backend.namespace, self.__own_bare_jid)
 
@@ -559,12 +611,23 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     self.__own_device_id
                 )
             except BundleDownloadFailed:
+                logging.getLogger(SessionManager.LOG_TAG).warning(
+                    "Couldn't download own bundle.",
+                    exc_info=True
+                )
+
                 upload_bundle = True
             else:
                 upload_bundle = remote_bundle != local_bundle
 
             if upload_bundle:
+                logging.getLogger(SessionManager.LOG_TAG).warning(
+                    "Online bundle data differs from offline bundle data."
+                )
+
                 await self._upload_bundle(local_bundle)
+
+        logging.getLogger(SessionManager.LOG_TAG).info("Data consistency ensured/restored.")
 
     ####################
     # abstract methods #
@@ -828,11 +891,18 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 :meth:`_upload_device_list`.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Incoming device list update:\n"
+            f"\tnamespace={namespace}\n"
+            f"\tbare_jid={bare_jid}\n"
+            f"\tdevice_list={device_list}"
+        )
+
         storage = self.__storage
 
         # This isn't strictly necessary, but good for consistency
         if namespace not in { backend.namespace for backend in self.__backends }:
-            raise UnknownNamespace(f"The backend hanlding the namespace {namespace} is not currently loaded.")
+            raise UnknownNamespace(f"The backend handling the namespace {namespace} is not currently loaded.")
 
         # Copy to make sure the original is not modified
         device_list = dict(device_list)
@@ -842,12 +912,18 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         new_devices = new_device_list - old_device_list
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Old device list: {old_device_list}")
+
         # If the device list is for this JID and a loaded backend, make sure this device is included
         if (
             bare_jid == self.__own_bare_jid
             and namespace in { backend.namespace for backend in self.__backends }
             and self.__own_device_id not in new_device_list
         ):
+            logging.getLogger(SessionManager.LOG_TAG).warning(
+                "Own device id was not included in the online device list."
+            )
+
             # Add this device to the device list and publish it
             device_list[self.__own_device_id] = (await storage.load_optional(
                 f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/label",
@@ -902,6 +978,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         if len(new_devices) > 0:
             await storage.store(f"/devices/{bare_jid}/list", list(new_device_list | old_device_list))
 
+        logging.getLogger(SessionManager.LOG_TAG).debug("Device list update processed.")
+
     async def refresh_device_list(self, namespace: str, bare_jid: str) -> None:
         """
         Manually trigger the refresh of a device list.
@@ -918,6 +996,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 update is for the own bare JID and does not include the own device. Forwarded from
                 :meth:`update_device_list`.
         """
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Device list refresh triggered for namespace {namespace} and bare JID {bare_jid}."
+        )
 
         await self.update_device_list(
             namespace,
@@ -938,6 +1020,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             identity_key: The identity key.
             trust_level_name: The custom trust level to set for the identity key.
         """
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Setting trust level for identity key {identity_key} to {trust_level_name}."
+        )
 
         await self.__storage.store(
             f"/trust/{bare_jid}/{base64.urlsafe_b64encode(identity_key).decode('ASCII')}",
@@ -975,6 +1061,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             per session to replace, the notifications are not bundled. This is to minimize the negative impact
             of network failure.
         """
+
+        # TODO: Keep on logging from here.
 
         # The challenge with this method is minimizing the impact of failures at any point. For example, if a
         # session is replaced and persisted in storage, but sending the corresponding empty message to notify
