@@ -1062,7 +1062,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             of network failure.
         """
 
-        # TODO: Keep on logging from here.
+        logging.getLogger(SessionManager.LOG_TAG).warning(f"Replacing sessions with device {device}.")
 
         # The challenge with this method is minimizing the impact of failures at any point. For example, if a
         # session is replaced and persisted in storage, but sending the corresponding empty message to notify
@@ -1081,6 +1081,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             lambda dev: dev.device_id == device.device_id,
             await self.get_device_information(device.bare_jid)
         ))
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Device information from storage: {device}")
 
         # Remove namespaces that correspond to backends which are not currently loaded or backends which have
         # no session for this device.
@@ -1111,7 +1113,13 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     # Send the notification message
                     await self.__send_empty_message(backend, session)
                 except OMEMOException as e:
+                    logging.getLogger(SessionManager.LOG_TAG).warning(
+                        f"Session replacement failed for namespace {backend.namespace}.",
+                        exc_info=True
+                    )
                     unsuccessful[backend.namespace] = e
+
+        logging.getLogger(SessionManager.LOG_TAG).info("Session replacement done.")
 
         return unsuccessful
 
@@ -1128,6 +1136,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             there is no session with the device for that backend.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Sending chain length of device {device} requested.")
+
         sessions = {
             backend.namespace: await backend.load_session(device.bare_jid, device.device_id)
             for backend
@@ -1135,11 +1145,17 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             if backend.namespace in device.namespaces
         }
 
-        return {
+        sending_chain_length = {
             namespace: None if session is None else session.sending_chain_length
             for namespace, session
             in sessions.items()
         }
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Sending chain lengths reported by the backends: {sending_chain_length}"
+        )
+
+        return sending_chain_length
 
     ##############################
     # device metadata management #
@@ -1161,6 +1177,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         Note:
             It is recommended to keep the length of the label under 53 unicode code points.
         """
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Updating own label to {own_label}.")
 
         # Store the new label
         await self.__storage.store(f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/label", own_label)
@@ -1229,9 +1247,15 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Gathering device information for bare JID {bare_jid}."
+        )
+
         storage = self.__storage
 
         device_list = set((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Offline device list: {device_list}")
 
         devices: Set[DeviceInformation] = set()
         bundle_cache: Set[Bundle] = set()
@@ -1250,6 +1274,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     f"/devices/{bare_jid}/{device_id}/identity_key"
                 )).from_just()
             except Nothing:
+                logging.getLogger(SessionManager.LOG_TAG).debug(
+                    f"Identity key assigned to device {device_id} not known."
+                )
+
                 # The identity key assigned to this device is not known yet. Fetch the bundle to find that
                 # information. Return the downloaded bundle to avoid double-fetching it if the same bundle is
                 # required for session initiation afterwards.
@@ -1257,8 +1285,16 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     try:
                         bundle = await self._download_bundle(namespace, bare_jid, device_id)
                     except BundleDownloadFailed:
-                        pass
+                        logging.getLogger(SessionManager.LOG_TAG).warning(
+                            f"Bundle download failed for device {device_id} of bare JID {bare_jid} for"
+                            " namespace {namespace}.",
+                            exc_info=True
+                        )
                     else:
+                        logging.getLogger(SessionManager.LOG_TAG).debug(
+                            f"Identity key information extracted from bundle of namespace {namespace}."
+                        )
+
                         bundle_cache.add(bundle)
 
                         identity_key = bundle.identity_key
@@ -1270,6 +1306,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                         break
                 else:
                     # Skip this device in case none of the bundles could be downloaded
+                    logging.getLogger(SessionManager.LOG_TAG).warning(
+                        f"Not including device {device_id} in the device information set for bare JID"
+                        f" {bare_jid} due to the lack of downloadable bundles for identity key assignment."
+                    )
                     continue
 
             active = (await storage.load_dict(f"/devices/{bare_jid}/{device_id}/active", bool)).from_just()
@@ -1289,6 +1329,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 trust_level_name=trust_level_name,
                 label=label
             ))
+
+        logging.getLogger(SessionManager.LOG_TAG).debug("Device information gathered.")
 
         return devices, bundle_cache
 
@@ -1353,6 +1395,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             While in history synchronization mode, the library can process live events too.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).info("Entering history synchronization mode.")
+
         self.__synchronizing = True
 
     async def after_history_sync(self) -> None:
@@ -1365,6 +1409,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             MessageSendingFailed: if one of the queued empty messages could not be sent. Forwarded from
                 :meth:`_send_message`.
         """
+
+        logging.getLogger(SessionManager.LOG_TAG).info("Exiting history synchronization mode.")
 
         storage = self.__storage
 
@@ -1380,6 +1426,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             queued_jids = set((await storage.load_list(f"/queue/{backend.namespace}", str)).maybe([]))
             await storage.delete(f"/queue/{backend.namespace}")
 
+            logging.getLogger(SessionManager.LOG_TAG).debug(
+                f"Bare JIDs for which empty messages are queued for namespace {backend.namespace}:"
+                f" {queued_jids}"
+            )
+
             for bare_jid in queued_jids:
                 # For each queued bare JID, load and delete the list of devices that have queued an empty
                 # message for this backend
@@ -1389,12 +1440,21 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 )).maybe([]))
                 await storage.delete(f"/queue/{backend.namespace}/{bare_jid}")
 
+                logging.getLogger(SessionManager.LOG_TAG).debug(f"Queued device ids: {queued_device_ids}")
+
                 for device_id in queued_device_ids:
                     session = await backend.load_session(bare_jid, device_id)
-                    if session is not None:
+                    if session is None:
+                        logging.getLogger(SessionManager.LOG_TAG).warning(
+                            f"Can't send queued empty message for device {device_id} of bare JID {bare_jid}"
+                            f" for namespace {backend.namespace}. The session could not be loaded."
+                        )
+                    else:
                         # It is theoretically possible that the session has been deleted after an empty
                         # message was queued for it.
                         await self.__send_empty_message(backend, session)
+
+        logging.getLogger(SessionManager.LOG_TAG).debug("History synchronization mode exited.")
 
     ######################
     # en- and decryption #
@@ -1411,6 +1471,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         Raises:
             MessageSendingFailed: if the message could not be sent. Forwarded from :meth:`_send_message`.
         """
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Sending empty message using session {session} ({session.device_id}, {session.bare_jid},"
+            f" {session.namespace}) and backend {backend} ({backend.namespace})."
+        )
 
         content, key_material = await backend.encrypt_empty(session)
         await self._send_message(Message(
@@ -1467,6 +1532,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             information about the ``PlaintextTypeT`` type.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Encrypting plaintext {plaintext} for recipients {bare_jids} with following backend priority"
+            f" order: {backend_priority_order}"
+        )
+
         # Prepare the backend priority order list
         available_namespaces = [ backend.namespace for backend in self.__backends ]
 
@@ -1480,6 +1550,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         effective_backend_priority_order = \
             available_namespaces if backend_priority_order is None else backend_priority_order
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Effective backend priority order: {effective_backend_priority_order}"
+        )
 
         # Add the own bare JID to the list of recipients.
         # Copy to make sure the original is not modified.
@@ -1526,6 +1600,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         bundle_cache = cast(Set[Bundle], set()).union(*(bundle_cache for _, bundle_cache in tmp))
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Recipient devices: {devices}, bundle cache: {bundle_cache}"
+        )
+
         # Check for recipients without a single active device
         no_eligible_devices = set(filter(
             lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
@@ -1566,6 +1644,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             apply_backend_priorty_order(device, effective_backend_priority_order) for device in devices
         }
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Backend priority order applied: {devices}")
+
         # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
         # the remaining devices)
         def is_undecided(device: DeviceInformation) -> bool:
@@ -1599,6 +1679,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.TRUSTED
 
         undecided_devices = set(filter(is_undecided, devices))
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Undecided devices: {undecided_devices}")
         if len(undecided_devices) > 0:
             await self._make_trust_decision(undecided_devices)
 
@@ -1607,6 +1688,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 f"/trust/{device.bare_jid}/{base64.urlsafe_b64encode(device.identity_key).decode('ASCII')}",
                 str
             )).maybe(self.__undecided_trust_level_name)) for device in devices }
+
+            logging.getLogger(SessionManager.LOG_TAG).debug(f"Updated trust: {devices}")
 
         # Make sure the trust status of all previously undecided devices has been decided on
         undecided_devices = set(filter(is_undecided, devices))
@@ -1617,6 +1700,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         # Keep only trusted devices
         devices = set(filter(is_trusted, devices))
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Trusted devices: {devices}")
 
         # Check for recipients without a single remaining device
         no_eligible_devices = set(filter(
@@ -1652,14 +1737,17 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             """
 
             session = await backend.load_session(device.bare_jid, device.device_id)
+            logging.getLogger(SessionManager.LOG_TAG).debug(f"Session for device {device}: {session}")
             if session is None:
                 try:
+                    logging.getLogger(SessionManager.LOG_TAG).debug("Using cached bundle.")
                     bundle = next(filter(lambda bundle: (
                         bundle.namespace == backend.namespace
                         and bundle.bare_jid == device.bare_jid
                         and bundle.device_id == device.device_id
                     ), bundle_cache))
                 except StopIteration:
+                    logging.getLogger(SessionManager.LOG_TAG).debug("Downloading bundle.")
                     bundle = await self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
 
                 session, key_exchange = await backend.build_session_active(
@@ -1683,6 +1771,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             backend_devices = {
                 device for device in devices if next(iter(device.namespaces)) == backend.namespace
             }
+
+            logging.getLogger(SessionManager.LOG_TAG).debug(
+                f"Encrypting for devices {backend_devices} using backend {backend.namespace}."
+            )
 
             # Skip this backend if there isn't a single recipient device using it
             if len(backend_devices) == 0:
@@ -1708,6 +1800,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             # Persist the sessions as the final step
             for session in sessions:
                 await backend.store_session(session)
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Message encrypted: {messages}")
 
         return messages
 
@@ -1757,6 +1851,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             information about the ``PlaintextTypeT`` type.
         """
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Decrypting message: {message}")
+
         storage = self.__storage
 
         # Find the backend to handle this message
@@ -1776,10 +1872,18 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             # pylint: disable=raise-missing-from
             raise MessageNotForUs("The message to decrypt does not contain key material for us.")
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Key material: {key_material}, key exchange: {key_exchange}"
+        )
+
         # Check whether the sending device is known
         devices = await self.get_device_information(message.bare_jid)
         device = next(filter(lambda device: device.device_id == message.device_id, devices), None)
         if device is None:
+            logging.getLogger(SessionManager.LOG_TAG).warning(
+                "Sender device is not known, triggering a device list update."
+            )
+
             # If it isn't, trigger a refresh of the device list. This shouldn't be necessary due to PEP
             # subscription mechanisms, however there might be race conditions and it doesn't hurt to refresh
             # here.
@@ -1798,6 +1902,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     " device either does not appear in the device list of the sending XMPP account, or the"
                     " bundle of the sending device could not be downloaded."
                 )
+
+            logging.getLogger(SessionManager.LOG_TAG).warning(
+                "Sender device found by the manual device list update. Make sure your PEP subscription is set"
+                " up correctly."
+            )
 
         # Check the trust level of the sending device. Abort in case of explicit distrust.
         if self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.DISTRUSTED:
@@ -1861,8 +1970,14 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             # Check whether there is a session with the sending device already
             session = await backend.load_session(device.bare_jid, device.device_id)
             if session is not None:
+                logging.getLogger(SessionManager.LOG_TAG).debug("Key exchange present, but session exists.")
                 # If the key exchange would build a new session, treat this session as non-existent
-                if session.key_exchange != key_exchange:
+                if session.key_exchange == key_exchange:
+                    logging.getLogger(SessionManager.LOG_TAG).debug("Key exchange builds existing session.")
+                else:
+                    logging.getLogger(SessionManager.LOG_TAG).warning(
+                        "Key exchange replaces existing session."
+                    )
                     session = None
 
             # If a new session needs to be built, do so
@@ -1888,6 +2003,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             self.__max_num_per_message_skipped_keys
         ))
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Message decrypted: {plaintext}")
+
         # Key exchanges are sent with encrypted messages for new sessions, until it is confirmed that the
         # other party has received at least one of them. Once a new session is used to decrypt a message, the
         # other party is confirmed to have received at least one of the key exchanges, so the data can be
@@ -1903,14 +2020,17 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             if self.__synchronizing:
                 # If the library is currently in history synchronization mode, hide the pre key but defer the
                 # deletion.
+                logging.getLogger(SessionManager.LOG_TAG).debug("Hiding pre key.")
                 bundle_changed = await backend.hide_pre_key(session)
             else:
                 # Otherwise, delete the pre key right away
+                logging.getLogger(SessionManager.LOG_TAG).debug("Deleting pre key.")
                 bundle_changed = await backend.delete_pre_key(session)
 
             if bundle_changed:
                 num_visible_pre_keys = await backend.get_num_visible_pre_keys()
                 if num_visible_pre_keys <= self.__pre_key_refill_threshold:
+                    logging.getLogger(SessionManager.LOG_TAG).debug("Refilling pre keys.")
                     await backend.generate_pre_keys(100 - num_visible_pre_keys)
                     bundle = await backend.bundle(
                         self.__own_bare_jid,
@@ -1923,6 +2043,9 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         # Send an empty message if necessary to avoid staleness and to "complete" the handshake in case this
         # was a key exchange
         if key_exchange is not None or session.receiving_chain_length > self.__class__.STALENESS_MAGIC_NUMBER:
+            logging.getLogger(SessionManager.LOG_TAG).debug(
+                "Sending/queueing empty message for session completion or staleness prevention."
+            )
             if self.__synchronizing:
                 # Add this bare JID to the queue
                 queued_jids = set((await storage.load_list(f"/queue/{session.namespace}", str)).maybe([]))
@@ -1941,6 +2064,8 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             else:
                 # If not in history synchronization mode, send the empty message right away
                 await self.__send_empty_message(backend, session)
+
+        logging.getLogger(SessionManager.LOG_TAG).debug("Post-decryption tasks completed.")
 
         # Return the plaintext and information about the sending device
         return (plaintext, device)

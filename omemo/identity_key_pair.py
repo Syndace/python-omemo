@@ -1,4 +1,5 @@
 import enum
+import logging
 from typing import Optional, Type, TypeVar
 
 from cryptography.exceptions import InvalidSignature
@@ -25,7 +26,6 @@ class IdentityKeyPairVariation(enum.Enum):
 IdentityKeyPairTypeT = TypeVar("IdentityKeyPairTypeT", bound="IdentityKeyPair")
 
 
-# TODO: Logging
 class IdentityKeyPair:
     """
     The identity key pair associated to this device, shared by all backends.
@@ -57,6 +57,8 @@ class IdentityKeyPair:
         backend-specific.
     """
 
+    LOG_TAG = "omemo.core.identity_key_pair"
+
     def __init__(self) -> None:
         # Just the type definitions here
         self.__identity_key: XEdDSA25519
@@ -86,11 +88,15 @@ class IdentityKeyPair:
             locations, thus the same data.
         """
 
+        logging.getLogger(IdentityKeyPair.LOG_TAG).debug(f"Creating instance from storage {storage}.")
+
         self = cls()
 
         try:
             ikp_type = IdentityKeyPairVariation((await storage.load_primitive("/ikp/type", int)).from_just())
+            logging.getLogger(IdentityKeyPair.LOG_TAG).debug(f"Type of stored ikp: {ikp_type}")
         except Nothing:
+            logging.getLogger(IdentityKeyPair.LOG_TAG).info("Generating identity key pair.")
             # If there's no private key in storage, generate and store a new seed-based Ed25519 private key
             await storage.store_bytes("/ikp/key", Ed25519PrivateKey.generate().private_bytes(
                 encoding=serialization.Encoding.Raw,
@@ -101,15 +107,21 @@ class IdentityKeyPair:
             # Set and store the identity key pair type accordingly
             ikp_type = IdentityKeyPairVariation.ED25519_SEED
             await storage.store("/ikp/type", ikp_type.value)
+            logging.getLogger(IdentityKeyPair.LOG_TAG).debug(
+                "New seed-based Ed25519 identity key pair generated and stored."
+            )
 
         key = (await storage.load_bytes("/ikp/key")).from_just()
 
         if ikp_type is IdentityKeyPairVariation.ED25519_SEED:
             # In case of a seed-based Ed25519 private key, generate and extract the private scalar
+            logging.getLogger(IdentityKeyPair.LOG_TAG).debug("Extracting private scalar from Ed25519 seed.")
             key = libnacl.crypto_sign_ed25519_sk_to_curve25519(libnacl.crypto_sign_seed_keypair(key)[1])
 
         # Let XEdDSA handle the rest
         self.__identity_key = XEdDSA25519(key)
+
+        logging.getLogger(IdentityKeyPair.LOG_TAG).debug("Identity key pair prepared.")
 
         return self
 

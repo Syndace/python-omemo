@@ -21,7 +21,8 @@ python-omemo uses [pytest](https://docs.pytest.org/en/latest/) as its testing fr
 
 ```sh
 $ pip install pytest pytest-asyncio mypy pylint flake8
-$ mypy --strict omemo/ setup.py
+$ export MYPYPATH=stubs/
+$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py
 $ pylint omemo/ setup.py
 $ flake8 omemo/ setup.py
 $ pytest
