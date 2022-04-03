@@ -89,7 +89,9 @@ class Nothing(Maybe[ValueTypeT]):
     """
 
     def __init__(self) -> None:
-        pass
+        """
+        Initialize a :class:`Nothing`, representing an empty :class:`Maybe`.
+        """
 
     @property
     def is_just(self) -> bool:
@@ -105,7 +107,7 @@ class Nothing(Maybe[ValueTypeT]):
     def maybe(self, default: ValueTypeT) -> ValueTypeT:
         return default
 
-    def fmap(self, _function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Nothing[MappedValueTypeT]":
+    def fmap(self, function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Nothing[MappedValueTypeT]":
         return Nothing()
 
 
@@ -115,6 +117,13 @@ class Just(Maybe[ValueTypeT]):
     """
 
     def __init__(self, value: ValueTypeT) -> None:
+        """
+        Initialize a :class:`Just`, representing a :class:`Maybe` that holds a value.
+
+        Args:
+            value: The value to store in this :class:`Just`.
+        """
+
         self.__value = copy.deepcopy(value)
 
     @property
@@ -128,7 +137,7 @@ class Just(Maybe[ValueTypeT]):
     def from_just(self) -> ValueTypeT:
         return copy.deepcopy(self.__value)
 
-    def maybe(self, _default: ValueTypeT) -> ValueTypeT:
+    def maybe(self, default: ValueTypeT) -> ValueTypeT:
         return copy.deepcopy(self.__value)
 
     def fmap(self, function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Just[MappedValueTypeT]":

@@ -59,7 +59,16 @@ html_theme = "sphinx_rtd_theme"
 # "default.css" will overwrite the builtin "default.css".
 html_static_path = [ "_static" ]
 
-# -- Autodoc Member Skipping -------------------------------------------------------------
+# -- Autodoc Configuration ---------------------------------------------------------------
+
+# The following two options seem to be ignored...
+autodoc_typehints = "description"
+autodoc_type_aliases = { type_alias: f"{type_alias}" for type_alias in {
+    "Priv",
+    "Seed",
+    "Ed25519Pub",
+    "JSONType"
+} }
 
 def autodoc_skip_member_handler(app, what, name, obj, skip, options):
     # Skip private members, i.e. those that start with double underscores but do not end in underscores

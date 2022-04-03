@@ -1,3 +1,6 @@
+# This import from future (theoretically) enables sphinx_autodoc_typehints to handle type aliases better
+from __future__ import annotations  # pylint: disable=unused-variable
+
 from abc import ABC, abstractmethod
 import logging
 import secrets
@@ -115,6 +118,11 @@ class IdentityKeyPairSeed(IdentityKeyPair):
     """
 
     def __init__(self, seed: Seed) -> None:
+        """
+        Args:
+            seed: The Curve25519/Ed25519 seed.
+        """
+
         self.__seed = seed
 
     @property
@@ -148,6 +156,11 @@ class IdentityKeyPairPriv(IdentityKeyPair):
     """
 
     def __init__(self, priv: Priv) -> None:
+        """
+        Args:
+            priv: The Curve25519/Ed25519 private key.
+        """
+
         self.__priv = priv
 
     @property
