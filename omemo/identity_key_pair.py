@@ -31,6 +31,9 @@ class IdentityKeyPair:
     Note:
         This is the only actual cryptographic functionality offered by the core library. Everything else is
         backend-specific.
+
+    TODO: Hmm. Maybe more of an API to request the identity key pair in a specific format, rather than provide
+          signing/x25519?
     """
 
     LOG_TAG = "omemo.core.identity_key_pair"
