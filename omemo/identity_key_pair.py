@@ -1,17 +1,14 @@
+from abc import ABC, abstractmethod
 import logging
 import secrets
-from typing import Optional, Type, TypeVar, Union
 
 import xeddsa.bindings as xeddsa
-from xeddsa.bindings import Ed25519Pub, Ed25519Signature, Priv, Seed, SharedSecret
+from xeddsa.bindings import Ed25519Pub, Priv, Seed
 
-from .storage import Nothing, Storage
-
-
-IdentityKeyPairTypeT = TypeVar("IdentityKeyPairTypeT", bound="IdentityKeyPair")
+from .storage import NothingException, Storage
 
 
-class IdentityKeyPair:
+class IdentityKeyPair(ABC):
     """
     The identity key pair associated to this device, shared by all backends.
 
@@ -22,41 +19,22 @@ class IdentityKeyPair:
 
     There are at least two different kinds of key pairs that can fulfill these requirements: Ed25519 key pairs
     and Curve25519 key pairs. The birational equivalence of both curves can be used to "convert" one pair to
-    the other, with caveats.
+    the other.
 
-    For all possible variations, this type transparently handles the required conversions and caveats
-    internally, to offer Ed25519-compatible signature creation and verification, as well as X25519-compatible
-    Diffie-Hellman key agreement functionality.
+    Both types of key pairs share the same private key, however instead of a private key, a seed can be used
+    which the private key is derived from using SHA-512. This is standard practice for Ed25519, where the
+    other 32 bytes of the SHA-512 seed hash are used as a nonce during signing. If a new key pair has to be
+    generated, this implementation generates a seed.
 
     Note:
         This is the only actual cryptographic functionality offered by the core library. Everything else is
         backend-specific.
-
-    TODO: Hmm. Maybe more of an API to request the identity key pair in a specific format, rather than provide
-          signing/x25519?
     """
 
     LOG_TAG = "omemo.core.identity_key_pair"
 
-    def __init__(self) -> None:
-        # Just the type definitions here
-        self.__key: Union[Priv, Seed]
-        self.__is_seed: bool
-
-    @property
-    def identity_key(self) -> Ed25519Pub:
-        """
-        Returns:
-            The public part of the identity key pair, in Ed25519 format.
-        """
-
-        if self.__is_seed:
-            return xeddsa.seed_to_ed25519_pub(self.__key)
-        else:
-            return xeddsa.priv_to_ed25519_pub(self.__key)
-
-    @classmethod
-    async def get(cls: Type[IdentityKeyPairTypeT], storage: Storage) -> IdentityKeyPairTypeT:
+    @staticmethod
+    async def get(storage: Storage) -> "IdentityKeyPair":
         """
         Get the identity key pair.
 
@@ -73,87 +51,132 @@ class IdentityKeyPair:
 
         logging.getLogger(IdentityKeyPair.LOG_TAG).debug(f"Creating instance from storage {storage}.")
 
-        self = cls()
-
+        is_seed: bool
+        key: bytes
         try:
-            self.__is_seed = (await storage.load_primitive("/ik/is_seed", bool)).from_just()
+            # Try to load both is_seed and the key. If any one of the loads fails, generate a new seed.
+            is_seed = (await storage.load_primitive("/ikp/is_seed", bool)).from_just()
+            key = (await storage.load_bytes("/ikp/key")).from_just()
+
             logging.getLogger(IdentityKeyPair.LOG_TAG).debug(
-                f"Loaded identity key from storage. is_seed={self.__is_seed}"
+                f"Loaded identity key from storage. is_seed={is_seed}"
             )
-        except Nothing:
+        except NothingException:
+            # If there's no private key in storage, generate and store a new seed
             logging.getLogger(IdentityKeyPair.LOG_TAG).info("Generating identity key.")
 
-            # If there's no private key in storage, generate and store a new seed
-            self.__is_seed = True
-            await storage.store("/ik/is_seed", True)
-            await storage.store_bytes("/ik/key", secrets.token_bytes(32))
+            is_seed = True
+            key = secrets.token_bytes(32)
+
+            await storage.store("/ikp/is_seed", is_seed)
+            await storage.store_bytes("/ikp/key", key)
 
             logging.getLogger(IdentityKeyPair.LOG_TAG).debug("New seed generated and stored.")
 
-        self.__key = (await storage.load_bytes("/ik/key")).from_just()
-
         logging.getLogger(IdentityKeyPair.LOG_TAG).debug("Identity key prepared.")
 
+        return IdentityKeyPairSeed(key) if is_seed else IdentityKeyPairPriv(key)
+
+    @property
+    @abstractmethod
+    def is_seed(self) -> bool:
+        """
+        Returns:
+            Whether this is a :class:`IdentityKeyPairSeed`.
+        """
+
+    @property
+    @abstractmethod
+    def is_priv(self) -> bool:
+        """
+        Returns:
+            Whether this is a :class:`IdentityKeyPairPriv`.
+        """
+
+    @abstractmethod
+    def as_priv(self) -> "IdentityKeyPairPriv":
+        """
+        Returns:
+            An :class:`IdentityKeyPairPriv` derived from this instance (if necessary).
+        """
+
+    @property
+    @abstractmethod
+    def identity_key(self) -> Ed25519Pub:
+        """
+        Returns:
+            The public part of this identity key pair, in Ed25519 format.
+        """
+
+
+class IdentityKeyPairSeed(IdentityKeyPair):
+    """
+    An :class:`IdentityKeyPair` represented by a seed.
+    """
+
+    def __init__(self, seed: Seed) -> None:
+        self.__seed = seed
+
+    @property
+    def is_seed(self) -> bool:
+        return True
+
+    @property
+    def is_priv(self) -> bool:
+        return False
+
+    def as_priv(self) -> "IdentityKeyPairPriv":
+        return IdentityKeyPairPriv(xeddsa.seed_to_priv(self.__seed))
+
+    @property
+    def identity_key(self) -> Ed25519Pub:
+        return xeddsa.seed_to_ed25519_pub(self.__seed)
+
+    @property
+    def seed(self) -> Seed:
+        """
+        Returns:
+            The Curve25519/Ed25519 seed.
+        """
+
+        return self.__seed
+
+
+class IdentityKeyPairPriv(IdentityKeyPair):
+    """
+    An :class:`IdentityKeyPair` represented by a private key.
+    """
+
+    def __init__(self, priv: Priv) -> None:
+        self.__priv = priv
+
+    @property
+    def is_seed(self) -> bool:
+        return False
+
+    @property
+    def is_priv(self) -> bool:
+        return True
+
+    def as_priv(self) -> "IdentityKeyPairPriv":
         return self
 
-    def sign(self, message: bytes, enforce_ed25519_pub_sign: Optional[bool] = None) -> Ed25519Signature:
+    @property
+    def identity_key(self) -> Ed25519Pub:
+        return xeddsa.priv_to_ed25519_pub(self.__priv)
+
+    @property
+    def priv(self) -> Priv:
         """
-        Sign a message using this identity key pair.
-
-        Args:
-            message: The message to sign.
-            enforce_ed25519_pub_sign: Used if the Ed25519 public key needs a specific sign enforced. Pass
-                `None` if the sign does not need to be enforced, `True` if the sign bit needs to be set and
-                `False` if it needs not be set. For example, XEdDSA needs the sign bit to not be set.
-
         Returns:
-            The signature of the message, not including the message itself.
+            The Curve25519/Ed25519 private key.
         """
 
-        if enforce_ed25519_pub_sign is None:
-            if self.__is_seed:
-                return xeddsa.ed25519_seed_sign(self.__key, message)
-            else:
-                return xeddsa.ed25519_priv_sign(self.__key, message)
-        else:
-            return xeddsa.ed25519_priv_sign(xeddsa.priv_force_sign(
-                xeddsa.seed_to_priv(self.__key) if self.__is_seed else self.__key,
-                enforce_ed25519_pub_sign
-            ) , message)
-
-    @staticmethod
-    def verify(message: bytes, signature: Ed25519Signature, identity_key: Ed25519Pub) -> bool:
-        """
-        Verify a signature.
-
-        Args:
-            message: The signed message.
-            signature: The signature.
-            identity_key: The identity key that allegedly signed the message.
-
-        Returns:
-            Whether the signature verification was successful.
-        """
-
-        return xeddsa.ed25519_verify(signature, identity_key, message)
-
-    def diffie_hellman(self, other_identity_key: Ed25519Pub) -> SharedSecret:
-        """
-        Perform Diffie-Hellman key agreement.
-
-        Args:
-            other_identity_key: The identity key of the other party.
-
-        Returns:
-            The shared secret.
-        """
-
-        return xeddsa.x25519(
-            xeddsa.seed_to_priv(self.__key) if self.__is_seed else self.__key,
-            xeddsa.ed25519_pub_to_curve25519_pub(other_identity_key)
-        )
+        return self.__priv
 
 
 __all__ = [  # pylint: disable=unused-variable
-    IdentityKeyPair.__name__
+    IdentityKeyPair.__name__,
+    IdentityKeyPairSeed.__name__,
+    IdentityKeyPairPriv.__name__
 ]
