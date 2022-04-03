@@ -1,26 +1,11 @@
-import enum
 import logging
-from typing import Optional, Type, TypeVar
+import secrets
+from typing import Type, TypeVar, Union
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
-import libnacl
-from xeddsa import XEdDSA25519
+import xeddsa.bindings as xeddsa
+from xeddsa.bindings import Ed25519Pub, Ed25519Signature, Priv, Seed, SharedSecret
 
 from .storage import Nothing, Storage
-
-
-@enum.unique
-class IdentityKeyPairVariation(enum.Enum):
-    """
-    The three variations of identity key pairs supported by :class:`IdentityKeyPair`.
-    """
-
-    CURVE25519 = 1
-    ED25519_SEED = 2
-    ED25519_SCALAR = 3
 
 
 IdentityKeyPairTypeT = TypeVar("IdentityKeyPairTypeT", bound="IdentityKeyPair")
@@ -39,18 +24,9 @@ class IdentityKeyPair:
     and Curve25519 key pairs. The birational equivalence of both curves can be used to "convert" one pair to
     the other, with caveats.
 
-    This class can handle three variations of key pairs:
-
-    * Curve25519 key pairs
-    * Ed25519 key pairs, where a seed to derive the private scalar is the private key
-    * Ed25519 key pairs, where the private scalar is the private key
-
-    For all three variations, this type transparently handles the required conversions and caveats internally,
-    to offer Ed25519-compatible signature creation and verification, as well as X25519-compatible
+    For all possible variations, this type transparently handles the required conversions and caveats
+    internally, to offer Ed25519-compatible signature creation and verification, as well as X25519-compatible
     Diffie-Hellman key agreement functionality.
-
-    In case a new identity key pair needs to be generated, this implementation generates a seed-based Ed25519
-    key pair.
 
     Note:
         This is the only actual cryptographic functionality offered by the core library. Everything else is
@@ -61,16 +37,20 @@ class IdentityKeyPair:
 
     def __init__(self) -> None:
         # Just the type definitions here
-        self.__identity_key: XEdDSA25519
+        self.__key: Union[Priv, Seed]
+        self.__is_seed: bool
 
     @property
-    def identity_key(self) -> bytes:
+    def identity_key(self) -> Ed25519Pub:
         """
         Returns:
             The public part of the identity key pair, in Ed25519 format.
         """
 
-        return self.__identity_key.mont_pub_to_ed_pub(self.__identity_key.mont_pub)
+        if self.__is_seed:
+            return xeddsa.seed_to_ed25519_pub(self.__key)
+        else:
+            return xeddsa.priv_to_ed25519_pub(self.__key)
 
     @classmethod
     async def get(cls: Type[IdentityKeyPairTypeT], storage: Storage) -> IdentityKeyPairTypeT:
@@ -93,54 +73,44 @@ class IdentityKeyPair:
         self = cls()
 
         try:
-            ikp_type = IdentityKeyPairVariation((await storage.load_primitive("/ikp/type", int)).from_just())
-            logging.getLogger(IdentityKeyPair.LOG_TAG).debug(f"Type of stored ikp: {ikp_type}")
-        except Nothing:
-            logging.getLogger(IdentityKeyPair.LOG_TAG).info("Generating identity key pair.")
-            # If there's no private key in storage, generate and store a new seed-based Ed25519 private key
-            await storage.store_bytes("/ikp/key", Ed25519PrivateKey.generate().private_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PrivateFormat.Raw,
-                encryption_algorithm=serialization.NoEncryption()
-            ))
-
-            # Set and store the identity key pair type accordingly
-            ikp_type = IdentityKeyPairVariation.ED25519_SEED
-            await storage.store("/ikp/type", ikp_type.value)
+            self.__is_seed = (await storage.load_primitive("/ik/is_seed", bool)).from_just()
             logging.getLogger(IdentityKeyPair.LOG_TAG).debug(
-                "New seed-based Ed25519 identity key pair generated and stored."
+                f"Loaded identity key from storage. is_seed={self.__is_seed}"
             )
+        except Nothing:
+            logging.getLogger(IdentityKeyPair.LOG_TAG).info("Generating identity key.")
 
-        key = (await storage.load_bytes("/ikp/key")).from_just()
+            # If there's no private key in storage, generate and store a new seed
+            self.__is_seed = True
+            await storage.store("/ik/is_seed", True)
+            await storage.store_bytes("/ik/key", secrets.token_bytes(32))
 
-        if ikp_type is IdentityKeyPairVariation.ED25519_SEED:
-            # In case of a seed-based Ed25519 private key, generate and extract the private scalar
-            logging.getLogger(IdentityKeyPair.LOG_TAG).debug("Extracting private scalar from Ed25519 seed.")
-            key = libnacl.crypto_sign_ed25519_sk_to_curve25519(libnacl.crypto_sign_seed_keypair(key)[1])
+            logging.getLogger(IdentityKeyPair.LOG_TAG).debug("New seed generated and stored.")
 
-        # Let XEdDSA handle the rest
-        self.__identity_key = XEdDSA25519(key)
+        self.__key = (await storage.load_bytes("/ik/key")).from_just()
 
-        logging.getLogger(IdentityKeyPair.LOG_TAG).debug("Identity key pair prepared.")
+        logging.getLogger(IdentityKeyPair.LOG_TAG).debug("Identity key prepared.")
 
         return self
 
-    def sign(self, message: bytes, nonce: Optional[bytes]) -> bytes:
+    def sign(self, message: bytes) -> Ed25519Signature:
         """
         Sign a message using this identity key pair.
 
         Args:
             message: The message to sign.
-            nonce: The nonce to use while signing. If omitted or set to None, a nonce is generated.
 
         Returns:
             The signature of the message, not including the message itself.
         """
 
-        return self.__identity_key.sign(message, nonce)
+        if self.__is_seed:
+            return xeddsa.ed25519_seed_sign(self.__key, message)
+        else:
+            return xeddsa.ed25519_priv_sign(self.__key, message)
 
     @staticmethod
-    def verify(message: bytes, signature: bytes, identity_key: bytes) -> bool:
+    def verify(message: bytes, signature: Ed25519Signature, identity_key: Ed25519Pub) -> bool:
         """
         Verify a signature.
 
@@ -150,16 +120,12 @@ class IdentityKeyPair:
             identity_key: The identity key that allegedly signed the message.
 
         Returns:
-            Whether the signature is valid.
+            Whether the signature verification was successful.
         """
 
-        try:
-            Ed25519PublicKey.from_public_bytes(identity_key).verify(signature, message)
-            return True
-        except InvalidSignature:
-            return False
+        return xeddsa.ed25519_verify(signature, identity_key, message)
 
-    def diffie_hellman(self, other_identity_key: bytes) -> bytes:
+    def diffie_hellman(self, other_identity_key: Ed25519Pub) -> SharedSecret:
         """
         Perform Diffie-Hellman key agreement.
 
@@ -170,11 +136,9 @@ class IdentityKeyPair:
             The shared secret.
         """
 
-        assert self.__identity_key.mont_priv is not None
-        return X25519PrivateKey.from_private_bytes(self.__identity_key.mont_priv).exchange(
-            X25519PublicKey.from_public_bytes(libnacl.crypto_sign_ed25519_pk_to_curve25519(
-                other_identity_key
-            ))
+        return xeddsa.x25519(
+            xeddsa.seed_to_priv(self.__key) if self.__is_seed else self.__key,
+            xeddsa.ed25519_pub_to_curve25519_pub(other_identity_key)
         )
 
 

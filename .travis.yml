@@ -17,21 +17,20 @@ install:
 - python -m pip install --upgrade pip setuptools wheel
 - python -m pip --version
 - python -m pip install --upgrade pytest pytest-asyncio pylint flake8
-- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade mypy; fi
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then python -m pip install --upgrade mypy; fi
 - if [   $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography==3.3.2 libnacl==1.7.2; fi
 - if [ ! $DEBIAN_DEPS ]; then python -m pip install --upgrade cryptography        libnacl; fi
 - python -m pip install .
 
 script:
 - export MYPYPATH=stubs/
-- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict omemo/; fi
-- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict tests/; fi
-- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict examples/; fi
-- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ] && [ ! $DEBIAN_DEPS ]; then python -m mypy --strict setup.py; fi
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then python -m mypy --strict omemo/; fi
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then python -m mypy --strict tests/; fi
+- if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then python -m mypy --strict setup.py; fi
 - python -m pylint omemo/
 - python -m pylint tests/*.py
-- python -m pylint examples/*.py
 - python -m pylint setup.py
 - python -m flake8 omemo/
+- python -m flake8 tests/*.py
 - python -m flake8 setup.py
 - python -m pytest

@@ -1,6 +1,6 @@
 [![PyPI](https://img.shields.io/pypi/v/OMEMO.svg)](https://pypi.org/project/OMEMO/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/OMEMO.svg)](https://pypi.org/project/OMEMO/)
-[![Build Status](https://travis-ci.org/Syndace/python-omemo.svg?branch=master)](https://travis-ci.org/Syndace/python-omemo)
+[![Build Status](https://travis-ci.org/Syndace/python-omemo.svg?branch=stable)](https://travis-ci.org/Syndace/python-omemo)
 [![Documentation Status](https://readthedocs.org/projects/python-omemo/badge/?version=latest)](https://python-omemo.readthedocs.io/en/latest/?badge=latest)
 
 # python-omemo #
@@ -22,9 +22,9 @@ python-omemo uses [pytest](https://docs.pytest.org/en/latest/) as its testing fr
 ```sh
 $ pip install pytest pytest-asyncio mypy pylint flake8
 $ export MYPYPATH=stubs/
-$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py
-$ pylint omemo/ setup.py
-$ flake8 omemo/ setup.py
+$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py tests/
+$ pylint omemo/ setup.py tests/
+$ flake8 omemo/ setup.py tests/
 $ pytest
 ```
 
