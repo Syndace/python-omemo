@@ -14,16 +14,9 @@ class StorageException(OMEMOException):
 
 ValueTypeT = TypeVar("ValueTypeT")
 MappedValueTypeT = TypeVar("MappedValueTypeT")
-MaybeTypeT = TypeVar("MaybeTypeT", bound="Maybe[Any]")
 
 
-class Nothing(Exception):
-    """
-    Raise by :meth:`Maybe.from_just`, in case the value of the :class:`Maybe` is not set.
-    """
-
-
-class Maybe(Generic[ValueTypeT]):
+class Maybe(ABC, Generic[ValueTypeT]):
     """
     typing's `Optional[A]` is just an alias for `Union[None, A]`, which means if `A` is a union itself that
     allows `None`, the `Optional[A]` doesn't add anything. E.g. `Optional[Optional[X]] = Optional[X]` is true
@@ -33,80 +26,113 @@ class Maybe(Generic[ValueTypeT]):
     instance are not affected by outside application logic.
     """
 
-    def __init__(self) -> None:
-        # Just the type definitions here
-        self.__value: ValueTypeT
-
-    @classmethod
-    def just(cls: Type[MaybeTypeT], value: ValueTypeT) -> MaybeTypeT:
-        """
-        Args:
-            value: The value to set.
-
-        Returns:
-            An instance of :class:`Maybe` with a set value.
-        """
-
-        self = cls()
-        self.__value = copy.deepcopy(value)
-        return self
-
-    @classmethod
-    def nothing(cls: Type[MaybeTypeT]) -> MaybeTypeT:
+    @property
+    @abstractmethod
+    def is_just(self) -> bool:
         """
         Returns:
-            An instance of :class:`Maybe` without a value.
+            Whether this is a :class:`Just`.
         """
 
-        return cls()
+    @property
+    @abstractmethod
+    def is_nothing(self) -> bool:
+        """
+        Returns:
+            Whether this is a :class:`Nothing`.
+        """
 
+    @abstractmethod
     def from_just(self) -> ValueTypeT:
         """
         Returns:
-            The value stored in this :class:`Maybe`.
+            The value if this is a :class:`Just`.
 
         Raises:
-            Nothing: if no value is set.
+            NothingException: if this is a :class:`Nothing`.
         """
 
-        try:
-            return copy.deepcopy(self.__value)
-        except AttributeError:
-            # pylint: disable=raise-missing-from
-            raise Nothing("Maybe.fromJust: Nothing")  # -- yuck
-
+    @abstractmethod
     def maybe(self, default: ValueTypeT) -> ValueTypeT:
         """
         Args:
-            default: The value to return if no value is set in this :class:`Maybe`.
+            default: The value to return if this is in instance of :class:`Nothing`.
 
         Returns:
-            The value stored in the :class:`Maybe`, or the default value, which is returned by reference.
+            The value if this is a :class:`Just`, or the default value if this is a :class:`Nothing`. The
+            default is returned by reference in that case.
         """
 
-        try:
-            return copy.deepcopy(self.__value)
-        except AttributeError:
-            return default
-
+    @abstractmethod
     def fmap(self, function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Maybe[MappedValueTypeT]":
         """
-        Apply a mapping function to the value stored in this :class:`Maybe`, if a value is stored.
+        Apply a mapping function.
 
         Args:
-            function: The mapping function to apply to the value stored in this :class:`Maybe`, if present.
+            function: The mapping function.
 
         Returns:
-            A new :class:`Maybe`, containing either the mapped value or no value, depending on the original
-            :class:`Maybe`.
+            A new :class:`Just` containing the mapped value if this is a :class:`Just`. A new :class:`Nothing`
+            if this is a :class:`Nothing`.
         """
 
-        try:
-            value = copy.deepcopy(self.__value)
-        except AttributeError:
-            return Maybe.nothing()
 
-        return Maybe.just(function(value))
+class NothingException(Exception):
+    """
+    Raised by :meth:`Maybe.from_just`, in case the :class:`Maybe` is a :class:`Nothing`.
+    """
+
+
+class Nothing(Maybe[ValueTypeT]):
+    """
+    A :class:`Maybe` that does not hold a value.
+    """
+
+    def __init__(self) -> None:
+        pass
+
+    @property
+    def is_just(self) -> bool:
+        return False
+
+    @property
+    def is_nothing(self) -> bool:
+        return True
+
+    def from_just(self) -> ValueTypeT:
+        raise NothingException("Maybe.fromJust: Nothing")  # -- yuck
+
+    def maybe(self, default: ValueTypeT) -> ValueTypeT:
+        return default
+
+    def fmap(self, _function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Nothing[MappedValueTypeT]":
+        return Nothing()
+
+
+class Just(Maybe[ValueTypeT]):
+    """
+    A :class:`Maybe` that does hold a value.
+    """
+
+    def __init__(self, value: ValueTypeT) -> None:
+        self.__value = copy.deepcopy(value)
+
+    @property
+    def is_just(self) -> bool:
+        return True
+
+    @property
+    def is_nothing(self) -> bool:
+        return False
+
+    def from_just(self) -> ValueTypeT:
+        return copy.deepcopy(self.__value)
+
+    def maybe(self, _default: ValueTypeT) -> ValueTypeT:
+        return copy.deepcopy(self.__value)
+
+    def fmap(self, function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Just[MappedValueTypeT]":
+        return Just(function(copy.deepcopy(self.__value)))
 
 
 PrimitiveTypeT = TypeVar("PrimitiveTypeT", None, float, int, str, bool)
@@ -230,7 +256,7 @@ class Storage(ABC):
         await self._store(key, value)
 
         if self.__cache is not None:
-            self.__cache[key] = Maybe.just(value)
+            self.__cache[key] = Just(value)
 
     async def delete(self, key: str) -> None:
         """
@@ -247,7 +273,7 @@ class Storage(ABC):
         await self._delete(key)
 
         if self.__cache is not None:
-            self.__cache[key] = Maybe.nothing()
+            self.__cache[key] = Nothing()
 
     async def store_bytes(self, key: str, value: bytes) -> None:
         """
@@ -384,7 +410,9 @@ class Storage(ABC):
 
 __all__ = [  # pylint: disable=unused-variable
     StorageException.__name__,
-    Nothing.__name__,
+    NothingException.__name__,
     Maybe.__name__,
+    Nothing.__name__,
+    Just.__name__,
     Storage.__name__
 ]

@@ -4,16 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - Unreleased
 
 ### Changed
-- CHANGED EVERYTHING!!!
-- Complete rewrite of the whole library (and dependencies) to use asynchronous and (strictly) typed Python 3.
-- Built-in support for [XEP-0384](https://xmpp.org/extensions/xep-0384.html) >= 0.4 in the namespace `urn:xmpp:omemo:1`. Legacy OMEMO in the namespace `eu.siacs.conversations.axolotl` remains available in the [python-omemo-backend-legacy](https://github.com/Syndace/python-omemo-backend-legacy) package.
+- Complete rewrite of the library (and dependencies) to use asynchronous and (strictly) typed Python 3.
+- Built-in support for [XEP-0384](https://xmpp.org/extensions/xep-0384.html) >= 0.4 in the namespace `urn:xmpp:omemo:2`. Legacy OMEMO in the namespace `eu.siacs.conversations.axolotl` remains available in the [python-omemo-backend-legacy](https://github.com/Syndace/python-omemo-backend-legacy) package.
 - Mostly following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) now (except for the date format).
-- Compatibility with the old serialization format is preserved!
 
-## [0.14.0] - Unreleased
+## [0.14.0] - 12th of March, 2022
 
 ### Changed
 - Adjusted signature of the `SessionManager.encryptRatchetForwardingMessage` method to accept exactly one bare JID + device id pair

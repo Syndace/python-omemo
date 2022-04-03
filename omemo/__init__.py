@@ -35,5 +35,5 @@ from .session_manager import (
     SessionManager
 )
 
-from .storage import Maybe, Nothing, Storage, StorageException
+from .storage import Just, Maybe, Nothing, NothingException, Storage, StorageException
 from .types import DeviceInformation, JSONType, OMEMOException, TrustLevel

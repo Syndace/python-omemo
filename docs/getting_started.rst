@@ -52,7 +52,7 @@ This is done in four steps:
 The Plaintext Type
 ^^^^^^^^^^^^^^^^^^
 
-The type for plaintext as passed into encryption methods and received from decryption methods is generic in python-omemo, since the most convenient plaintext type might differ between backends and applications. For example, OMEMO under the `urn:xmpp:omemo:1` namespace uses `SCE <https://xmpp.org/extensions/xep-0420.html>`_, which means that the input to encryption is a whole XMPP stanza. Meanwhile, OMEMO under the legacy `eu.siacs.conversations.axolotl` namespace can only handle message bodies, which means that the most convenient plaintext type is a simple Python string. When multiple backends with differing preferred plaintext types are loaded at the same time, a common ground must be chosen. This is what the plaintext generic is for.
+The type for plaintext as passed into encryption methods and received from decryption methods is generic in python-omemo, since the most convenient plaintext type might differ between backends and applications. For example, OMEMO under the `urn:xmpp:omemo:2` namespace uses `SCE <https://xmpp.org/extensions/xep-0420.html>`_, which means that the input to encryption is a whole XMPP stanza. Meanwhile, OMEMO under the legacy `eu.siacs.conversations.axolotl` namespace can only handle message bodies, which means that the most convenient plaintext type is a simple Python string. When multiple backends with differing preferred plaintext types are loaded at the same time, a common ground must be chosen. This is what the plaintext generic is for.
 
 Backend Subclassing
 ^^^^^^^^^^^^^^^^^^^

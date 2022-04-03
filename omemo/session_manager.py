@@ -10,7 +10,7 @@ from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
 from .message import KeyExchange, Message
 from .session import Session
-from .storage import Nothing, Storage
+from .storage import NothingException, Storage
 from .types import DeviceInformation, OMEMOException, TrustLevel
 
 
@@ -328,7 +328,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         try:
             self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).from_just()
             logging.getLogger(SessionManager.LOG_TAG).debug(f"Device id from storage: {self.__own_device_id}")
-        except Nothing:
+        except NothingException:
             # First run.
             logging.getLogger(SessionManager.LOG_TAG).info("First run.")
 
@@ -544,7 +544,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 identity_keys.add((await storage.load_bytes(
                     f"/devices/{bare_jid}/{device_id}/identity_key"
                 )).from_just())
-            except Nothing:
+            except NothingException:
                 pass
 
         # Delete information about the individual devices
@@ -1273,7 +1273,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 identity_key = (await storage.load_bytes(
                     f"/devices/{bare_jid}/{device_id}/identity_key"
                 )).from_just()
-            except Nothing:
+            except NothingException:
                 logging.getLogger(SessionManager.LOG_TAG).debug(
                     f"Identity key assigned to device {device_id} not known."
                 )
