@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 class Bundle(ABC):
     """
     The bundle of a device, containing the cryptographic information required for active session building.
+
+    Note:
+        All usages of "identity key" in the public API refer to the public part of the identity key pair in
+        Ed25519 format.
     """
 
     @property
