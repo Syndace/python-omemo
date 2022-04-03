@@ -1,6 +1,6 @@
 import logging
 import secrets
-from typing import Type, TypeVar, Union
+from typing import Optional, Type, TypeVar, Union
 
 import xeddsa.bindings as xeddsa
 from xeddsa.bindings import Ed25519Pub, Ed25519Signature, Priv, Seed, SharedSecret
@@ -93,21 +93,30 @@ class IdentityKeyPair:
 
         return self
 
-    def sign(self, message: bytes) -> Ed25519Signature:
+    def sign(self, message: bytes, enforce_ed25519_pub_sign: Optional[bool] = None) -> Ed25519Signature:
         """
         Sign a message using this identity key pair.
 
         Args:
             message: The message to sign.
+            enforce_ed25519_pub_sign: Used if the Ed25519 public key needs a specific sign enforced. Pass
+                `None` if the sign does not need to be enforced, `True` if the sign bit needs to be set and
+                `False` if it needs not be set. For example, XEdDSA needs the sign bit to not be set.
 
         Returns:
             The signature of the message, not including the message itself.
         """
 
-        if self.__is_seed:
-            return xeddsa.ed25519_seed_sign(self.__key, message)
+        if enforce_ed25519_pub_sign is None:
+            if self.__is_seed:
+                return xeddsa.ed25519_seed_sign(self.__key, message)
+            else:
+                return xeddsa.ed25519_priv_sign(self.__key, message)
         else:
-            return xeddsa.ed25519_priv_sign(self.__key, message)
+            return xeddsa.ed25519_priv_sign(xeddsa.priv_force_sign(
+                xeddsa.seed_to_priv(self.__key) if self.__is_seed else self.__key,
+                enforce_ed25519_pub_sign
+            ) , message)
 
     @staticmethod
     def verify(message: bytes, signature: Ed25519Signature, identity_key: Ed25519Pub) -> bool:
