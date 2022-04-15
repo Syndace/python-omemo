@@ -1,11 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Optional, Set, Tuple, TypeVar
+from typing import Any, Generic, Optional, Tuple, TypeVar
 
 from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
-from .message import Content, KeyMaterial, KeyExchange
+from .message import Content, EncryptedKeyMaterial, PlainKeyMaterial, KeyExchange
 from .session import Session
 from .types import OMEMOException
+
+
+__all__ = [  # pylint: disable=unused-variable
+    "Backend",
+    "BackendException",
+    "KeyExchangeFailed",
+    "TooManySkippedMessageKeys"
+]
 
 
 class BackendException(OMEMOException):
@@ -49,6 +57,11 @@ class Backend(ABC, Generic[PlaintextTypeT]):
     Warning:
         All parameters must be treated as immutable unless explicitly noted otherwise.
 
+    Warning:
+        Make sure to call :meth:`__init__` from your subclass to configure per-message and per-session skipped
+        message key DoS protection thresholds, and respect those thresholds when decrypting key material using
+        :meth:`decrypt_key_material`.
+
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
         listed explicitly.
@@ -60,12 +73,13 @@ class Backend(ABC, Generic[PlaintextTypeT]):
     Note:
         For backend implementors: as part of your backend implementation, you are expected to subclass various
         abstract base classes like :class:`~omemo.session.Session`, :class:`~omemo.message.Content`,
-        :class:`~omemo.message.KeyMaterial` and :class:`~omemo.message.KeyExchange`. Whenever any of these
-        abstract base types appears in a method signature of the :class:`Backend` class, what's actually meant
-        is an instance of your respective subclass. This is not correctly expressed through the type system,
-        since I couldn't think of a clean way to do so. Adding generics for every single of these types seemed
-        not worth the effort. For now, the recommended way to deal with this type inaccuray is to assert the
-        types of the affected method parameters, for example::
+        :class:`~omemo.message.PlaintKeyMaterial`, :class:`~omemo.message.EncryptedKeyMaterial` and
+        :class:`~omemo.message.KeyExchange`. Whenever any of these abstract base types appears in a method
+        signature of the :class:`Backend` class, what's actually meant is an instance of your respective
+        subclass. This is not correctly expressed through the type system, since I couldn't think of a clean
+        way to do so. Adding generics for every single of these types seemed not worth the effort. For now,
+        the recommended way to deal with this type inaccuray is to assert the types of the affected method
+        parameters, for example::
 
             async def store_session(self, session: Session) -> Any:
                 assert isinstance(session, MySessionImpl)
@@ -74,6 +88,57 @@ class Backend(ABC, Generic[PlaintextTypeT]):
 
         Doing so tells mypy how to deal with the situation. These assertions should never fail.
     """
+
+    def __init__(
+        self,
+        max_num_per_session_skipped_keys: int = 1000,
+        max_num_per_message_skipped_keys: Optional[int] = None
+    ) -> None:
+        """
+        Args:
+            max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep around per
+                session. Once the maximum is reached, old message keys are deleted to make space for newer
+                ones. Accessible via :meth:`max_num_per_session_skipped_keys`.
+            max_num_per_message_skipped_keys: The maximum number of skipped message keys to accept in a single
+                message. When set to ``None`` (the default), this parameter defaults to the per-session
+                maximum (i.e. the value of the ``max_num_per_session_skipped_keys`` parameter). This parameter
+                may only be 0 if the per-session maximum is 0, otherwise it must be a number between 1 and the
+                per-session maximum. Accessible via :meth:`max_num_per_message_skipped_keys`.
+        """
+
+        if max_num_per_message_skipped_keys == 0 and max_num_per_session_skipped_keys != 0:
+            raise ValueError(
+                "The number of allowed per-message skipped keys must be nonzero if the number of per-session"
+                " skipped keys to keep is nonzero."
+            )
+
+        if max_num_per_message_skipped_keys or 0 > max_num_per_session_skipped_keys:
+            raise ValueError(
+                "The number of allowed per-message skipped keys must not be greater than the number of"
+                " per-session skipped keys to keep."
+            )
+
+        self.__max_num_per_session_skipped_keys = max_num_per_session_skipped_keys
+        self.__max_num_per_message_skipped_keys = max_num_per_session_skipped_keys if \
+            max_num_per_message_skipped_keys is None else max_num_per_message_skipped_keys
+
+    @property
+    def max_num_per_session_skipped_keys(self) -> int:
+        """
+        Returns:
+            The maximum number of skipped message keys to keep around per session.
+        """
+
+        return self.__max_num_per_session_skipped_keys
+
+    @property
+    def max_num_per_message_skipped_keys(self) -> int:
+        """
+        Returns:
+            The maximum number of skipped message keys to accept in a single message.
+        """
+
+        return self.__max_num_per_message_skipped_keys
 
     @property
     @abstractmethod
@@ -99,8 +164,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             calling the :meth:`store_session` method.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `load_session`.")
-
     @abstractmethod
     async def store_session(self, session: Session) -> Any:
         """
@@ -119,15 +182,14 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             calling this method.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `store_session`.")
-
     @abstractmethod
     async def build_session_active(
         self,
         bare_jid: str,
         device_id: int,
-        bundle: Bundle
-    ) -> Tuple[Session, KeyExchange]:
+        bundle: Bundle,
+        plain_key_material: PlainKeyMaterial
+    ) -> Tuple[Session, EncryptedKeyMaterial]:
         """
         Actively build a session.
 
@@ -136,10 +198,15 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             device_id: The id of the device.
             bundle: The bundle containing the public key material of the other device required for active
                 session building.
+            plain_key_material: The key material to encrypt for the recipient as part of the initial key
+                exchange/session initiation.
 
         Returns:
-            The newly built session and the key exchange information required by the other device to complete
-            the passive part of session building.
+            The newly built session, the encrypted key material and the key exchange information required by
+            the other device to complete the passive part of session building. The :meth:`initiation` property
+            of the returned session must return :var:`Initiation.ACTIVE`. The :meth:`key_exchange` property of
+            the returned session must return the information required by the other party to complete its part
+            of the key exchange.
 
         Raises:
             KeyExchangeFailed: in case of failure related to the key exchange required for session building.
@@ -152,15 +219,14 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             exist in storage, which can be controlled using the :meth:`store_session` method.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `build_session_active`.")
-
     @abstractmethod
     async def build_session_passive(
         self,
         bare_jid: str,
         device_id: int,
-        key_exchange: KeyExchange
-    ) -> Session:
+        key_exchange: KeyExchange,
+        encrypted_key_material: EncryptedKeyMaterial
+    ) -> Tuple[Session, PlainKeyMaterial]:
         """
         Passively build a session.
 
@@ -168,10 +234,13 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             bare_jid: The bare JID the device belongs to.
             device_id: The id of the device.
             key_exchange: Key exchange information for the passive session building.
+            encrypted_key_material: The key material to decrypt as part of the initial key exchange/session
+                initiation.
 
         Returns:
-            The newly built session. Note that the pre key used to initiate this session must somehow be
-            associated with the session, such that :meth:`hide_pre_key` and :meth:`delete_pre_key` can work.
+            The newly built session and the decrypted key material. Note that the pre key used to initiate
+            this session must somehow be associated with the session, such that :meth:`hide_pre_key` and
+            :meth:`delete_pre_key` can work.
 
         Raises:
             KeyExchangeFailed: in case of failure related to the key exchange required for session building.
@@ -183,8 +252,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             multiple sessions for the same device can exist in memory, while only one session per device can
             exist in storage, which can be controlled using the :meth:`store_session` method.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `build_session_passive`.")
 
     @abstractmethod
     def serialize_plaintext(self, plaintext: PlaintextTypeT) -> bytes:
@@ -200,43 +267,44 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             ``PlaintextType`` type.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `serialize_plaintext`.")
-
     @abstractmethod
-    async def encrypt(
-        self,
-        sessions: Set[Session],
-        plaintext: bytes
-    ) -> Tuple[Content, Set[KeyMaterial]]:
+    async def encrypt_plaintext(self, plaintext: bytes) -> Tuple[Content, PlainKeyMaterial]:
         """
-        Encrypt some plaintext symmetrically, and encrypt the corresponding key material once with each
-        session.
+        Encrypt some plaintext symmetrically.
 
         Args:
-            sessions: The sessions to encrypt the key material with.
             plaintext: The serialized plaintext to encrypt symmetrically.
 
         Returns:
-            The symmetrically encrypted plaintext, and a set containing the encrypted key material for each
-            sessions.
+            The encrypted plaintext aka content, as well as the key material needed to decrypt it.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `encrypt`.")
-
     @abstractmethod
-    async def encrypt_empty(self, session: Session) -> Tuple[Content, KeyMaterial]:
+    async def encrypt_empty(self) -> Tuple[Content, PlainKeyMaterial]:
         """
         Encrypt an empty message for the sole purpose of session manangement/ratchet forwarding/key material
         transportation.
 
-        Args:
-            session: The session to encrypt the key material for the empty message with.
-
         Returns:
-            The symmetrically encrypted empty content, and the encrypted key material.
+            The symmetrically encrypted empty content, and the key material needed to decrypt it.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `encrypt_empty`.")
+    @abstractmethod
+    async def encrypt_key_material(
+        self,
+        session: Session,
+        plain_key_material: PlainKeyMaterial
+    ) -> EncryptedKeyMaterial:
+        """
+        Encrypt some key material asymmetrically using the session.
+
+        Args:
+            session: The session to encrypt the key material with.
+            plain_key_material: The key material to encrypt asymmetrically for each recipient.
+
+        Returns:
+            The encrypted key material.
+        """
 
     @abstractmethod
     def deserialize_plaintext(self, plaintext: bytes) -> PlaintextTypeT:
@@ -252,43 +320,52 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             ``PlaintextType`` type.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `deserialize_plaintext`.")
-
     @abstractmethod
-    async def decrypt(
-        self,
-        session: Session,
-        content: Content,
-        key_material: KeyMaterial,
-        max_num_per_session_skipped_keys: int,
-        max_num_per_message_skipped_keys: int
-    ) -> bytes:
+    async def decrypt_plaintext(self, content: Content, plain_key_material: PlainKeyMaterial) -> bytes:
         """
-        Decrypt some key material using the session, then decrypt the content symmetrically using the key
-        material.
+        Decrypt some symmetrically encrypted plaintext.
 
         Args:
-            session: The session to decrypt the key material with.
-            content: The symmetrically encrypted content.
-            key_material: The encrypted key material.
-            max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep per session.
-            max_num_per_message_skipped_keys: The maximum number of skipped message keys allowed in a single
-                message.
+            content: The content to decrypt.
+            plain_key_material: The key material to decrypt with.
 
         Returns:
             The decrypted, yet serialized plaintext.
 
         Raises:
+            TODO
+        """
+
+    @abstractmethod
+    async def decrypt_key_material(
+        self,
+        session: Session,
+        encrypted_key_material: EncryptedKeyMaterial
+    ) -> PlainKeyMaterial:
+        """
+        Decrypt some key material asymmetrically using the session.
+
+        Args:
+            session: The session to decrypt the key material with.
+            encrypted_key_material: The encrypted key material.
+
+        Returns:
+            The decrypted key material
+
+        Raises:
             TooManySkippedMessageKeys: if the number of message keys skipped by this message exceeds the upper
-                limit enforced by `max_num_per_message_skipped_keys`.
+                limit enforced by :meth:`max_num_per_message_skipped_keys`.
+            TODO
+
+        Warning:
+            Make sure to respect the values of :meth:`max_num_per_session_skipped_keys` and
+            :meth:`max_num_per_message_skipped_keys`.
 
         Note:
             When the maximum number of skipped message keys for this session, given by
-            `max_num_per_session_skipped_keys`, is exceeded, old skipped message keys are deleted to make
-            space for new ones.
+            :meth:`max_num_per_session_skipped_keys`, is exceeded, old skipped message keys are deleted to
+            make space for new ones.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `decrypt`.")
 
     @abstractmethod
     async def signed_pre_key_age(self) -> int:
@@ -296,8 +373,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         Returns:
             The age of the signed pre key, i.e. the time elapsed since it was last rotated, in seconds.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `signed_pre_key_age`.")
 
     @abstractmethod
     async def rotate_signed_pre_key(self, identity_key_pair: IdentityKeyPair) -> Any:
@@ -311,8 +386,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         Returns:
             Anything, the return value is ignored.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `rotate_signed_pre_key`.")
 
     @abstractmethod
     async def hide_pre_key(self, session: Session) -> bool:
@@ -329,8 +402,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             deleted), or was already hidden, do not throw an exception, but return `False` instead.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `hide_pre_key`.")
-
     @abstractmethod
     async def delete_pre_key(self, session: Session) -> bool:
         """
@@ -345,8 +416,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             deleted), do not throw an exception, but return `False` instead.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `delete_pre_key`.")
-
     @abstractmethod
     async def delete_hidden_pre_keys(self) -> Any:
         """
@@ -356,8 +425,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             Anything, the return value is ignored.
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `delete_hidden_pre_keys`.")
-
     @abstractmethod
     async def get_num_visible_pre_keys(self) -> int:
         """
@@ -365,8 +432,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             The number of visible pre keys available. The number returned here should match the number of pre
             keys included in the bundle returned by :meth:`bundle`.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `get_num_pre_keys`.")
 
     @abstractmethod
     async def generate_pre_keys(self, num_pre_keys: int) -> Any:
@@ -379,8 +444,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         Returns:
             Anything, the return value is ignored.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `generate_pre_keys`.")
 
     @abstractmethod
     async def bundle(self, bare_jid: str, device_id: int, identity_key: bytes) -> Bundle:
@@ -397,8 +460,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             Do not include pre keys hidden by :meth:`hide_pre_key` in the bundle!
         """
 
-        raise NotImplementedError("Create a subclass of Backend and implement `bundle`.")
-
     @abstractmethod
     async def purge(self) -> Any:
         """
@@ -407,8 +468,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         Returns:
             Anything, the return value is ignored.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `purge`.")
 
     @abstractmethod
     async def purge_bare_jid(self, bare_jid: str) -> Any:
@@ -421,13 +480,3 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         Returns:
             Anything, the return value is ignored.
         """
-
-        raise NotImplementedError("Create a subclass of Backend and implement `purge_bare_jid`.")
-
-
-__all__ = [  # pylint: disable=unused-variable
-    Backend.__name__,
-    BackendException.__name__,
-    KeyExchangeFailed.__name__,
-    TooManySkippedMessageKeys.__name__
-]

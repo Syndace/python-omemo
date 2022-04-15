@@ -1,12 +1,9 @@
-# Could populate __all__ here, however since the sole purpose of this __init__.py is reexporting, it's easier
-# to silence the linters and rely on the default __all__
-# pylint: disable=unused-variable
 from .version import __version__
 from .project import project
 
 from .backend import Backend, BackendException, KeyExchangeFailed, TooManySkippedMessageKeys
 from .bundle import Bundle
-from .message import Content, KeyExchange, KeyMaterial, Message
+from .message import Content, EncryptedKeyMaterial, KeyExchange, Message
 
 from .session_manager import (
     SessionManagerException,
@@ -37,3 +34,69 @@ from .session_manager import (
 
 from .storage import Just, Maybe, Nothing, NothingException, Storage, StorageException
 from .types import DeviceInformation, JSONType, OMEMOException, TrustLevel
+
+# Fun:
+# https://github.com/PyCQA/pylint/issues/6006
+# https://github.com/python/mypy/issues/10198
+__all__ = [  # pylint: disable=unused-variable
+    # .version
+    "__version__",
+
+    # .project
+    "project",
+
+    # .backend
+    "Backend",
+    "BackendException",
+    "KeyExchangeFailed",
+    "TooManySkippedMessageKeys",
+
+    # .bundle
+    "Bundle",
+
+    # .message
+    "Content",
+    "EncryptedKeyMaterial",
+    "KeyExchange",
+    "Message",
+
+    # .session_manager
+    "SessionManagerException",
+
+    "TrustDecisionFailed",
+    "StillUndecided",
+    "NoEligibleDevices",
+
+    "MessageNotForUs",
+    "SenderNotFound",
+    "SenderDistrusted",
+    "NoSession",
+    "PublicDataInconsistency",
+
+    "UnknownTrustLevel",
+    "UnknownNamespace",
+
+    "XMPPInteractionFailed",
+    "BundleUploadFailed",
+    "BundleDownloadFailed",
+    "BundleDeletionFailed",
+    "DeviceListUploadFailed",
+    "DeviceListDownloadFailed",
+    "MessageSendingFailed",
+
+    "SessionManager",
+
+    # .storage
+    "Just",
+    "Maybe",
+    "Nothing",
+    "NothingException",
+    "Storage",
+    "StorageException",
+
+    # .types
+    "DeviceInformation",
+    "JSONType",
+    "OMEMOException",
+    "TrustLevel"
+]

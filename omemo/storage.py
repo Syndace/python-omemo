@@ -1,9 +1,19 @@
 from abc import ABC, abstractmethod
 import base64
 import copy
-from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, cast
+from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union, cast
 
 from .types import JSONType, OMEMOException
+
+
+__all__ = [  # pylint: disable=unused-variable
+    "Just",
+    "Maybe",
+    "Nothing",
+    "NothingException",
+    "Storage",
+    "StorageException"
+]
 
 
 class StorageException(OMEMOException):
@@ -13,6 +23,7 @@ class StorageException(OMEMOException):
 
 
 ValueTypeT = TypeVar("ValueTypeT")
+DefaultTypeT = TypeVar("DefaultTypeT")
 MappedValueTypeT = TypeVar("MappedValueTypeT")
 
 
@@ -53,7 +64,7 @@ class Maybe(ABC, Generic[ValueTypeT]):
         """
 
     @abstractmethod
-    def maybe(self, default: ValueTypeT) -> ValueTypeT:
+    def maybe(self, default: DefaultTypeT) -> Union[ValueTypeT, DefaultTypeT]:
         """
         Args:
             default: The value to return if this is in instance of :class:`Nothing`.
@@ -104,7 +115,7 @@ class Nothing(Maybe[ValueTypeT]):
     def from_just(self) -> ValueTypeT:
         raise NothingException("Maybe.fromJust: Nothing")  # -- yuck
 
-    def maybe(self, default: ValueTypeT) -> ValueTypeT:
+    def maybe(self, default: DefaultTypeT) -> DefaultTypeT:
         return default
 
     def fmap(self, function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Nothing[MappedValueTypeT]":
@@ -137,7 +148,7 @@ class Just(Maybe[ValueTypeT]):
     def from_just(self) -> ValueTypeT:
         return copy.deepcopy(self.__value)
 
-    def maybe(self, default: ValueTypeT) -> ValueTypeT:
+    def maybe(self, default: DefaultTypeT) -> ValueTypeT:
         return copy.deepcopy(self.__value)
 
     def fmap(self, function: Callable[[ValueTypeT], MappedValueTypeT]) -> "Just[MappedValueTypeT]":
@@ -190,8 +201,6 @@ class Storage(ABC):
             StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
-        raise NotImplementedError("Create a subclass of Storage and implement `_load`.")
-
     @abstractmethod
     async def _store(self, key: str, value: JSONType) -> Any:
         """
@@ -208,8 +217,6 @@ class Storage(ABC):
             StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
-        raise NotImplementedError("Create a subclass of Storage and implement `_store`.")
-
     @abstractmethod
     async def _delete(self, key: str) -> Any:
         """
@@ -225,8 +232,6 @@ class Storage(ABC):
             StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
                 Do not raise if the key doesn't exist.
         """
-
-        raise NotImplementedError("Create a subclass of Storage and implement `_delete`.")
 
     async def load(self, key: str) -> Maybe[JSONType]:
         """
@@ -415,13 +420,3 @@ class Storage(ABC):
             raise TypeError(f"The value stored for key {key} is not a dict of {primitive}: {value}")
 
         return (await self.load(key)).fmap(check_type)
-
-
-__all__ = [  # pylint: disable=unused-variable
-    StorageException.__name__,
-    NothingException.__name__,
-    Maybe.__name__,
-    Nothing.__name__,
-    Just.__name__,
-    Storage.__name__
-]

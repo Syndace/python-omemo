@@ -37,6 +37,9 @@ Storage
 
 python-omemo uses a simple key-value storage to persist its state. This storage has to be provided to the library by implementing the :class:`~omemo.storage.Storage` interface. Refer to the API documentation of the :class:`~omemo.storage.Storage` interface for details.
 
+.. WARNING::
+    It might be tempting to offer a backup/restore flow for the OMEMO data. However, due to the forward secrecy of OMEMO, restoring old data results in broken sessions. It is strongly recommended to not include OMEMO data in backups, and to at most include it in migration flows that make sure that old data can't be restored over newer data.
+
 Setting it Up
 -------------
 

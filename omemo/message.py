@@ -2,6 +2,15 @@ from abc import ABC, abstractmethod
 from typing import NamedTuple, Optional, Set, Tuple
 
 
+__all__ = [  # pylint: disable=unused-variable
+    "Content",
+    "EncryptedKeyMaterial",
+    "KeyExchange",
+    "Message",
+    "PlainKeyMaterial"
+]
+
+
 class Content(ABC):
     """
     The encrypted content of an OMEMO-encrypted message. Contains for example the ciphertext, but can contain
@@ -9,7 +18,13 @@ class Content(ABC):
     """
 
 
-class KeyMaterial(ABC):
+class PlainKeyMaterial(ABC):
+    """
+    Key material which be used to decrypt the content. Defails are backend-specific.
+    """
+
+
+class EncryptedKeyMaterial(ABC):
     """
     Encrypted key material. When decrypted, the key material can in turn be used to decrypt the content. One
     collection of key material is included in an OMEMO-encrypted message per recipient. Defails are
@@ -74,12 +89,4 @@ class Message(NamedTuple):
     bare_jid: str
     device_id: int
     content: Content
-    keys: Set[Tuple[KeyMaterial, Optional[KeyExchange]]]
-
-
-__all__ = [  # pylint: disable=unused-variable
-    Content.__name__,
-    KeyExchange.__name__,
-    KeyMaterial.__name__,
-    Message.__name__
-]
+    keys: Set[Tuple[EncryptedKeyMaterial, Optional[KeyExchange]]]

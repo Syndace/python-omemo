@@ -5,6 +5,14 @@ import enum
 from typing import Dict, List, Mapping, NamedTuple, Optional, Set, Union
 
 
+__all__ = [  # pylint: disable=unused-variable
+    "DeviceInformation",
+    "JSONType",
+    "OMEMOException",
+    "TrustLevel"
+]
+
+
 class OMEMOException(Exception):
     """
     Parent type for all custom exceptions in this library.
@@ -52,11 +60,3 @@ class TrustLevel(enum.Enum):
 Primitives = Union[None, float, int, str, bool]
 JSONType1 = Union[Primitives, List[Primitives], Mapping[str, Primitives]]
 JSONType = Union[Primitives, List[JSONType1], Mapping[str, JSONType1]]
-
-
-__all__ = [  # pylint: disable=unused-variable
-    DeviceInformation.__name__,
-    "JSONType",
-    OMEMOException.__name__,
-    TrustLevel.__name__
-]

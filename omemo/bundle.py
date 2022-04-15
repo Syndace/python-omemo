@@ -1,6 +1,11 @@
 from abc import ABC, abstractmethod
 
 
+__all__ = [  # pylint: disable=unused-variable
+    "Bundle"
+]
+
+
 class Bundle(ABC):
     """
     The bundle of a device, containing the cryptographic information required for active session building.
@@ -57,8 +62,3 @@ class Bundle(ABC):
         Returns:
             An integer value representing this instance.
         """
-
-
-__all__ = [  # pylint: disable=unused-variable
-    Bundle.__name__
-]

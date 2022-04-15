@@ -1,7 +1,7 @@
 [![PyPI](https://img.shields.io/pypi/v/OMEMO.svg)](https://pypi.org/project/OMEMO/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/OMEMO.svg)](https://pypi.org/project/OMEMO/)
 [![Build Status](https://travis-ci.org/Syndace/python-omemo.svg?branch=stable)](https://travis-ci.org/Syndace/python-omemo)
-[![Documentation Status](https://readthedocs.org/projects/python-omemo/badge/?version=latest)](https://python-omemo.readthedocs.io/en/latest/?badge=latest)
+TODO: Add doc badge
 
 # python-omemo #
 

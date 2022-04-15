@@ -1,7 +1,24 @@
 from abc import ABC, abstractmethod
+import enum
 from typing import Optional
 
 from .message import KeyExchange
+
+
+__all__ = [  # pylint: disable=unused-variable
+    "Initiation",
+    "Session"
+]
+
+
+@enum.unique
+class Initiation(enum.Enum):
+    """
+    Enumeration identifying whether a session was built through active or passive session initiation.
+    """
+
+    ACTIVE = "ACTIVE"
+    PASSIVE = "PASSIVE"
 
 
 class Session(ABC):
@@ -48,54 +65,40 @@ class Session(ABC):
 
     @property
     @abstractmethod
-    def identity_key(self) -> bytes:
-        # pylint: disable=missing-function-docstring
-        pass
-
-    @property
-    @abstractmethod
-    def key_exchange(self) -> Optional[KeyExchange]:
+    def initiation(self) -> Initiation:
         """
-        This property allows associating some key exchange information with a session. This can either be the
-        key exchange information received during passive session building, or the key exchange information
-        created as part of active session building. The key exchange information is needed by the protocol for
-        stability reasons, to make sure that all sides can build the session, even if messages are lost or
-        received out of order.
-
         Returns:
-            The key exchange information associated with this session, or `None`.
-
-        Note:
-            The core library (i.e. :class:`~omemo.session_manager.SessionManager`) takes care of setting this
-            property, backend implementors only have to care about loading and storing the value in
-            :meth:`~omemo.backend.Backend.load_session` and :meth:`~omemo.backend.Backend.store_session`.
-        """
-
-    @abstractmethod
-    def set_key_exchange(self, value: Optional[KeyExchange]) -> None:
-        """
-        Override the key exchange information associated with this session. Setter for the `key_exchange`
-        property.
-
-        Args:
-            value: The key exchange information to associate with this session, or `None`.
-
-        Note:
-            The core library (i.e. :class:`~omemo.session_manager.SessionManager`) takes care of setting this
-            property, backend implementors only have to care about loading and storing the value in
-            :meth:`~omemo.backend.Backend.load_session` and :meth:`~omemo.backend.Backend.store_session`.
-
-        Note:
-            Not an actual setter, since mypy doesn't support abstract setters:
-            `GitHub issue <https://github.com/python/mypy/issues/4165>`__
+            Whether this session was actively initiated or passively.
         """
 
     @property
     @abstractmethod
-    def receiving_chain_length(self) -> int:
+    def confirmed(self) -> bool:
+        """
+        In case this session was built through active session initiation, this flag should indicate whether
+        the session initiation has been "confirmed", i.e. at least one message was received and decrypted
+        using this session.
+        """
+
+    @property
+    @abstractmethod
+    def key_exchange(self) -> KeyExchange:
+        """
+        Either the key exchange information received during passive session building, or the key exchange
+        information created as part of active session building. The key exchange information is needed by the
+        protocol for stability reasons, to make sure that all sides can build the session, even if messages
+        are lost or received out of order.
+
+        Returns:
+            The key exchange information associated with this session.
+        """
+
+    @property
+    @abstractmethod
+    def receiving_chain_length(self) -> Optional[int]:
         """
         Returns:
-            The length of the receiving chain, used for own staleness detection.
+            The length of the receiving chain, if it exists, used for own staleness detection.
         """
 
     @property
@@ -105,8 +108,3 @@ class Session(ABC):
         Returns:
             The length of the sending chain, used for staleness detection of other devices.
         """
-
-
-__all__ = [  # pylint: disable=unused-variable
-    Session.__name__
-]

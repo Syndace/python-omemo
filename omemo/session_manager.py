@@ -8,10 +8,38 @@ from typing import Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar
 from .backend import Backend
 from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
-from .message import KeyExchange, Message
-from .session import Session
+from .message import EncryptedKeyMaterial, KeyExchange, Message, PlainKeyMaterial
+from .session import Initiation, Session
 from .storage import NothingException, Storage
 from .types import DeviceInformation, OMEMOException, TrustLevel
+
+
+__all__ = [  # pylint: disable=unused-variable
+    "SessionManagerException",
+
+    "TrustDecisionFailed",
+    "StillUndecided",
+    "NoEligibleDevices",
+
+    "MessageNotForUs",
+    "SenderNotFound",
+    "SenderDistrusted",
+    "NoSession",
+    "PublicDataInconsistency",
+
+    "UnknownTrustLevel",
+    "UnknownNamespace",
+
+    "XMPPInteractionFailed",
+    "BundleUploadFailed",
+    "BundleDownloadFailed",
+    "BundleDeletionFailed",
+    "DeviceListUploadFailed",
+    "DeviceListDownloadFailed",
+    "MessageSendingFailed",
+
+    "SessionManager"
+]
 
 
 class SessionManagerException(OMEMOException):
@@ -193,8 +221,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         self.__own_bare_jid: str
         self.__own_device_id: int
         self.__undecided_trust_level_name: str
-        self.__max_num_per_session_skipped_keys: int
-        self.__max_num_per_message_skipped_keys: int
         self.__pre_key_refill_threshold: int
         self.__identity_key_pair: IdentityKeyPair
         self.__synchronizing: bool
@@ -207,8 +233,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         own_bare_jid: str,
         initial_own_label: Optional[str],
         undecided_trust_level_name: str,
-        max_num_per_session_skipped_keys: int = 1000,
-        max_num_per_message_skipped_keys: Optional[int] = None,
         signed_pre_key_rotation_period: int = 7 * 24 * 60 * 60,
         pre_key_refill_threshold: int = 99
     ) -> SessionManagerTypeT:
@@ -228,14 +252,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             undecided_trust_level_name: The name of the custom trust level to initialize the trust level with
                 when a new device is first encoutered. :meth:`_evaluate_custom_trust_level` should evaluate
                 this custom trust level to :attr:`~omemo.types.TrustLevel.UNDECIDED`.
-            max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep around per
-                session. Once the maximum is reached, old message keys are deleted to make space for newer
-                ones.
-            max_num_per_message_skipped_keys: The maximum number of skipped message keys to accept in a single
-                message. When set to ``None`` (the default), this parameter defaults to the per-session
-                maximum (i.e. the value of the ``max_num_per_session_skipped_keys`` parameter). This parameter
-                may only be 0 if the per-session maximum is 0, otherwise it must be a number between 1 and the
-                per-session maximum.
             signed_pre_key_rotation_period: The rotation period for the signed pre key, in seconds. The
                 rotation period is recommended to be between one week (the default) and one month.
             pre_key_refill_threshold: The number of pre keys that triggers a refill to 100. Defaults to 99,
@@ -283,18 +299,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         if len({ backend.namespace for backend in backends }) != len(backends):
             raise ValueError("Multiple backends that handle the same namespace were passed.")
 
-        if max_num_per_message_skipped_keys == 0 and max_num_per_session_skipped_keys != 0:
-            raise ValueError(
-                "The number of allowed per-message skipped keys must be nonzero if the number of per-session"
-                " skipped keys to keep is nonzero."
-            )
-
-        if max_num_per_message_skipped_keys or 0 > max_num_per_session_skipped_keys:
-            raise ValueError(
-                "The number of allowed per-message skipped keys must not be greater than the number of"
-                " per-session skipped keys to keep."
-            )
-
         if not 25 <= pre_key_refill_threshold <= 99:
             raise ValueError("Pre key refill threshold out of allowed range.")
 
@@ -307,8 +311,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             f"\town_bare_jid={own_bare_jid}\n"
             f"\tinitial_own_label={initial_own_label}\n"
             f"\tundecided_trust_level_name={undecided_trust_level_name}\n"
-            f"\tmax_num_per_session_skipped_keys={max_num_per_session_skipped_keys}\n"
-            f"\tmax_num_per_message_skipped_keys={max_num_per_message_skipped_keys}\n"
             f"\tsigned_pre_key_rotation_period={signed_pre_key_rotation_period}\n"
             f"\tpre_key_refill_threshold={pre_key_refill_threshold}"
         )
@@ -318,9 +320,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         self.__storage = storage
         self.__own_bare_jid = own_bare_jid
         self.__undecided_trust_level_name = undecided_trust_level_name
-        self.__max_num_per_session_skipped_keys = max_num_per_session_skipped_keys
-        self.__max_num_per_message_skipped_keys = max_num_per_session_skipped_keys if \
-            max_num_per_message_skipped_keys is None else max_num_per_message_skipped_keys
         self.__pre_key_refill_threshold = pre_key_refill_threshold
         self.__identity_key_pair = await IdentityKeyPair.get(storage)
         self.__synchronizing = True
@@ -657,8 +656,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             This method must be able to handle at least the namespaces of all loaded backends.
         """
 
-        raise NotImplementedError("Create a subclass of SessionManager and implement `_upload_bundle`.")
-
     @staticmethod
     @abstractmethod
     async def _download_bundle(namespace: str, bare_jid: str, device_id: int) -> Bundle:
@@ -685,8 +682,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         Note:
             This method must be able to handle at least the namespaces of all loaded backends.
         """
-
-        raise NotImplementedError("Create a subclass of SessionManager and implement `_download_bundle`.")
 
     @staticmethod
     @abstractmethod
@@ -716,8 +711,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             the backend is not currently loaded.
         """
 
-        raise NotImplementedError("Create a subclass of SessionManager and implement `_delete_bundle`.")
-
     @staticmethod
     @abstractmethod
     async def _upload_device_list(namespace: str, device_list: Dict[int, Optional[str]]) -> Any:
@@ -744,8 +737,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             This method must be able to handle at least the namespaces of all loaded backends.
         """
 
-        raise NotImplementedError("Create a subclass of SessionManager and implement `_upload_device_list`.")
-
     @staticmethod
     @abstractmethod
     async def _download_device_list(namespace: str, bare_jid: str) -> Dict[int, Optional[str]]:
@@ -771,10 +762,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         Note:
             This method must be able to handle at least the namespaces of all loaded backends.
         """
-
-        raise NotImplementedError(
-            "Create a subclass of SessionManager and implement `_download_device_list`."
-        )
 
     @staticmethod
     @abstractmethod
@@ -804,10 +791,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             to core trust levels, without any side effects.
         """
 
-        raise NotImplementedError(
-            "Create a subclass of SessionManager and implement `_evaluate_custom_trust_level`."
-        )
-
     @abstractmethod
     async def _make_trust_decision(self, undecided: Set[DeviceInformation]) -> Any:
         """
@@ -831,8 +814,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             still evaluate to the undecided trust level after the call, the encryption will fail with an
             exception. See :meth:`encrypt` for details.
         """
-
-        raise NotImplementedError("Create a subclass of SessionManager and implement `_make_trust_decision`.")
 
     @staticmethod
     @abstractmethod
@@ -862,8 +843,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             MessageSendingFailed: if for any reason the message could not be sent. Feel free to raise a
                 subclass instead.
         """
-
-        raise NotImplementedError("Create a subclass of SessionManager and implement `_send_message`.")
 
     ##########################
     # device list management #
@@ -1099,19 +1078,32 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         for backend in self.__backends:
             if backend.namespace in device.namespaces:
                 try:
-                    session, key_exchange = await backend.build_session_active(
+                    # Prepare an empty message
+                    content, plain_key_material = await backend.encrypt_empty()
+
+                    # Build a new session to replace the old one
+                    session, encrypted_key_material = await backend.build_session_active(
                         device.bare_jid,
                         device.device_id,
                         await self._download_bundle(
                             backend.namespace,
                             device.bare_jid,
                             device.device_id
-                        )
+                        ),
+                        plain_key_material
                     )
-                    session.set_key_exchange(key_exchange)
 
                     # Send the notification message
-                    await self.__send_empty_message(backend, session)
+                    await self._send_message(Message(
+                        backend.namespace,
+                        self.__own_bare_jid,
+                        self.__own_device_id,
+                        content,
+                        { (encrypted_key_material, session.key_exchange) }
+                    ))
+
+                    # Store the replacement
+                    await backend.store_session(session)
                 except OMEMOException as e:
                     logging.getLogger(SessionManager.LOG_TAG).warning(
                         f"Session replacement failed for namespace {backend.namespace}.",
@@ -1477,13 +1469,18 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             f" {session.namespace}) and backend {backend} ({backend.namespace})."
         )
 
-        content, key_material = await backend.encrypt_empty(session)
+        content, plain_key_material = await backend.encrypt_empty()
+        encrypted_key_material = await backend.encrypt_key_material(session, plain_key_material)
         await self._send_message(Message(
             backend.namespace,
             self.__own_bare_jid,
             self.__own_device_id,
             content,
-            { (key_material, session.key_exchange) }
+            { (encrypted_key_material, (
+                session.key_exchange
+                if session.initiation is Initiation.ACTIVE and not session.confirmed
+                else None
+            )) }
         ))
         await backend.store_session(session)
 
@@ -1716,49 +1713,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 " the loaded backends."
             )
 
-        async def load_or_create_session(
-            backend: Backend[PlaintextTypeT],
-            device: DeviceInformation
-        ) -> Session:
-            """
-            Helper to load a session for a device or create it if it doesn't exist.
-
-            Args:
-                backend: The backend to load/create this session with.
-                device: The device to load/create this session with.
-
-            Returns:
-                The loaded or newly created session.
-
-            Raises:
-                BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
-                KeyExchangeFailed: in case there is an error during the key exchange required for session
-                    building. Forwarded from :meth:`build_session_active`.
-            """
-
-            session = await backend.load_session(device.bare_jid, device.device_id)
-            logging.getLogger(SessionManager.LOG_TAG).debug(f"Session for device {device}: {session}")
-            if session is None:
-                try:
-                    logging.getLogger(SessionManager.LOG_TAG).debug("Using cached bundle.")
-                    bundle = next(filter(lambda bundle: (
-                        bundle.namespace == backend.namespace
-                        and bundle.bare_jid == device.bare_jid
-                        and bundle.device_id == device.device_id
-                    ), bundle_cache))
-                except StopIteration:
-                    logging.getLogger(SessionManager.LOG_TAG).debug("Downloading bundle.")
-                    bundle = await self._download_bundle(backend.namespace, device.bare_jid, device.device_id)
-
-                session, key_exchange = await backend.build_session_active(
-                    device.bare_jid,
-                    device.device_id,
-                    bundle
-                )
-                session.set_key_exchange(key_exchange)
-
-            return session
-
         # Encrypt the plaintext once per backend
         # TODO: Think about how to handle failures
         # - Device-scope failures: bundle download and key exchange failures
@@ -1780,26 +1734,53 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             if len(backend_devices) == 0:
                 continue
 
-            # Prepare the sessions
-            sessions = { await load_or_create_session(backend, device) for device in backend_devices }
+            # Encrypt the message content symmetrically
+            content, plain_key_material = await backend.encrypt_plaintext(backend.serialize_plaintext(
+                plaintext
+            ))
 
-            # Perform the encryption, which is mostly backend-specific.
-            content, key_materials = await backend.encrypt(sessions, backend.serialize_plaintext(plaintext))
+            keys: Set[Tuple[EncryptedKeyMaterial, Optional[KeyExchange]]] = set()
 
-            # Build pairs of key material and key exchange information
-            keys = { (
-                next(key_material for key_material in key_materials if (
-                    key_material.bare_jid == session.bare_jid and key_material.device_id == session.device_id
-                )),
-                session.key_exchange
-            ) for session in sessions }
+            for device in backend_devices:
+                # Attempt to load the session
+                session = await backend.load_session(device.bare_jid, device.device_id)
+                logging.getLogger(SessionManager.LOG_TAG).debug(f"Session for device {device}: {session}")
+
+                # Prepare the cached bundle in case it is needed for session building
+                bundle = next((bundle for bundle in bundle_cache if (
+                    bundle.namespace == backend.namespace
+                    and bundle.bare_jid == device.bare_jid
+                    and bundle.device_id == device.device_id
+                )), None)
+                logging.getLogger(SessionManager.LOG_TAG).debug(f"Cached bundle: {bundle}")
+
+                # Build the session if necessary, and encrypt the key material
+                session, encrypted_key_material = await backend.build_session_active(
+                    device.bare_jid,
+                    device.device_id,
+                    await self._download_bundle(
+                        backend.namespace,
+                        device.bare_jid,
+                        device.device_id
+                    ) if bundle is None else bundle,
+                    plain_key_material
+                ) if session is None else (session, await backend.encrypt_key_material(
+                    session,
+                    plain_key_material
+                ))
+
+                # Extract the data that needs to be sent to the other party
+                keys.add((encrypted_key_material, (
+                    session.key_exchange
+                    if session.initiation is Initiation.ACTIVE and not session.confirmed
+                    else None
+                )))
+
+                # Persist the session as the final step
+                await backend.store_session(session)
 
             # Build the message from content, key material and key exchange information
             messages.add(Message(backend.namespace, self.__own_bare_jid, self.__own_device_id, content, keys))
-
-            # Persist the sessions as the final step
-            for session in sessions:
-                await backend.store_session(session)
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Message encrypted: {messages}")
 
@@ -1864,7 +1845,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         # Check if there is key material for us
         try:
-            key_material, key_exchange = next(filter(
+            encrypted_key_material, key_exchange = next(filter(
                 lambda k: k[0].bare_jid == self.__own_bare_jid and k[0].device_id == self.__own_device_id,
                 message.keys
             ))
@@ -1873,7 +1854,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             raise MessageNotForUs("The message to decrypt does not contain key material for us.")
 
         logging.getLogger(SessionManager.LOG_TAG).debug(
-            f"Key material: {key_material}, key exchange: {key_exchange}"
+            f"Encrypted key material: {encrypted_key_material}, key exchange: {key_exchange}"
         )
 
         # Check whether the sending device is known
@@ -1914,18 +1895,25 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 "The identity key corresponding to the sending device is explicitly distrusted."
             )
 
-        # Handle the key exchange if available
-        async def load_session(backend: Backend[PlaintextTypeT], device: DeviceInformation) -> Session:
+        async def decrypt_key_material(
+            backend: Backend[PlaintextTypeT],
+            device: DeviceInformation,
+            encrypted_key_material: EncryptedKeyMaterial
+        ) -> Tuple[Session, PlainKeyMaterial]:
             """
+            Load an existing session and use it to decrypt some key material.
+
             Args:
                 backend: The backend to load the session from.
                 device: The device whose session to load.
+                encrypted_key_material: The key material to decrypt.
 
             Returns:
-                The session.
+                The session and the decrypted key material.
 
             Raises:
                 NoSession: in case there is no session with the device in storage.
+                TODO
             """
 
             # If there is no key exchange, a session has to exist and should be loadable
@@ -1935,21 +1923,30 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     "There is no session with the sending device, and key exchange information required to"
                     " build a new session is not included in the message."
                 )
-            return session
+
+            plain_key_material = await backend.decrypt_key_material(session, encrypted_key_material)
+
+            return session, plain_key_material
 
         async def handle_key_exchange(
             backend: Backend[PlaintextTypeT],
             device: DeviceInformation,
-            key_exchange: KeyExchange
-        ) -> Session:
+            key_exchange: KeyExchange,
+            encrypted_key_material: EncryptedKeyMaterial
+        ) -> Tuple[Session, PlainKeyMaterial]:
             """
+            Handle a key exchange by building a new session if necessary, and decrypt some key material in the
+            process.
+
             Args:
                 backend: The backend to handle the key exchange with.
                 device: The device which sent the key exchange information.
                 key_exchange: The key exchange information.
+                encrypted_key_material: The key material to decrypt.
 
             Returns:
-                A session that was built using the key exchange information, either now or in the past.
+                A session that was built using the key exchange information, either now or in the past,
+                and the decrypted key material.
 
             Raises:
                 PublicDataInconsistency: if the identity key that's part of the key exchange information
@@ -1957,6 +1954,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 KeyExchangeFailed: in case a new session needed to be built, and there was an error during the
                     key exchange that's part of the session building. Forwarded from
                     :meth:`~omemo.backend.Backend.build_session_passive`.
+                TODO
             """
 
             # Check whether the identity key matches the one we know
@@ -1972,7 +1970,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             if session is not None:
                 logging.getLogger(SessionManager.LOG_TAG).debug("Key exchange present, but session exists.")
                 # If the key exchange would build a new session, treat this session as non-existent
-                if session.key_exchange == key_exchange:
+                if session.initiation is Initiation.PASSIVE and session.key_exchange == key_exchange:
                     logging.getLogger(SessionManager.LOG_TAG).debug("Key exchange builds existing session.")
                 else:
                     logging.getLogger(SessionManager.LOG_TAG).warning(
@@ -1980,36 +1978,37 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                     )
                     session = None
 
-            # If a new session needs to be built, do so
-            if session is None:
-                session = await backend.build_session_passive(device.bare_jid, device.device_id, key_exchange)
-                session.set_key_exchange(key_exchange)
+            # If a new session needs to be built, do so.
+            session, plain_key_material = await backend.build_session_passive(
+                device.bare_jid,
+                device.device_id,
+                key_exchange,
+                encrypted_key_material
+            ) if session is None else (session, await backend.decrypt_key_material(
+                session,
+                encrypted_key_material
+            ))
 
-            return session
+            # If an existing session is used, and the session was built through active session initiation, it
+            # should now be flagged as confirmed.
+            return session, plain_key_material
 
         # Inline if for type safety and pylint satisfaction.
-        session = (
-            await load_session(backend, device)
+        session, plain_key_material = (
+            await decrypt_key_material(backend, device, encrypted_key_material)
             if key_exchange is None else
-            await handle_key_exchange(backend, device, key_exchange)
+            await handle_key_exchange(backend, device, key_exchange, encrypted_key_material)
         )
 
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Plain key material: {plain_key_material}")
+
         # Decrypt the message
-        plaintext = backend.deserialize_plaintext(await backend.decrypt(
-            session,
+        plaintext = backend.deserialize_plaintext(await backend.decrypt_plaintext(
             message.content,
-            key_material,
-            self.__max_num_per_session_skipped_keys,
-            self.__max_num_per_message_skipped_keys
+            plain_key_material
         ))
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Message decrypted: {plaintext}")
-
-        # Key exchanges are sent with encrypted messages for new sessions, until it is confirmed that the
-        # other party has received at least one of them. Once a new session is used to decrypt a message, the
-        # other party is confirmed to have received at least one of the key exchanges, so the data can be
-        # safely deleted.
-        session.set_key_exchange(None)
 
         # Persist the session following successful decryption
         await backend.store_session(session)
@@ -2042,7 +2041,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         # Send an empty message if necessary to avoid staleness and to "complete" the handshake in case this
         # was a key exchange
-        if key_exchange is not None or session.receiving_chain_length > self.__class__.STALENESS_MAGIC_NUMBER:
+        if (
+            key_exchange is not None
+            or (session.receiving_chain_length or 0) > self.__class__.STALENESS_MAGIC_NUMBER
+        ):
             logging.getLogger(SessionManager.LOG_TAG).debug(
                 "Sending/queueing empty message for session completion or staleness prevention."
             )
@@ -2069,31 +2071,3 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         # Return the plaintext and information about the sending device
         return (plaintext, device)
-
-
-__all__ = [  # pylint: disable=unused-variable
-    SessionManagerException.__name__,
-
-    TrustDecisionFailed.__name__,
-    StillUndecided.__name__,
-    NoEligibleDevices.__name__,
-
-    MessageNotForUs.__name__,
-    SenderNotFound.__name__,
-    SenderDistrusted.__name__,
-    NoSession.__name__,
-    PublicDataInconsistency.__name__,
-
-    UnknownTrustLevel.__name__,
-    UnknownNamespace.__name__,
-
-    XMPPInteractionFailed.__name__,
-    BundleUploadFailed.__name__,
-    BundleDownloadFailed.__name__,
-    BundleDeletionFailed.__name__,
-    DeviceListUploadFailed.__name__,
-    DeviceListDownloadFailed.__name__,
-    MessageSendingFailed.__name__,
-
-    SessionManager.__name__
-]

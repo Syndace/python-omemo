@@ -11,6 +11,13 @@ from xeddsa.bindings import Ed25519Pub, Priv, Seed
 from .storage import NothingException, Storage
 
 
+__all__ = [  # pylint: disable=unused-variable
+    "IdentityKeyPair",
+    "IdentityKeyPairPriv",
+    "IdentityKeyPairSeed"
+]
+
+
 class IdentityKeyPair(ABC):
     """
     The identity key pair associated to this device, shared by all backends.
@@ -186,10 +193,3 @@ class IdentityKeyPairPriv(IdentityKeyPair):
         """
 
         return self.__priv
-
-
-__all__ = [  # pylint: disable=unused-variable
-    IdentityKeyPair.__name__,
-    IdentityKeyPairSeed.__name__,
-    IdentityKeyPairPriv.__name__
-]
