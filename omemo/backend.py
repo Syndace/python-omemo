@@ -203,10 +203,11 @@ class Backend(ABC, Generic[PlaintextTypeT]):
 
         Returns:
             The newly built session, the encrypted key material and the key exchange information required by
-            the other device to complete the passive part of session building. The :meth:`initiation` property
-            of the returned session must return :var:`Initiation.ACTIVE`. The :meth:`key_exchange` property of
-            the returned session must return the information required by the other party to complete its part
-            of the key exchange.
+            the other device to complete the passive part of session building. The
+            :meth:`~omemo.session.Session.initiation` property of the returned session must return
+            :attr:`~omemo.session.Initiation.ACTIVE`. The :meth:`~omemo.session.Session.key_exchange` property
+            of the returned session must return the information required by the other party to complete its
+            part of the key exchange.
 
         Raises:
             KeyExchangeFailed: in case of failure related to the key exchange required for session building.
