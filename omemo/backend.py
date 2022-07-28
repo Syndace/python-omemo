@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Optional, Tuple, TypeVar
+from typing import Any, Optional, Tuple
 
 from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
@@ -41,18 +41,11 @@ class TooManySkippedMessageKeys(BackendException):
     """
 
 
-PlaintextTypeT = TypeVar("PlaintextTypeT")
-
-
-class Backend(ABC, Generic[PlaintextTypeT]):
+class Backend(ABC):
     """
     The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
     version to the core library. Refer to the documentation page :ref:`writing_a_backend` for details about
     the concept and a guide on building your own backend.
-
-    The plaintext generic can be used to choose a convenient type for the plaintext passed/received from the
-    encrypt/decrypt methods. This can for example be a stanze type for backend implementations utilizing
-    `SCE <https://xmpp.org/extensions/xep-0420.html>`__.
 
     Warning:
         All parameters must be treated as immutable unless explicitly noted otherwise.
@@ -255,26 +248,12 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         """
 
     @abstractmethod
-    def serialize_plaintext(self, plaintext: PlaintextTypeT) -> bytes:
-        """
-        Args:
-            plaintext: The plaintext to serialize.
-
-        Returns:
-            The plaintext serialized to bytes.
-
-        Note:
-            Refer to the documentation of the :class:`~omemo.backend.Backend` class for information about the
-            ``PlaintextType`` type.
-        """
-
-    @abstractmethod
     async def encrypt_plaintext(self, plaintext: bytes) -> Tuple[Content, PlainKeyMaterial]:
         """
         Encrypt some plaintext symmetrically.
 
         Args:
-            plaintext: The serialized plaintext to encrypt symmetrically.
+            plaintext: The plaintext to encrypt symmetrically.
 
         Returns:
             The encrypted plaintext aka content, as well as the key material needed to decrypt it.
@@ -308,20 +287,6 @@ class Backend(ABC, Generic[PlaintextTypeT]):
         """
 
     @abstractmethod
-    def deserialize_plaintext(self, plaintext: bytes) -> PlaintextTypeT:
-        """
-        Args:
-            plaintext: The serialized plaintext as bytes.
-
-        Returns:
-            The deserialized plaintext.
-
-        Note:
-            Refer to the documentation of the :class:`~omemo.backend.Backend` class for information about the
-            ``PlaintextType`` type.
-        """
-
-    @abstractmethod
     async def decrypt_plaintext(self, content: Content, plain_key_material: PlainKeyMaterial) -> bytes:
         """
         Decrypt some symmetrically encrypted plaintext.
@@ -331,7 +296,7 @@ class Backend(ABC, Generic[PlaintextTypeT]):
             plain_key_material: The key material to decrypt with.
 
         Returns:
-            The decrypted, yet serialized plaintext.
+            The decrypted plaintext.
 
         Raises:
             TODO

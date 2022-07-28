@@ -23,7 +23,6 @@ install:
 - python -m pip install .
 
 script:
-- export MYPYPATH=stubs/
 - if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then python -m mypy --strict omemo/; fi
 - if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then python -m mypy --strict tests/; fi
 - if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then python -m mypy --strict setup.py; fi

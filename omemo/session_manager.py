@@ -3,7 +3,7 @@ import base64
 import itertools
 import logging
 import secrets
-from typing import Any, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar, cast
 
 from .backend import Backend
 from .bundle import Bundle
@@ -175,22 +175,16 @@ class MessageSendingFailed(XMPPInteractionFailed):
     """
 
 
-SessionManagerTypeT = TypeVar("SessionManagerTypeT", bound="SessionManager[Any]")
-PlaintextTypeT = TypeVar("PlaintextTypeT")
+SessionManagerTypeT = TypeVar("SessionManagerTypeT", bound="SessionManager")
 
 
-class SessionManager(ABC, Generic[PlaintextTypeT]):
+class SessionManager(ABC):
     """
     The core of python-omemo. Manages your own key material and bundle, device lists, sessions with other
     users and much more, all while being flexibly usable with different backends and transparenlty maintaining
     a level of compatibility between the backends that allows you to maintain a single identity throughout all
     of them. Easy APIs are provided to handle common use-cases of OMEMO-enabled XMPP clients, with one of the
-    primary goals being strict type safety. The plaintext generic can be used to choose a convenient type for
-    the plaintext passed/received from the encrypt/decrypt methods. Which type to choose depends on the loaded
-    backends. For example, if only one backend is loaded which uses
-    `SCE <https://xmpp.org/extensions/xep-0420.html>`__, a good choice for the plaintext type might be some
-    XML/stanza structure. For other backends, Pythons `str` type might be a better choice. If multiple
-    backends are loaded, a common ground must be chosen.
+    primary goals being strict type safety.
 
     Note:
         Most methods can raise :class:`~omemo.storage.StorageException` in addition to those exceptions
@@ -216,7 +210,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
     def __init__(self) -> None:
         # Just the type definitions here
-        self.__backends: List[Backend[PlaintextTypeT]]
+        self.__backends: List[Backend]
         self.__storage: Storage
         self.__own_bare_jid: str
         self.__own_device_id: int
@@ -228,7 +222,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
     @classmethod
     async def create(
         cls: Type[SessionManagerTypeT],
-        backends: List[Backend[PlaintextTypeT]],
+        backends: List[Backend],
         storage: Storage,
         own_bare_jid: str,
         initial_own_label: Optional[str],
@@ -1452,7 +1446,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
     # en- and decryption #
     ######################
 
-    async def __send_empty_message(self, backend: Backend[PlaintextTypeT], session: Session) -> None:
+    async def __send_empty_message(self, backend: Backend, session: Session) -> None:
         """
         Internal helper to send an empty message for ratchet forwarding.
 
@@ -1487,7 +1481,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
     async def encrypt(
         self,
         bare_jids: Set[str],
-        plaintext: PlaintextTypeT,
+        plaintext: Dict[str, bytes],
         backend_priority_order: Optional[List[str]] = None
     ) -> Set[Message]:
         """
@@ -1495,7 +1489,11 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         Args:
             bare_jids: The bare JIDs of the intended recipients.
-            plaintext: The plaintext to encrypt for the recipients. Details depend on the backend(s).
+            plaintext: The plaintext to encrypt for the recipients. Since different backends may use different
+                kinds of plaintext, for example just the message body versus a whole stanza using
+                `Stanza Content Encryption <https://xmpp.org/extensions/xep-0420.html>`__, this parameter is a
+                dictionary, where the keys are backend namespaces and the values are the plaintext for each
+                specific backend. The plaintext has to be supplied for each backend.
             backend_priority_order: If a recipient device supports multiple versions of OMEMO, this parameter
                 decides which version to prioritize. If ``None`` is supplied, the order of backends as passed
                 to :meth:`create` is assumed as the order of priority. If a list of namespaces is supplied,
@@ -1523,10 +1521,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         Note:
             The own JID is implicitly added to the set of recipients, there is no need to list it manually.
-
-        Note:
-            Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
-            information about the ``PlaintextTypeT`` type.
         """
 
         logging.getLogger(SessionManager.LOG_TAG).debug(
@@ -1735,9 +1729,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
                 continue
 
             # Encrypt the message content symmetrically
-            content, plain_key_material = await backend.encrypt_plaintext(backend.serialize_plaintext(
-                plaintext
-            ))
+            content, plain_key_material = await backend.encrypt_plaintext(plaintext[backend.namespace])
 
             keys: Set[Tuple[EncryptedKeyMaterial, Optional[KeyExchange]]] = set()
 
@@ -1786,7 +1778,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         return messages
 
-    async def decrypt(self, message: Message) -> Tuple[PlaintextTypeT, DeviceInformation]:
+    async def decrypt(self, message: Message) -> Tuple[bytes, DeviceInformation]:
         """
         Decrypt a message.
 
@@ -1826,10 +1818,6 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
 
         Note:
             May send empty OMEMO messages to "complete" key exchanges or prevent staleness.
-
-        Note:
-            Refer to the documentation of the :class:`~omemo.session_manager.SessionManager` class for
-            information about the ``PlaintextTypeT`` type.
         """
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Decrypting message: {message}")
@@ -1896,7 +1884,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             )
 
         async def decrypt_key_material(
-            backend: Backend[PlaintextTypeT],
+            backend: Backend,
             device: DeviceInformation,
             encrypted_key_material: EncryptedKeyMaterial
         ) -> Tuple[Session, PlainKeyMaterial]:
@@ -1929,7 +1917,7 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
             return session, plain_key_material
 
         async def handle_key_exchange(
-            backend: Backend[PlaintextTypeT],
+            backend: Backend,
             device: DeviceInformation,
             key_exchange: KeyExchange,
             encrypted_key_material: EncryptedKeyMaterial
@@ -2003,10 +1991,10 @@ class SessionManager(ABC, Generic[PlaintextTypeT]):
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Plain key material: {plain_key_material}")
 
         # Decrypt the message
-        plaintext = backend.deserialize_plaintext(await backend.decrypt_plaintext(
+        plaintext = await backend.decrypt_plaintext(
             message.content,
             plain_key_material
-        ))
+        )
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Message decrypted: {plaintext}")
 

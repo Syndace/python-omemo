@@ -45,27 +45,21 @@ Setting it Up
 
 With the backends selected, the trust system chosen and the storage implementation prepared, the library can be set up.
 
-This is done in four steps:
+This is done in three steps:
 
-1. Choose the plaintext type
-2. Subclass abstract backend classes
-3. Subclass abstract core library classes
-4. Instantiate the :class:`~omemo.session_manager.SessionManager`
-
-The Plaintext Type
-^^^^^^^^^^^^^^^^^^
-
-The type for plaintext as passed into encryption methods and received from decryption methods is generic in python-omemo, since the most convenient plaintext type might differ between backends and applications. For example, OMEMO under the `urn:xmpp:omemo:2` namespace uses `SCE <https://xmpp.org/extensions/xep-0420.html>`_, which means that the input to encryption is a whole XMPP stanza. Meanwhile, OMEMO under the legacy `eu.siacs.conversations.axolotl` namespace can only handle message bodies, which means that the most convenient plaintext type is a simple Python string. When multiple backends with differing preferred plaintext types are loaded at the same time, a common ground must be chosen. This is what the plaintext generic is for.
+1. Subclass abstract backend classes
+2. Subclass abstract core library classes
+3. Instantiate the :class:`~omemo.session_manager.SessionManager`
 
 Backend Subclassing
 ^^^^^^^^^^^^^^^^^^^
 
-Backend classes are generic over the plaintext type as explained above. Create subclasses of the respective backend classes, set the plaintext generic and implement the :meth:`~omemo.backend.Backend.serialize_plaintext` and :meth:`~omemo.backend.Backend.deserialize_plaintext` methods accordingly. Some backends may offer implementations for common plaintext types, so you don't have to create your own. Refer to the docs of the respective backends for setup instructions.
+Create subclasses of the respective backend classes. Some backends may require you to implement abstract methods, others may not. Refer to the docs of the respective backends for setup instructions.
 
 Core Library Subclassing
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-As the final preparation step, create a subclass of :class:`~omemo.session_manager.SessionManager`, using the same plaintext generic type as for all backends. There are various abstract methods for interaction with XMPP (device lists, bundles etc.) and trust management that you have to fill out to integrate the library with your client/framework. The API documentation of the :class:`~omemo.session_manager.SessionManager` class should contain the necessary information.
+Create a subclass of :class:`~omemo.session_manager.SessionManager`. There are various abstract methods for interaction with XMPP (device lists, bundles etc.) and trust management that you have to fill out to integrate the library with your client/framework. The API documentation of the :class:`~omemo.session_manager.SessionManager` class should contain the necessary information.
 
 Instantiate the Library
 ^^^^^^^^^^^^^^^^^^^^^^^
