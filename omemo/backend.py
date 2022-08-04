@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional, Tuple
 
 from .bundle import Bundle
-from .identity_key_pair import IdentityKeyPair
 from .message import Content, EncryptedKeyMaterial, PlainKeyMaterial, KeyExchange
 from .session import Session
 from .types import OMEMOException
@@ -80,6 +79,10 @@ class Backend(ABC):
                 ...
 
         Doing so tells mypy how to deal with the situation. These assertions should never fail.
+
+    Note:
+        For backend implementors: you can access the identity key pair at any time via
+        :meth:`omemo.identity_key_pair.IdentityKeyPair.get`.
     """
 
     def __init__(
@@ -341,13 +344,10 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def rotate_signed_pre_key(self, identity_key_pair: IdentityKeyPair) -> Any:
+    async def rotate_signed_pre_key(self) -> Any:
         """
         Rotate the signed pre key. Keep the old signed pre key around for one additional rotation period, i.e.
         until this method is called again.
-
-        Args:
-            identity_key_pair: The identity key pair of this device, to sign the new signed pre key with.
 
         Returns:
             Anything, the return value is ignored.
@@ -412,12 +412,11 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def bundle(self, bare_jid: str, device_id: int, identity_key: bytes) -> Bundle:
+    async def bundle(self, bare_jid: str, device_id: int) -> Bundle:
         """
         Args:
             bare_jid: The bare JID of this XMPP account, to be included in the bundle.
             device_id: The id of this device, to be included in the bundle.
-            identity_key: The identity key assigned to this device, to be included in the bundle.
 
         Returns:
             The bundle containing public information about the cryptographic state of this backend.
