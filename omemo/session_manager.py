@@ -1791,6 +1791,8 @@ class SessionManager(ABC):
                 device, which can affect the trust status.
             MessageSendingFailed: if an attempt to send an empty OMEMO message failed. Forwarded from
                 :meth:`_send_message`.
+            DecryptionFailed: in case of backend-specific failures during decryption. Forwarded from the
+                respective backend implementation.
 
         Warning:
             Do **NOT** implement any automatic reaction to decryption failures, those automatic reactions are
@@ -1885,7 +1887,8 @@ class SessionManager(ABC):
 
             Raises:
                 NoSession: in case there is no session with the device in storage.
-                TODO
+                DecryptionFailed: in case of backend-specific failures during decryption. Forwarded from
+                    :meth:`~omemo.backend.Backend.decrypt_key_material`.
             """
 
             # If there is no key exchange, a session has to exist and should be loadable
@@ -1926,7 +1929,8 @@ class SessionManager(ABC):
                 KeyExchangeFailed: in case a new session needed to be built, and there was an error during the
                     key exchange that's part of the session building. Forwarded from
                     :meth:`~omemo.backend.Backend.build_session_passive`.
-                TODO
+                DecryptionFailed: in case of backend-specific failures during decryption. Forwarded from the
+                    respective backend implementation.
             """
 
             # Check whether the identity key matches the one we know

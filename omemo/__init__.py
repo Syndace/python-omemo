@@ -1,7 +1,7 @@
 from .version import __version__
 from .project import project
 
-from .backend import Backend, BackendException, KeyExchangeFailed, TooManySkippedMessageKeys
+from .backend import Backend, BackendException, DecryptionFailed, KeyExchangeFailed, TooManySkippedMessageKeys
 from .bundle import Bundle
 from .message import Content, EncryptedKeyMaterial, KeyExchange, Message
 
@@ -48,6 +48,7 @@ __all__ = [  # pylint: disable=unused-variable
     # .backend
     "Backend",
     "BackendException",
+    "DecryptionFailed",
     "KeyExchangeFailed",
     "TooManySkippedMessageKeys",
 

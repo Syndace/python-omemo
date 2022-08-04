@@ -10,6 +10,7 @@ from .types import OMEMOException
 __all__ = [  # pylint: disable=unused-variable
     "Backend",
     "BackendException",
+    "DecryptionFailed",
     "KeyExchangeFailed",
     "TooManySkippedMessageKeys"
 ]
@@ -18,6 +19,12 @@ __all__ = [  # pylint: disable=unused-variable
 class BackendException(OMEMOException):
     """
     Parent type for all exceptions specific to :class:`Backend`.
+    """
+
+
+class DecryptionFailed(BackendException):
+    """
+    Raised by various methods of :class:`Backend` in case of backend-specific failures during decryption.
     """
 
 
@@ -241,6 +248,7 @@ class Backend(ABC):
 
         Raises:
             KeyExchangeFailed: in case of failure related to the key exchange required for session building.
+            DecryptionFailed: in case of backend-specific failures during decryption of the initial message.
 
         Warning:
             This method may be called for a device which already has a session. In that case, the original
@@ -302,7 +310,7 @@ class Backend(ABC):
             The decrypted plaintext.
 
         Raises:
-            TODO
+            DecryptionFailed: in case of backend-specific failures during decryption.
         """
 
     @abstractmethod
@@ -324,7 +332,7 @@ class Backend(ABC):
         Raises:
             TooManySkippedMessageKeys: if the number of message keys skipped by this message exceeds the upper
                 limit enforced by :meth:`max_num_per_message_skipped_keys`.
-            TODO
+            DecryptionFailed: in case of backend-specific failures during decryption.
 
         Warning:
             Make sure to respect the values of :meth:`max_num_per_session_skipped_keys` and
