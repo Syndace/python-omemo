@@ -367,7 +367,7 @@ class SessionManager(ABC):
 
             # Publish the bundles for all backends
             for backend in self.__backends:
-                await self._upload_bundle(await backend.bundle(self.__own_bare_jid, self.__own_device_id))
+                await self._upload_bundle(await backend.get_bundle(self.__own_bare_jid, self.__own_device_id))
 
             # Trigger a refresh of the own device lists for all backends, this will result in this device
             # being added to the lists and the lists republished.
@@ -400,7 +400,10 @@ class SessionManager(ABC):
             for backend in self.__backends:
                 if backend.namespace not in active_namespaces:
                     # Publish the bundle of the new backend
-                    await self._upload_bundle(await backend.bundle(self.__own_bare_jid, self.__own_device_id))
+                    await self._upload_bundle(await backend.get_bundle(
+                        self.__own_bare_jid,
+                        self.__own_device_id
+                    ))
 
                     # Trigger a refresh of the own device list of the new backend, this will result in this
                     # device being added to the lists and the lists republished.
@@ -416,7 +419,7 @@ class SessionManager(ABC):
             logging.getLogger(SessionManager.LOG_TAG).debug(f"Signed pre key age: {signed_pre_key_age}")
             if signed_pre_key_age > signed_pre_key_rotation_period:
                 await backend.rotate_signed_pre_key()
-                await self._upload_bundle(await backend.bundle(self.__own_bare_jid, self.__own_device_id))
+                await self._upload_bundle(await backend.get_bundle(self.__own_bare_jid, self.__own_device_id))
 
         logging.getLogger(SessionManager.LOG_TAG).info(
             "Library core prepared, entering history synchronization mode."
@@ -578,7 +581,7 @@ class SessionManager(ABC):
         for backend in self.__backends:
             await self.refresh_device_list(backend.namespace, self.__own_bare_jid)
 
-            local_bundle = await backend.bundle(self.__own_bare_jid, self.__own_device_id)
+            local_bundle = await backend.get_bundle(self.__own_bare_jid, self.__own_device_id)
 
             upload_bundle = False
             try:
@@ -2007,7 +2010,7 @@ class SessionManager(ABC):
                 if num_visible_pre_keys <= self.__pre_key_refill_threshold:
                     logging.getLogger(SessionManager.LOG_TAG).debug("Refilling pre keys.")
                     await backend.generate_pre_keys(100 - num_visible_pre_keys)
-                    bundle = await backend.bundle(self.__own_bare_jid, self.__own_device_id)
+                    bundle = await backend.get_bundle(self.__own_bare_jid, self.__own_device_id)
 
                 await self._upload_bundle(bundle)
 

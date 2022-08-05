@@ -69,4 +69,4 @@ Finally, instantiate the storage, backends and then the :class:`~omemo.session_m
 Migration
 ---------
 
-Refer to :ref:`migration_from_legacy` for information about migrating from pre-stable python-omemo to python-omemo 1.0+. Migrations withing stable (1.0+) versions are handled automatically.
+Refer to :ref:`migration_from_legacy` for information about migrating from pre-stable python-omemo to python-omemo 1.0+. Migrations within stable (1.0+) versions are handled automatically.

@@ -17,8 +17,8 @@ class Initiation(enum.Enum):
     Enumeration identifying whether a session was built through active or passive session initiation.
     """
 
-    ACTIVE = "ACTIVE"
-    PASSIVE = "PASSIVE"
+    ACTIVE: str = "ACTIVE"
+    PASSIVE: str = "PASSIVE"
 
 
 class Session(ABC):

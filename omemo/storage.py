@@ -1,3 +1,6 @@
+# This import from future (theoretically) enables sphinx_autodoc_typehints to handle type aliases better
+from __future__ import annotations  # pylint: disable=unused-variable
+
 from abc import ABC, abstractmethod
 import base64
 import copy

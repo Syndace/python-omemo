@@ -1,5 +1,5 @@
-omemo
-=====
+Package: omemo
+==============
 
 .. toctree::
     Module: backend <backend>

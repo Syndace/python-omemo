@@ -78,22 +78,11 @@ def autodoc_skip_member_handler(app, what, name, obj, skip, options):
     # Could be achieved using exclude-members, but this is more comfy
     if name in {
         "__abstractmethods__",
-        "__annotations__",
         "__dict__",
-        "__getnewargs__",
         "__module__",
         "__new__",
-        "__orig_bases__",
-        "__parameters__",
-        "__repr__",
-        "__slots__",
         "__weakref__",
-        "_abc_impl",
-        "_asdict",
-        "_field_defaults",
-        "_fields",
-        "_make",
-        "_replace"
+        "_abc_impl"
     }: return True
 
     # Skip __init__s without documentation. Those are just used for type hints.

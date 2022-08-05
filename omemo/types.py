@@ -40,9 +40,9 @@ class TrustLevel(enum.Enum):
     The three core trust levels.
     """
 
-    TRUSTED = 1
-    DISTRUSTED = 2
-    UNDECIDED = 3
+    TRUSTED: str = "TRUSTED"
+    DISTRUSTED: str = "DISTRUSTED"
+    UNDECIDED: str = "UNDECIDED"
 
 
 # # Thanks @vanburgerberg - https://github.com/python/typing/issues/182

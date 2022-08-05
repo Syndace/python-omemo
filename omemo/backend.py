@@ -43,7 +43,7 @@ class KeyExchangeFailed(BackendException):
 
 class TooManySkippedMessageKeys(BackendException):
     """
-    Raised by :meth:`Backend.decrypt` if a message skips more message keys than allowed.
+    Raised by :meth:`Backend.decrypt_key_material` if a message skips more message keys than allowed.
     """
 
 
@@ -52,9 +52,6 @@ class Backend(ABC):
     The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
     version to the core library. Refer to the documentation page :ref:`writing_a_backend` for details about
     the concept and a guide on building your own backend.
-
-    Warning:
-        All parameters must be treated as immutable unless explicitly noted otherwise.
 
     Warning:
         Make sure to call :meth:`__init__` from your subclass to configure per-message and per-session skipped
@@ -72,7 +69,7 @@ class Backend(ABC):
     Note:
         For backend implementors: as part of your backend implementation, you are expected to subclass various
         abstract base classes like :class:`~omemo.session.Session`, :class:`~omemo.message.Content`,
-        :class:`~omemo.message.PlaintKeyMaterial`, :class:`~omemo.message.EncryptedKeyMaterial` and
+        :class:`~omemo.message.PlainKeyMaterial`, :class:`~omemo.message.EncryptedKeyMaterial` and
         :class:`~omemo.message.KeyExchange`. Whenever any of these abstract base types appears in a method
         signature of the :class:`Backend` class, what's actually meant is an instance of your respective
         subclass. This is not correctly expressed through the type system, since I couldn't think of a clean
@@ -101,12 +98,12 @@ class Backend(ABC):
         Args:
             max_num_per_session_skipped_keys: The maximum number of skipped message keys to keep around per
                 session. Once the maximum is reached, old message keys are deleted to make space for newer
-                ones. Accessible via :meth:`max_num_per_session_skipped_keys`.
+                ones. Accessible via :attr:`max_num_per_session_skipped_keys`.
             max_num_per_message_skipped_keys: The maximum number of skipped message keys to accept in a single
                 message. When set to ``None`` (the default), this parameter defaults to the per-session
                 maximum (i.e. the value of the ``max_num_per_session_skipped_keys`` parameter). This parameter
                 may only be 0 if the per-session maximum is 0, otherwise it must be a number between 1 and the
-                per-session maximum. Accessible via :meth:`max_num_per_message_skipped_keys`.
+                per-session maximum. Accessible via :attr:`max_num_per_message_skipped_keys`.
         """
 
         if max_num_per_message_skipped_keys == 0 and max_num_per_session_skipped_keys != 0:
@@ -207,8 +204,8 @@ class Backend(ABC):
         Returns:
             The newly built session, the encrypted key material and the key exchange information required by
             the other device to complete the passive part of session building. The
-            :meth:`~omemo.session.Session.initiation` property of the returned session must return
-            :attr:`~omemo.session.Initiation.ACTIVE`. The :meth:`~omemo.session.Session.key_exchange` property
+            :attr:`~omemo.session.Session.initiation` property of the returned session must return
+            :attr:`~omemo.session.Initiation.ACTIVE`. The :attr:`~omemo.session.Session.key_exchange` property
             of the returned session must return the information required by the other party to complete its
             part of the key exchange.
 
@@ -331,16 +328,16 @@ class Backend(ABC):
 
         Raises:
             TooManySkippedMessageKeys: if the number of message keys skipped by this message exceeds the upper
-                limit enforced by :meth:`max_num_per_message_skipped_keys`.
+                limit enforced by :attr:`max_num_per_message_skipped_keys`.
             DecryptionFailed: in case of backend-specific failures during decryption.
 
         Warning:
-            Make sure to respect the values of :meth:`max_num_per_session_skipped_keys` and
-            :meth:`max_num_per_message_skipped_keys`.
+            Make sure to respect the values of :attr:`max_num_per_session_skipped_keys` and
+            :attr:`max_num_per_message_skipped_keys`.
 
         Note:
             When the maximum number of skipped message keys for this session, given by
-            :meth:`max_num_per_session_skipped_keys`, is exceeded, old skipped message keys are deleted to
+            :attr:`max_num_per_session_skipped_keys`, is exceeded, old skipped message keys are deleted to
             make space for new ones.
         """
 
@@ -364,7 +361,7 @@ class Backend(ABC):
     @abstractmethod
     async def hide_pre_key(self, session: Session) -> bool:
         """
-        Hide a pre key from the bundle returned by :meth:`bundle` and pre key count returned by
+        Hide a pre key from the bundle returned by :meth:`get_bundle` and pre key count returned by
         :meth:`get_num_visible_pre_keys`, but keep the pre key for cryptographic operations.
 
         Args:
@@ -404,7 +401,7 @@ class Backend(ABC):
         """
         Returns:
             The number of visible pre keys available. The number returned here should match the number of pre
-            keys included in the bundle returned by :meth:`bundle`.
+            keys included in the bundle returned by :meth:`get_bundle`.
         """
 
     @abstractmethod
@@ -420,7 +417,7 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def bundle(self, bare_jid: str, device_id: int) -> Bundle:
+    async def get_bundle(self, bare_jid: str, device_id: int) -> Bundle:
         """
         Args:
             bare_jid: The bare JID of this XMPP account, to be included in the bundle.
