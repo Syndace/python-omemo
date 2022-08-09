@@ -7,7 +7,7 @@ TODO: Add doc badge
 
 A Python implementation of the [OMEMO Multi-End Message and Object Encryption protocol](https://xmpp.org/extensions/xep-0384.html).
 
-A complete implementation of [XEP-0384](https://xmpp.org/extensions/xep-0384.html) on protocol-level, i.e. more than just the cryptography. python-omemo supports different versions of the specification through so-called backends. A backend for OMEMO in the `urn:xmpp:omemo:2` namespace (the most recent version of the specification) is available in the [python-newmemo](https://github.com/Syndace/python-newmemo) Python package. A backend for (legacy) OMEMO in the `eu.siacs.conversations.axolotl` namespace is available in the [python-omemo-backend-legacy](https://github.com/Syndace/python-omemo-backend-legacy) package. Multiple backends can be loaded and used at the same time, the library manages their coexistence transparently.
+A complete implementation of [XEP-0384](https://xmpp.org/extensions/xep-0384.html) on protocol-level, i.e. more than just the cryptography. python-omemo supports different versions of the specification through so-called backends. A backend for OMEMO in the `urn:xmpp:omemo:2` namespace (the most recent version of the specification) is available in the [python-twomemo](https://github.com/Syndace/python-twomemo) Python package. A backend for (legacy) OMEMO in the `eu.siacs.conversations.axolotl` namespace is available in the [python-omemo-backend-legacy](https://github.com/Syndace/python-omemo-backend-legacy) package. Multiple backends can be loaded and used at the same time, the library manages their coexistence transparently.
 
 ## Installation ##
 
