@@ -3,9 +3,9 @@ import base64
 import itertools
 import logging
 import secrets
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar, cast
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
 
-from .backend import Backend
+from .backend import Backend, KeyExchangeFailed
 from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
 from .message import EncryptedKeyMaterial, KeyExchange, Message, PlainKeyMaterial
@@ -173,6 +173,18 @@ class MessageSendingFailed(XMPPInteractionFailed):
     Raised by :meth:`SessionManager._send_message`, and indirectly by various methods of
     :class:`SessionManager`.
     """
+
+
+class EncryptionError(NamedTuple):
+    # pylint: disable=invalid-name
+    """
+    Structure containing information about an encryption error, returned by :meth:`SessionManager.encrypt`.
+    """
+
+    namespace: str
+    bare_jid: str
+    device_id: int
+    exception: Union[BundleDownloadFailed, KeyExchangeFailed]
 
 
 SessionManagerTypeT = TypeVar("SessionManagerTypeT", bound="SessionManager")
@@ -1215,9 +1227,6 @@ class SessionManager(ABC):
             This method attempts to download the bundle of devices whose corresponding identity key is not
             known yet. In case the information can not be fetched due to bundle download failures, the device
             is not included in the returned set.
-
-        Raises:
-            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
         logging.getLogger(SessionManager.LOG_TAG).debug(
@@ -1470,7 +1479,7 @@ class SessionManager(ABC):
         bare_jids: Set[str],
         plaintext: Dict[str, bytes],
         backend_priority_order: Optional[List[str]] = None
-    ) -> Set[Message]:
+    ) -> Tuple[Set[Message], Set[EncryptionError]]:
         """
         Encrypt some plaintext for a set of recipients.
 
@@ -1488,7 +1497,7 @@ class SessionManager(ABC):
 
         Returns:
             One message per backend, encrypted for each device of each recipient and for other devices of this
-            account.
+            account, and a set of non-critical errors encountered during encryption.
 
         Raises:
             UnknownNamespace: if the backend priority order list contains a namespace of a backend that is not
@@ -1582,19 +1591,6 @@ class SessionManager(ABC):
             f"Recipient devices: {devices}, bundle cache: {bundle_cache}"
         )
 
-        # Check for recipients without a single active device
-        no_eligible_devices = set(filter(
-            lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
-            bare_jids
-        ))
-
-        if len(no_eligible_devices) > 0:
-            raise NoEligibleDevices(
-                no_eligible_devices,
-                "One or more of the intended recipients does not have a single active device for the loaded"
-                " backends."
-            )
-
         # Apply the backend priority order to the remaining devices
         def apply_backend_priorty_order(
             device: DeviceInformation,
@@ -1681,26 +1677,19 @@ class SessionManager(ABC):
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Trusted devices: {devices}")
 
-        # Check for recipients without a single remaining device
-        no_eligible_devices = set(filter(
-            lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
-            bare_jids
-        ))
-
-        if len(no_eligible_devices) > 0:
-            raise NoEligibleDevices(
-                no_eligible_devices,
-                "One or more of the intended recipients does not have a single active and trusted device for"
-                " the loaded backends."
-            )
-
-        # Encrypt the plaintext once per backend
-        # TODO: Think about how to handle failures
-        # - Device-scope failures: bundle download and key exchange failures
-        # - Library-scope failures: storage failures
-        # - Anything else?
-        # Also don't forget to adjust the excepions in the documentation after the decision is made.
+        # Encrypt the plaintext once per backend.
+        # About error handling:
+        # - It doesn't matter if a message is encrypted, the corresponding session is stored, and a failure
+        #   occurs afterwards. The cryptography/ratchet will not break if that happens.
+        # - Because of the previous point, library-scoped failures like storage failures can crash the whole
+        #   encryption process without risking inconsistencies.
+        # - Other than library-scoped failures like storage failures, the only thing that can fail are bundle
+        #   fetches/key agreements with new devices. Those failures must not prevent the encryption for the
+        #   other devices to fail. Instead, those failures are collected and returned together with the
+        #   successful encryption results, such that the library user can decide how to react in detail.
         messages: Set[Message] = set()
+        encryption_errors: Set[EncryptionError] = set()
+        sessions: Set[Tuple[Backend, Session]] = set()
         for backend in self.__backends:
             # Find the devices to encrypt for using this backend
             backend_devices = {
@@ -1733,37 +1722,70 @@ class SessionManager(ABC):
                 )), None)
                 logging.getLogger(SessionManager.LOG_TAG).debug(f"Cached bundle: {bundle}")
 
-                # Build the session if necessary, and encrypt the key material
-                session, encrypted_key_material = await backend.build_session_active(
-                    device.bare_jid,
-                    device.device_id,
-                    await self._download_bundle(
+                try:
+                    # Build the session if necessary, and encrypt the key material
+                    session, encrypted_key_material = await backend.build_session_active(
+                        device.bare_jid,
+                        device.device_id,
+                        await self._download_bundle(
+                            backend.namespace,
+                            device.bare_jid,
+                            device.device_id
+                        ) if bundle is None else bundle,
+                        plain_key_material
+                    ) if session is None else (session, await backend.encrypt_key_material(
+                        session,
+                        plain_key_material
+                    ))
+                except (BundleDownloadFailed, KeyExchangeFailed) as e:
+                    # Those failures are non-critical, i.e. encryption for other devices is still performed
+                    # and the errors are simply collected and returned.
+                    devices.remove(device)
+                    encryption_errors.add(EncryptionError(
                         backend.namespace,
                         device.bare_jid,
-                        device.device_id
-                    ) if bundle is None else bundle,
-                    plain_key_material
-                ) if session is None else (session, await backend.encrypt_key_material(
-                    session,
-                    plain_key_material
-                ))
+                        device.device_id,
+                        e
+                    ))
+                else:
+                    # Extract the data that needs to be sent to the other party
+                    keys.add((encrypted_key_material, (
+                        session.key_exchange
+                        if session.initiation is Initiation.ACTIVE and not session.confirmed
+                        else None
+                    )))
 
-                # Extract the data that needs to be sent to the other party
-                keys.add((encrypted_key_material, (
-                    session.key_exchange
-                    if session.initiation is Initiation.ACTIVE and not session.confirmed
-                    else None
-                )))
-
-                # Persist the session as the final step
-                await backend.store_session(session)
+                    # Keep track of the modified sessions to store them once encryption is fully done.
+                    sessions.add((backend, session))
 
             # Build the message from content, key material and key exchange information
             messages.add(Message(backend.namespace, self.__own_bare_jid, self.__own_device_id, content, keys))
 
-        logging.getLogger(SessionManager.LOG_TAG).debug(f"Message encrypted: {messages}")
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Devices with sessions: {devices}")
 
-        return messages
+        # Check for recipients without a single remaining device
+        no_eligible_devices = set(filter(
+            lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
+            bare_jids
+        ))
+
+        if len(no_eligible_devices) > 0:
+            raise NoEligibleDevices(
+                no_eligible_devices,
+                "One or more of the intended recipients does not have a single active and trusted device with"
+                " a valid session for the loaded backends."
+            )
+
+        for backend, session in sessions:
+            # Persist the session as the final step
+            await backend.store_session(session)
+
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Message encrypted: {messages}")
+        logging.getLogger(SessionManager.LOG_TAG).debug(
+            f"Non-critical encryption errors: {encryption_errors}"
+        )
+
+        return messages, encryption_errors
 
     async def decrypt(self, message: Message) -> Tuple[bytes, DeviceInformation]:
         """
