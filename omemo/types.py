@@ -58,5 +58,6 @@ class TrustLevel(enum.Enum):
 # Sadly @vanburgerberg's solution doesn't seem to like Dict[str, bool], thus for now an incomplete JSON
 # type with finite levels of depth.
 Primitives = Union[None, float, int, str, bool]
-JSONType1 = Union[Primitives, List[Primitives], Mapping[str, Primitives]]
+JSONType2 = Union[Primitives, List[Primitives], Mapping[str, Primitives]]
+JSONType1 = Union[Primitives, List[JSONType2], Mapping[str, JSONType2]]
 JSONType = Union[Primitives, List[JSONType1], Mapping[str, JSONType1]]
