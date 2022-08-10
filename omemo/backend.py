@@ -50,8 +50,7 @@ class TooManySkippedMessageKeys(BackendException):
 class Backend(ABC):
     """
     The base class for all backends. A backend is a unit providing the functionality of a certain OMEMO
-    version to the core library. Refer to the documentation page :ref:`writing_a_backend` for details about
-    the concept and a guide on building your own backend.
+    version to the core library.
 
     Warning:
         Make sure to call :meth:`__init__` from your subclass to configure per-message and per-session skipped

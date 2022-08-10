@@ -8,6 +8,5 @@ A complete implementation of `XEP-0384 <https://xmpp.org/extensions/xep-0384.htm
 .. toctree::
     installation
     getting_started
-    writing_a_backend
     migration_from_legacy
     API Documentation <omemo/package>

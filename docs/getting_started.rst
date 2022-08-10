@@ -8,11 +8,14 @@ Backend Selection
 
 There are two official backends:
 
-TODO
+==================================  ====
+Namespace                           Link
+==================================  ====
+``urn:xmpp:omemo:2``                `python-twomemo <https://github.com/Syndace/python-twomemo>`_
+``eu.siacs.conversations.axolotl``  `python-omemo-backend-legacy <https://github.com/Syndace/python-omemo-backend-legacy>`_
+==================================  ====
 
 Both backends (and more) can be loaded at the same time and the library will handle compatibility. You can specify backend priority, which will be used to decide which backend to use for encryption in case a recipient device supports multiple loaded backends.
-
-Refer to :ref:`writing_a_backend` for instructions on writing your own backend.
 
 Public API and Backends
 -----------------------
@@ -54,7 +57,7 @@ This is done in three steps:
 Backend Subclassing
 ^^^^^^^^^^^^^^^^^^^
 
-Create subclasses of the respective backend classes. Some backends may require you to implement abstract methods, others may not. Refer to the docs of the respective backends for setup instructions.
+Create subclasses of the respective backend classes if necessary. Some backends may require you to implement abstract methods, others may not. Refer to the docs of the respective backends for setup instructions.
 
 Core Library Subclassing
 ^^^^^^^^^^^^^^^^^^^^^^^^
