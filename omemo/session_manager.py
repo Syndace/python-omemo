@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import asyncio
 import base64
 import itertools
 import logging
@@ -425,13 +426,8 @@ class SessionManager(ABC):
             for namespace in active_namespaces - loaded_namespaces:
                 await self.purge_backend(namespace)
 
-        # Perform age check and rotation of the signed pre key
-        for backend in self.__backends:
-            signed_pre_key_age = await backend.signed_pre_key_age()
-            logging.getLogger(SessionManager.LOG_TAG).debug(f"Signed pre key age: {signed_pre_key_age}")
-            if signed_pre_key_age > signed_pre_key_rotation_period:
-                await backend.rotate_signed_pre_key()
-                await self._upload_bundle(await backend.get_bundle(self.__own_bare_jid, self.__own_device_id))
+        # Start signed pre key rotation management "in the background"
+        asyncio.ensure_future(self.__manage_signed_pre_key_rotation(signed_pre_key_rotation_period))
 
         logging.getLogger(SessionManager.LOG_TAG).info(
             "Library core prepared, entering history synchronization mode."
@@ -567,6 +563,70 @@ class SessionManager(ABC):
             f"Bare JID {bare_jid} purged from library core data and backend-specific data of all currently"
             " loaded backends."
         )
+
+    async def __manage_signed_pre_key_rotation(self, signed_pre_key_rotation_period: int) -> None:
+        """
+        Manage signed pre key rotation. Checks for signed pre keys that are due for rotation, rotates them,
+        uploads the new bundles, and then goes to sleep until the next rotation is due, in an infinite loop.
+        Start this loop "in the background" using ``asyncio.ensure_future``, without ``await``ing the result.
+
+        Args:
+            signed_pre_key_rotation_period: The rotation period for the signed pre key, in seconds. The
+                rotation period is recommended to be between one week and one month.
+
+        Note:
+            If a bundle upload fails after rotating a signed pre key, the method stalls further rotations and
+            instead periodically attempts to upload the bundle. Once the bundle upload succeeds, the method
+            returns to normal operation.
+        """
+
+        while True:
+            # Keep track of when the next signed pre key rotation is due
+            next_check = signed_pre_key_rotation_period
+
+            # For each backend, check whether the signed pre key is due for rotation
+            for backend in self.__backends:
+                signed_pre_key_age = await backend.signed_pre_key_age()
+                next_rotation = signed_pre_key_rotation_period - signed_pre_key_age
+
+                logging.getLogger(SessionManager.LOG_TAG).debug(
+                    f"Signed pre key age for backend {backend.namespace}: {signed_pre_key_age}. Rotating in"
+                    f" {next_rotation} seconds."
+                )
+
+                if next_rotation < 0:
+                    # Rotate the signed pre if necessary
+                    await backend.rotate_signed_pre_key()
+                    while True:
+                        retry_delay = 60  # Start with one minute of retry delay
+                        try:
+                            await self._upload_bundle(await backend.get_bundle(
+                                self.__own_bare_jid,
+                                self.__own_device_id
+                            ))
+                        except BundleUploadFailed:
+                            logging.getLogger(SessionManager.LOG_TAG).error(
+                                "Bundle upload failed after rotating signed pre key.",
+                                exc_info=True
+                            )
+                            await asyncio.sleep(retry_delay)
+                            retry_delay += 2  # Double the retry delay
+                            retry_delay = min(retry_delay, 60 * 60)  # Cap the retry delay at one hour
+                        else:
+                            break
+                else:
+                    # Otherwise, keep track of when the next signed pre key rotation is due
+                    next_check = min(next_check, next_rotation)
+
+            logging.getLogger(SessionManager.LOG_TAG).debug(
+                f"The next signed pre key rotation is due in {next_check} seconds."
+            )
+
+            # Add a minute to the delay for the next check
+            next_check += 60
+
+            # Wait for the given delay and check again
+            await asyncio.sleep(next_check)
 
     async def ensure_data_consistency(self) -> None:
         """
