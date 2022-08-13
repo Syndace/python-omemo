@@ -17,6 +17,15 @@ class Content(ABC):
     other backend-specific data that is shared between all recipients.
     """
 
+    @property
+    @abstractmethod
+    def empty(self) -> bool:
+        """
+        Returns:
+            Whether this instance corresponds to an empty OMEMO message purely used for protocol stability
+            reasons.
+        """
+
 
 class PlainKeyMaterial(ABC):
     """

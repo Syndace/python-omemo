@@ -1847,7 +1847,7 @@ class SessionManager(ABC):
 
         return messages, encryption_errors
 
-    async def decrypt(self, message: Message) -> Tuple[bytes, DeviceInformation]:
+    async def decrypt(self, message: Message) -> Tuple[Optional[bytes], DeviceInformation]:
         """
         Decrypt a message.
 
@@ -1856,7 +1856,8 @@ class SessionManager(ABC):
 
         Returns:
             A tuple, where the first entry is the decrypted plaintext and the second entry contains
-            information about the device that sent the message.
+            information about the device that sent the message. The plaintext is optional and will be ``None``
+            in case the message was an empty OMEMO message purely used for protocol stability reasons.
 
         Raises:
             UnknownNamespace: if the backend to handle the message is not currently loaded.
@@ -2064,7 +2065,7 @@ class SessionManager(ABC):
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Plain key material: {plain_key_material}")
 
         # Decrypt the message
-        plaintext = await backend.decrypt_plaintext(
+        plaintext = None if message.content.empty else await backend.decrypt_plaintext(
             message.content,
             plain_key_material
         )
