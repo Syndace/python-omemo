@@ -299,7 +299,7 @@ class Backend(ABC):
         Decrypt some symmetrically encrypted plaintext.
 
         Args:
-            content: The content to decrypt.
+            content: The content to decrypt. Not empty, i.e. :attr:`Content.empty` will return ``False``.
             plain_key_material: The key material to decrypt with.
 
         Returns:
