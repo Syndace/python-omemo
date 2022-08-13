@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 - Complete rewrite of the library (and dependencies) to use asynchronous and (strictly) typed Python 3.
-- Built-in support for [XEP-0384](https://xmpp.org/extensions/xep-0384.html) >= 0.4 in the namespace `urn:xmpp:omemo:2`. Legacy OMEMO in the namespace `eu.siacs.conversations.axolotl` remains available in the [python-omemo-backend-legacy](https://github.com/Syndace/python-omemo-backend-legacy) package.
+- Support for different versions of [XEP-0384](https://xmpp.org/extensions/xep-0384.html) via separate backend packages.
 - Mostly following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) now (except for the date format).
 
 ## [0.14.0] - 12th of March, 2022
