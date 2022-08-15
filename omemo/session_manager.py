@@ -339,11 +339,11 @@ class SessionManager(ABC):
             logging.getLogger(SessionManager.LOG_TAG).info("First run.")
 
             # Fetch the device lists for this bare JID for all loaded backends.
-            device_ids = cast(Set[int], set()).union(*{
+            device_ids = cast(Set[int], set()).union(*[
                 set((await self._download_device_list(backend.namespace, self.__own_bare_jid)).keys())
                 for backend
                 in self.__backends
-            })
+            ])
 
             # Generate a new device id for this device, making sure that it doesn't clash with any of the
             # existing device ids.
