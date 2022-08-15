@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import NamedTuple, Optional, Set, Tuple
+from typing import FrozenSet, NamedTuple, Optional, Tuple
 
 
 __all__ = [  # pylint: disable=unused-variable
@@ -98,4 +98,4 @@ class Message(NamedTuple):
     bare_jid: str
     device_id: int
     content: Content
-    keys: Set[Tuple[EncryptedKeyMaterial, Optional[KeyExchange]]]
+    keys: FrozenSet[Tuple[EncryptedKeyMaterial, Optional[KeyExchange]]]

@@ -2,7 +2,7 @@
 from __future__ import annotations  # pylint: disable=unused-variable
 
 import enum
-from typing import Dict, List, Mapping, NamedTuple, Optional, Set, Union
+from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Optional, Union
 
 
 __all__ = [  # pylint: disable=unused-variable
@@ -25,7 +25,7 @@ class DeviceInformation(NamedTuple):
     Structure containing information about a single OMEMO device.
     """
 
-    namespaces: Set[str]
+    namespaces: FrozenSet[str]
     active: Dict[str, bool]
     bare_jid: str
     device_id: int

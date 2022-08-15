@@ -4,7 +4,7 @@ import base64
 import itertools
 import logging
 import secrets
-from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
 
 from .backend import Backend, KeyExchangeFailed
 from .bundle import Bundle
@@ -69,7 +69,7 @@ class NoEligibleDevices(SessionManagerException):
     for encryption, for example due to distrust or bundle downloading failures.
     """
 
-    def __init__(self, bare_jids: Set[str], *args: object) -> None:
+    def __init__(self, bare_jids: FrozenSet[str], *args: object) -> None:
         """
         Args:
             bare_jids: The JIDs whose devices were not eligible. Accessible as an attribute of the returned
@@ -303,7 +303,7 @@ class SessionManager(ABC):
             for details.
         """
 
-        if len({ backend.namespace for backend in backends }) != len(backends):
+        if len(frozenset(backend.namespace for backend in backends)) != len(backends):
             raise ValueError("Multiple backends that handle the same namespace were passed.")
 
         if not 25 <= pre_key_refill_threshold <= 99:
@@ -339,8 +339,8 @@ class SessionManager(ABC):
             logging.getLogger(SessionManager.LOG_TAG).info("First run.")
 
             # Fetch the device lists for this bare JID for all loaded backends.
-            device_ids = cast(Set[int], set()).union(*[
-                set((await self._download_device_list(backend.namespace, self.__own_bare_jid)).keys())
+            device_ids = cast(FrozenSet[int], frozenset()).union(*[
+                frozenset((await self._download_device_list(backend.namespace, self.__own_bare_jid)).keys())
                 for backend
                 in self.__backends
             ])
@@ -389,7 +389,7 @@ class SessionManager(ABC):
 
         # If there a mismatch between loaded and active namespaces, look for changes in the loaded backends.
         device, _ = await self.get_own_device_information()
-        loaded_namespaces = { backend.namespace for backend in self.__backends }
+        loaded_namespaces = frozenset(backend.namespace for backend in self.__backends)
         active_namespaces = device.namespaces
         if loaded_namespaces != active_namespaces:
             logging.getLogger(SessionManager.LOG_TAG).info(
@@ -406,7 +406,7 @@ class SessionManager(ABC):
             # Set the device active for all loaded namespaces
             await storage.store(
                 f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
-                list({ namespace: True for namespace in loaded_namespaces })
+                list({ namespace: True for namespace in loaded_namespaces })  # TODO
             )
 
             # Take care of the initialization of newly added backends
@@ -476,7 +476,7 @@ class SessionManager(ABC):
 
         # Synchronize the offline device list with the online information
         device, _ = await self.get_own_device_information()
-        device.namespaces.discard(namespace)
+        device = device._replace(namespaces=device.namespaces - frozenset([ namespace ]))
         device.active.pop(namespace, None)
 
         await self.__storage.store(
@@ -527,7 +527,7 @@ class SessionManager(ABC):
         storage = self.__storage
 
         # Get the set of devices to delete
-        device_list = set((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
+        device_list = frozenset((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
 
         # Collect identity keys used by this account
         identity_keys: Set[bytes] = set()
@@ -845,7 +845,7 @@ class SessionManager(ABC):
         """
 
     @abstractmethod
-    async def _make_trust_decision(self, undecided: Set[DeviceInformation]) -> Any:
+    async def _make_trust_decision(self, undecided: FrozenSet[DeviceInformation]) -> Any:
         """
         Make a trust decision on a set of undecided identity keys.
 
@@ -933,14 +933,14 @@ class SessionManager(ABC):
         storage = self.__storage
 
         # This isn't strictly necessary, but good for consistency
-        if namespace not in { backend.namespace for backend in self.__backends }:
+        if namespace not in frozenset(backend.namespace for backend in self.__backends):
             raise UnknownNamespace(f"The backend handling the namespace {namespace} is not currently loaded.")
 
         # Copy to make sure the original is not modified
         device_list = dict(device_list)
 
-        new_device_list = set(device_list.keys())
-        old_device_list = set((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
+        new_device_list = frozenset(device_list.keys())
+        old_device_list = frozenset((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
 
         new_devices = new_device_list - old_device_list
 
@@ -949,7 +949,7 @@ class SessionManager(ABC):
         # If the device list is for this JID and a loaded backend, make sure this device is included
         if (
             bare_jid == self.__own_bare_jid
-            and namespace in { backend.namespace for backend in self.__backends }
+            and namespace in frozenset(backend.namespace for backend in self.__backends)
             and self.__own_device_id not in new_device_list
         ):
             logging.getLogger(SessionManager.LOG_TAG).warning(
@@ -1118,12 +1118,12 @@ class SessionManager(ABC):
 
         # Remove namespaces that correspond to backends which are not currently loaded or backends which have
         # no session for this device.
-        device = device._replace(namespaces=(device.namespaces & {
+        device = device._replace(namespaces=(device.namespaces & frozenset(
             backend.namespace
             for backend
             in self.__backends
             if await backend.load_session(device.bare_jid, device.device_id) is not None
-        }))
+        )))
 
         unsuccessful: Dict[str, OMEMOException] = {}
 
@@ -1152,7 +1152,7 @@ class SessionManager(ABC):
                         self.__own_bare_jid,
                         self.__own_device_id,
                         content,
-                        { (encrypted_key_material, session.key_exchange) }
+                        frozenset({ (encrypted_key_material, session.key_exchange) })
                     ))
 
                     # Store the replacement
@@ -1237,7 +1237,7 @@ class SessionManager(ABC):
             device_list[self.__own_device_id] = own_label
             await self._upload_device_list(backend.namespace, device_list)
 
-    async def get_device_information(self, bare_jid: str) -> Set[DeviceInformation]:
+    async def get_device_information(self, bare_jid: str) -> FrozenSet[DeviceInformation]:
         """
         Args:
             bare_jid: Get information about the devices of the XMPP account belonging to this bare JID.
@@ -1266,7 +1266,10 @@ class SessionManager(ABC):
         # Do not expose the bundle cache publicly.
         return (await self.__get_device_information(bare_jid))[0]
 
-    async def __get_device_information(self, bare_jid: str) -> Tuple[Set[DeviceInformation], Set[Bundle]]:
+    async def __get_device_information(
+        self,
+        bare_jid: str
+    ) -> Tuple[FrozenSet[DeviceInformation], FrozenSet[Bundle]]:
         """
         Internal implementation of :meth:`get_device_information` with the return value extended to include
         bundles that were downloaded in the process.
@@ -1295,7 +1298,7 @@ class SessionManager(ABC):
 
         storage = self.__storage
 
-        device_list = set((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
+        device_list = frozenset((await storage.load_list(f"/devices/{bare_jid}/list", int)).maybe([]))
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Offline device list: {device_list}")
 
@@ -1303,7 +1306,7 @@ class SessionManager(ABC):
         bundle_cache: Set[Bundle] = set()
 
         for device_id in device_list:
-            namespaces = set((await storage.load_list(
+            namespaces = frozenset((await storage.load_list(
                 f"/devices/{bare_jid}/{device_id}/namespaces",
                 str
             )).from_just())
@@ -1374,9 +1377,9 @@ class SessionManager(ABC):
 
         logging.getLogger(SessionManager.LOG_TAG).debug("Device information gathered.")
 
-        return devices, bundle_cache
+        return frozenset(devices), frozenset(bundle_cache)
 
-    async def get_own_device_information(self) -> Tuple[DeviceInformation, Set[DeviceInformation]]:
+    async def get_own_device_information(self) -> Tuple[DeviceInformation, FrozenSet[DeviceInformation]]:
         """
         Variation of :meth:`get_device_information` for convenience.
 
@@ -1389,7 +1392,10 @@ class SessionManager(ABC):
         """
 
         all_own_devices = await self.get_device_information(self.__own_bare_jid)
-        other_own_devices = set(filter(lambda dev: dev.device_id != self.__own_device_id, all_own_devices))
+        other_own_devices = frozenset(filter(
+            lambda dev: dev.device_id != self.__own_device_id,
+            all_own_devices
+        ))
 
         return next(iter(all_own_devices - other_own_devices)), other_own_devices
 
@@ -1465,7 +1471,7 @@ class SessionManager(ABC):
         # Send empty messages that were queued while in history synchronization mode
         for backend in self.__backends:
             # Load and delete the list of bare JIDs that have queued empty messages for this backend
-            queued_jids = set((await storage.load_list(f"/queue/{backend.namespace}", str)).maybe([]))
+            queued_jids = frozenset((await storage.load_list(f"/queue/{backend.namespace}", str)).maybe([]))
             await storage.delete(f"/queue/{backend.namespace}")
 
             logging.getLogger(SessionManager.LOG_TAG).debug(
@@ -1476,7 +1482,7 @@ class SessionManager(ABC):
             for bare_jid in queued_jids:
                 # For each queued bare JID, load and delete the list of devices that have queued an empty
                 # message for this backend
-                queued_device_ids = set((await storage.load_list(
+                queued_device_ids = frozenset((await storage.load_list(
                     f"/queue/{backend.namespace}/{bare_jid}",
                     int
                 )).maybe([]))
@@ -1526,20 +1532,20 @@ class SessionManager(ABC):
             self.__own_bare_jid,
             self.__own_device_id,
             content,
-            { (encrypted_key_material, (
+            frozenset({ (encrypted_key_material, (
                 session.key_exchange
                 if session.initiation is Initiation.ACTIVE and not session.confirmed
                 else None
-            )) }
+            )) })
         ))
         await backend.store_session(session)
 
     async def encrypt(
         self,
-        bare_jids: Set[str],
+        bare_jids: FrozenSet[str],
         plaintext: Dict[str, bytes],
         backend_priority_order: Optional[List[str]] = None
-    ) -> Tuple[Set[Message], Set[EncryptionError]]:
+    ) -> Tuple[FrozenSet[Message], FrozenSet[EncryptionError]]:
         """
         Encrypt some plaintext for a set of recipients.
 
@@ -1588,7 +1594,7 @@ class SessionManager(ABC):
         available_namespaces = [ backend.namespace for backend in self.__backends ]
 
         if backend_priority_order is not None:
-            unavailable_namespaces = set(backend_priority_order) - set(available_namespaces)
+            unavailable_namespaces = frozenset(backend_priority_order) - frozenset(available_namespaces)
             if len(unavailable_namespaces) > 0:
                 raise UnknownNamespace(
                     f"One or more unavailable namespaces were passed in the backend priority order list:"
@@ -1604,7 +1610,7 @@ class SessionManager(ABC):
 
         # Add the own bare JID to the list of recipients.
         # Copy to make sure the original is not modified.
-        bare_jids = set(bare_jids) | { self.__own_bare_jid }
+        bare_jids = frozenset(bare_jids) | frozenset({ self.__own_bare_jid })
 
         # Load the device information of all recipients
         def is_valid_recipient_device(device: DeviceInformation) -> bool:
@@ -1627,11 +1633,14 @@ class SessionManager(ABC):
                 return False
 
             # Remove namespaces for which the device is inactive
-            namespaces_active = set(filter(lambda namespace: device.active[namespace], device.namespaces))
+            namespaces_active = frozenset(filter(
+                lambda namespace: device.active[namespace],
+                device.namespaces
+            ))
 
             # Remove devices which are only available with backends that are not currently loaded and in
             # the priority list
-            if len(namespaces_active & set(effective_backend_priority_order)) == 0:
+            if len(namespaces_active & frozenset(effective_backend_priority_order)) == 0:
                 return False
 
             return True
@@ -1640,12 +1649,12 @@ class SessionManager(ABC):
         # identity key is not known and attempts to download the respecitve bundles fail. Those devices
         # missing is fine, since get_device_information is the public API for device information anyway, so
         # the publicly available device list and the recipient devices used here are consistent.
-        tmp = { await self.__get_device_information(bare_jid) for bare_jid in bare_jids }
+        tmp = frozenset([ await self.__get_device_information(bare_jid) for bare_jid in bare_jids ])
 
         devices = cast(Set[DeviceInformation], set()).union(*(devices for devices, _ in tmp))
         devices = set(filter(is_valid_recipient_device, devices))
 
-        bundle_cache = cast(Set[Bundle], set()).union(*(bundle_cache for _, bundle_cache in tmp))
+        bundle_cache = cast(FrozenSet[Bundle], frozenset()).union(*(bundle_cache for _, bundle_cache in tmp))
 
         logging.getLogger(SessionManager.LOG_TAG).debug(
             f"Recipient devices: {devices}, bundle cache: {bundle_cache}"
@@ -1669,10 +1678,10 @@ class SessionManager(ABC):
                 only one namespace - the one with highest priority that is supported by the device.
             """
 
-            return device._replace(namespaces={ sorted(
-                { namespace for namespace in device.namespaces if device.active[namespace] },
+            return device._replace(namespaces=frozenset(sorted(
+                frozenset(namespace for namespace in device.namespaces if device.active[namespace]),
                 key=backend_priorty_order.index
-            )[0] })
+            )[0]))
 
         devices = {
             apply_backend_priorty_order(device, effective_backend_priority_order) for device in devices
@@ -1712,7 +1721,7 @@ class SessionManager(ABC):
 
             return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.TRUSTED
 
-        undecided_devices = set(filter(is_undecided, devices))
+        undecided_devices = frozenset(filter(is_undecided, devices))
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Undecided devices: {undecided_devices}")
         if len(undecided_devices) > 0:
             await self._make_trust_decision(undecided_devices)
@@ -1726,7 +1735,7 @@ class SessionManager(ABC):
             logging.getLogger(SessionManager.LOG_TAG).debug(f"Updated trust: {devices}")
 
         # Make sure the trust status of all previously undecided devices has been decided on
-        undecided_devices = set(filter(is_undecided, devices))
+        undecided_devices = frozenset(filter(is_undecided, devices))
         if len(undecided_devices) > 0:
             raise StillUndecided(
                 f"The trust status of one or more devices has not been decided on: {undecided_devices}"
@@ -1752,9 +1761,9 @@ class SessionManager(ABC):
         sessions: Set[Tuple[Backend, Session]] = set()
         for backend in self.__backends:
             # Find the devices to encrypt for using this backend
-            backend_devices = {
+            backend_devices = frozenset(
                 device for device in devices if next(iter(device.namespaces)) == backend.namespace
-            }
+            )
 
             logging.getLogger(SessionManager.LOG_TAG).debug(
                 f"Encrypting for devices {backend_devices} using backend {backend.namespace}."
@@ -1819,12 +1828,18 @@ class SessionManager(ABC):
                     sessions.add((backend, session))
 
             # Build the message from content, key material and key exchange information
-            messages.add(Message(backend.namespace, self.__own_bare_jid, self.__own_device_id, content, keys))
+            messages.add(Message(
+                backend.namespace,
+                self.__own_bare_jid,
+                self.__own_device_id,
+                content,
+                frozenset(keys)
+            ))
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Devices with sessions: {devices}")
 
         # Check for recipients without a single remaining device
-        no_eligible_devices = set(filter(
+        no_eligible_devices = frozenset(filter(
             lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
             bare_jids
         ))
@@ -1845,7 +1860,7 @@ class SessionManager(ABC):
             f"Non-critical encryption errors: {encryption_errors}"
         )
 
-        return messages, encryption_errors
+        return frozenset(messages), frozenset(encryption_errors)
 
     async def decrypt(self, message: Message) -> Tuple[Optional[bytes], DeviceInformation]:
         """
