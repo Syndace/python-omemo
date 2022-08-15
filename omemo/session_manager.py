@@ -378,6 +378,24 @@ class SessionManager(ABC):
                 self.__identity_key_pair.identity_key
             )
 
+            # Initialize the local device list for this bare JID
+            await storage.store(
+                f"/devices/{self.__own_bare_jid}/list",
+                [ self.__own_device_id ]
+            )
+
+            # The trust level of the own identity key doesn't really matter as it's not checked anywhere, but
+            # some value still has to be set such that the device doesn't need special treatment in storage
+            # accessing code.
+            identity_key_b64 = base64.urlsafe_b64encode(self.__identity_key_pair.identity_key)
+            await self.__storage.store(
+                f"/trust/{self.__own_bare_jid}/{identity_key_b64.decode('ASCII')}",
+                undecided_trust_level_name
+            )
+
+            # Finally store the device id once the other setup is done
+            await self.__storage.store("/own_device_id", self.__own_device_id)
+
             # Publish the bundles for all backends
             for backend in self.__backends:
                 await self._upload_bundle(await backend.get_bundle(self.__own_bare_jid, self.__own_device_id))
