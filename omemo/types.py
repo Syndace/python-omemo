@@ -2,7 +2,7 @@
 from __future__ import annotations  # pylint: disable=unused-variable
 
 import enum
-from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Optional, Union
+from typing import FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, Union
 
 
 __all__ = [  # pylint: disable=unused-variable
@@ -26,7 +26,7 @@ class DeviceInformation(NamedTuple):
     """
 
     namespaces: FrozenSet[str]
-    active: Dict[str, bool]
+    active: FrozenSet[Tuple[str, bool]]
     bare_jid: str
     device_id: int
     identity_key: bytes

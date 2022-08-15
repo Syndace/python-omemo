@@ -406,7 +406,7 @@ class SessionManager(ABC):
             # Set the device active for all loaded namespaces
             await storage.store(
                 f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
-                list({ namespace: True for namespace in loaded_namespaces })  # TODO
+                { namespace: True for namespace in loaded_namespaces }
             )
 
             # Take care of the initialization of newly added backends
@@ -476,8 +476,10 @@ class SessionManager(ABC):
 
         # Synchronize the offline device list with the online information
         device, _ = await self.get_own_device_information()
+        active = dict(device.active)
+        active.pop(namespace, None)
         device = device._replace(namespaces=device.namespaces - frozenset([ namespace ]))
-        device.active.pop(namespace, None)
+        device = device._replace(active=frozenset(active.items()))
 
         await self.__storage.store(
             f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
@@ -486,7 +488,7 @@ class SessionManager(ABC):
 
         await self.__storage.store(
             f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
-            device.active
+            dict(device.active)
         )
 
         # If the backend is currently loaded, remove it from the list of loaded backends
@@ -1367,7 +1369,7 @@ class SessionManager(ABC):
 
             devices.add(DeviceInformation(
                 namespaces=namespaces,
-                active=active,
+                active=frozenset(active.items()),
                 bare_jid=bare_jid,
                 device_id=device_id,
                 identity_key=identity_key,
@@ -1634,7 +1636,7 @@ class SessionManager(ABC):
 
             # Remove namespaces for which the device is inactive
             namespaces_active = frozenset(filter(
-                lambda namespace: device.active[namespace],
+                lambda namespace: dict(device.active)[namespace],
                 device.namespaces
             ))
 
@@ -1679,7 +1681,7 @@ class SessionManager(ABC):
             """
 
             return device._replace(namespaces=frozenset(sorted(
-                frozenset(namespace for namespace in device.namespaces if device.active[namespace]),
+                frozenset(namespace for namespace in device.namespaces if dict(device.active)[namespace]),
                 key=backend_priorty_order.index
             )[0]))
 
