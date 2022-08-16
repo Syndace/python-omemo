@@ -1692,7 +1692,7 @@ class SessionManager(ABC):
         # Apply the backend priority order to the remaining devices
         def apply_backend_priorty_order(
             device: DeviceInformation,
-            backend_priorty_order: List[str]
+            backend_priority_order: List[str]
         ) -> DeviceInformation:
             """
             Apply the backend priority order to the namespaces of a device.
@@ -1707,14 +1707,19 @@ class SessionManager(ABC):
                 only one namespace - the one with highest priority that is supported by the device.
             """
 
-            return device._replace(namespaces=frozenset(sorted(
-                frozenset(namespace for namespace in device.namespaces if dict(device.active)[namespace]),
-                key=backend_priorty_order.index
-            )[0]))
+            return device._replace(namespaces=frozenset(sorted((
+                namespace
+                for namespace
+                in device.namespaces
+                if dict(device.active)[namespace] and namespace in backend_priority_order
+            ), key=backend_priority_order.index)[0:1]))
 
         devices = {
             apply_backend_priorty_order(device, effective_backend_priority_order) for device in devices
         }
+
+        # Remove devices that are not covered by the effective backend priority list
+        devices = { device for device in devices if len(device.namespaces) > 0 }
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Backend priority order applied: {devices}")
 
