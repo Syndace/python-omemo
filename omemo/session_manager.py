@@ -396,6 +396,10 @@ class SessionManager(ABC):
             # Finally store the device id once the other setup is done
             await self.__storage.store("/own_device_id", self.__own_device_id)
 
+            # Generate the first 100 pre keys for each backend
+            for backend in self.__backends:
+                await backend.generate_pre_keys(100)
+
             # Publish the bundles for all backends
             for backend in self.__backends:
                 await self._upload_bundle(await backend.get_bundle(self.__own_bare_jid, self.__own_device_id))
@@ -430,6 +434,11 @@ class SessionManager(ABC):
             # Take care of the initialization of newly added backends
             for backend in self.__backends:
                 if backend.namespace not in active_namespaces:
+                    # Refill pre keys if necessary
+                    num_visible_pre_keys = await backend.get_num_visible_pre_keys()
+                    if num_visible_pre_keys <= self.__pre_key_refill_threshold:
+                        await backend.generate_pre_keys(100 - num_visible_pre_keys)
+
                     # Publish the bundle of the new backend
                     await self._upload_bundle(await backend.get_bundle(
                         self.__own_bare_jid,
