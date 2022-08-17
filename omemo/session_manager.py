@@ -727,6 +727,7 @@ class SessionManager(ABC):
             Anything, the return value is ignored.
 
         Raises:
+            UnknownNamespace: if the namespace is unknown.
             BundleUploadFailed: if the upload failed. Feel free to raise a subclass instead.
 
         Note:
@@ -922,6 +923,7 @@ class SessionManager(ABC):
             Anything, the return value is ignored.
 
         Raises:
+            UnknownNamespace: if the namespace is unknown.
             MessageSendingFailed: if for any reason the message could not be sent. Feel free to raise a
                 subclass instead.
         """
@@ -1025,7 +1027,9 @@ class SessionManager(ABC):
                     str
                 )).from_just()
 
-                if device_list[device_id] != label:
+                # Don't interpret ``None`` as "no label set" here. Instead, interpret ``None`` as "the backend
+                # doesn't support labels".
+                if device_list[device_id] is not None and device_list[device_id] != label:
                     await storage.store(f"/devices/{bare_jid}/{device_id}/label", device_list[device_id])
             else:
                 # Update the status if required
@@ -1287,9 +1291,6 @@ class SessionManager(ABC):
             This method attempts to download the bundle of devices whose corresponding identity key is not
             known yet. In case the information can not be fetched due to bundle download failures, the device
             is not included in the returned set.
-
-        Raises:
-            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
         # Do not expose the bundle cache publicly.
@@ -1361,7 +1362,7 @@ class SessionManager(ABC):
                     except BundleDownloadFailed:
                         logging.getLogger(SessionManager.LOG_TAG).warning(
                             f"Bundle download failed for device {device_id} of bare JID {bare_jid} for"
-                            " namespace {namespace}.",
+                            f" namespace {namespace}.",
                             exc_info=True
                         )
                     else:
@@ -1415,9 +1416,6 @@ class SessionManager(ABC):
         Returns:
             A tuple, where the first entry is information about this device and the second entry contains
             information about the other devices of the own bare JID.
-
-        Raises:
-            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
         """
 
         all_own_devices = await self.get_device_information(self.__own_bare_jid)
