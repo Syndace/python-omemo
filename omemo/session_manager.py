@@ -2079,7 +2079,10 @@ class SessionManager(ABC):
             if session is not None:
                 logging.getLogger(SessionManager.LOG_TAG).debug("Key exchange present, but session exists.")
                 # If the key exchange would build a new session, treat this session as non-existent
-                if session.initiation is Initiation.PASSIVE and session.key_exchange == key_exchange:
+                if (
+                    session.initiation is Initiation.PASSIVE
+                    and session.key_exchange.builds_same_session(key_exchange)
+                ):
                     logging.getLogger(SessionManager.LOG_TAG).debug("Key exchange builds existing session.")
                 else:
                     logging.getLogger(SessionManager.LOG_TAG).warning(
