@@ -55,8 +55,8 @@ class IdentityKeyPair(ABC):
             The identity key pair, which has either been loaded from storage or newly generated.
 
         Note:
-            There is only one identity key pair. All instances of this class refer to the same storage
-            locations, thus the same data.
+            There is only one identity key pair for storage instance. All instances of this class refer to the
+            same storage locations, thus the same data.
         """
 
         logging.getLogger(IdentityKeyPair.LOG_TAG).debug(f"Creating instance from storage {storage}.")
