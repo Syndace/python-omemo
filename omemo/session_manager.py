@@ -6,6 +6,8 @@ import logging
 import secrets
 from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
 
+import xeddsa
+
 from .backend import Backend, KeyExchangeFailed
 from .bundle import Bundle
 from .identity_key_pair import IdentityKeyPair
@@ -1433,12 +1435,13 @@ class SessionManager(ABC):
             identity_key: The identity key to generate the fingerprint of.
 
         Returns:
-            The fingerprint of the identity key, as eight groups of eight lowercase hex chars each. Consider
-            applying `Consistent Color Generation <https://xmpp.org/extensions/xep-0392.html>`__ to each
-            individual group when displaying the fingerprint, if applicable.
+            The fingerprint of the identity key in its Curve25519 form as per the specficiaton, in eight
+            groups of eight lowercase hex chars each. Consider applying
+            `Consistent Color Generation <https://xmpp.org/extensions/xep-0392.html>`__ to each individual
+            group when displaying the fingerprint, if applicable.
         """
 
-        ik_hex_string = identity_key.hex()
+        ik_hex_string = xeddsa.ed25519_pub_to_curve25519_pub(identity_key).hex()
         group_size = 8
 
         return [ ik_hex_string[i:i + group_size] for i in range(0, len(ik_hex_string), group_size) ]
