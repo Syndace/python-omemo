@@ -1873,17 +1873,17 @@ class SessionManager(ABC):
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Devices with sessions: {devices}")
 
-        # Check for recipients without a single remaining device
+        # Check for recipients without a single remaining device, except for ourselves
         no_eligible_devices = frozenset(filter(
             lambda bare_jid: all(device.bare_jid != bare_jid for device in devices),
             bare_jids
-        ))
+        )) - frozenset({ self.__own_bare_jid })
 
         if len(no_eligible_devices) > 0:
             raise NoEligibleDevices(
                 no_eligible_devices,
                 "One or more of the intended recipients does not have a single active and trusted device with"
-                " a valid session for the loaded backends."
+                f" a valid session for the loaded backends: {no_eligible_devices}"
             )
 
         for backend, session in sessions:
