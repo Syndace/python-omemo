@@ -1,1 +1,2 @@
 XEdDSA>=1.0.0,<2
+typing-extensions>=4.3.0

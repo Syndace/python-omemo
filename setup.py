@@ -56,7 +56,10 @@ setup(
     long_description_content_type="text/markdown",
     license="MIT",
     packages=find_packages(),
-    install_requires=[ "XEdDSA>=1.0.0,<2" ],
+    install_requires=[
+        "XEdDSA>=1.0.0,<2",
+        "typing-extensions>=4.3.0"
+    ],
     python_requires=">=3.7",
     include_package_data=True,
     zip_safe=False,
