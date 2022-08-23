@@ -6,11 +6,22 @@ from typing import FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, Union
 
 
 __all__ = [  # pylint: disable=unused-variable
+    "AsyncFramework",
     "DeviceInformation",
     "JSONType",
     "OMEMOException",
     "TrustLevel"
 ]
+
+
+@enum.unique
+class AsyncFramework(enum.Enum):
+    """
+    Frameworks for asynchronous code supported by python-omemo.
+    """
+
+    ASYNCIO: str = "ASYNCIO"
+    TWISTED: str = "TWISTED"
 
 
 class OMEMOException(Exception):

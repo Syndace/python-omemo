@@ -33,7 +33,7 @@ from .session_manager import (
 )
 
 from .storage import Just, Maybe, Nothing, NothingException, Storage, StorageException
-from .types import DeviceInformation, JSONType, OMEMOException, TrustLevel
+from .types import AsyncFramework, DeviceInformation, JSONType, OMEMOException, TrustLevel
 
 # Fun:
 # https://github.com/PyCQA/pylint/issues/6006
@@ -96,6 +96,7 @@ __all__ = [  # pylint: disable=unused-variable
     "StorageException",
 
     # .types
+    "AsyncFramework",
     "DeviceInformation",
     "JSONType",
     "OMEMOException",

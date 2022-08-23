@@ -5,7 +5,13 @@ import itertools
 import logging
 import secrets
 from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from typing_extensions import assert_never
 
+try:
+    # One of the asynchronous frameworks supported other than asyncio.
+    from twisted.internet import defer, reactor, task, interfaces
+except ImportError:
+    pass
 import xeddsa
 
 from .backend import Backend, KeyExchangeFailed
@@ -14,7 +20,7 @@ from .identity_key_pair import IdentityKeyPair
 from .message import EncryptedKeyMaterial, KeyExchange, Message, PlainKeyMaterial
 from .session import Initiation, Session
 from .storage import NothingException, Storage
-from .types import DeviceInformation, OMEMOException, TrustLevel
+from .types import AsyncFramework, DeviceInformation, OMEMOException, TrustLevel
 
 
 __all__ = [  # pylint: disable=unused-variable
@@ -243,7 +249,8 @@ class SessionManager(ABC):
         initial_own_label: Optional[str],
         undecided_trust_level_name: str,
         signed_pre_key_rotation_period: int = 7 * 24 * 60 * 60,
-        pre_key_refill_threshold: int = 99
+        pre_key_refill_threshold: int = 99,
+        async_framework: AsyncFramework = AsyncFramework.ASYNCIO
     ) -> SessionManagerTypeT:
         """
         Load or create OMEMO backends. This method takes care of everything regarding the initialization of
@@ -266,6 +273,9 @@ class SessionManager(ABC):
             pre_key_refill_threshold: The number of pre keys that triggers a refill to 100. Defaults to 99,
                 which means that each pre key gets replaced with a new one right away. The threshold can not
                 be configured to lower than 25.
+            async_framework: The framework to use to create asynchronous tasks and perform asynchronous
+                waiting. Defaults to asyncio, since it's part of the standard library. Make sure the
+                respective framework is installed when using something other than asyncio.
 
         Returns:
             A configured instance of :class:`~omemo.session_manager.SessionManager`, with all backends loaded,
@@ -456,7 +466,18 @@ class SessionManager(ABC):
                 await self.purge_backend(namespace)
 
         # Start signed pre key rotation management "in the background"
-        asyncio.ensure_future(self.__manage_signed_pre_key_rotation(signed_pre_key_rotation_period))
+        if async_framework is AsyncFramework.ASYNCIO:
+            asyncio.ensure_future(self.__manage_signed_pre_key_rotation(
+                signed_pre_key_rotation_period,
+                async_framework
+            ))
+        elif async_framework is AsyncFramework.TWISTED:
+            defer.ensureDeferred(self.__manage_signed_pre_key_rotation(
+                signed_pre_key_rotation_period,
+                async_framework
+            ))
+        else:
+            assert_never(async_framework)
 
         logging.getLogger(SessionManager.LOG_TAG).info(
             "Library core prepared, entering history synchronization mode."
@@ -595,7 +616,11 @@ class SessionManager(ABC):
             " loaded backends."
         )
 
-    async def __manage_signed_pre_key_rotation(self, signed_pre_key_rotation_period: int) -> None:
+    async def __manage_signed_pre_key_rotation(
+        self,
+        signed_pre_key_rotation_period: int,
+        async_framework: AsyncFramework
+    ) -> None:
         """
         Manage signed pre key rotation. Checks for signed pre keys that are due for rotation, rotates them,
         uploads the new bundles, and then goes to sleep until the next rotation is due, in an infinite loop.
@@ -604,12 +629,28 @@ class SessionManager(ABC):
         Args:
             signed_pre_key_rotation_period: The rotation period for the signed pre key, in seconds. The
                 rotation period is recommended to be between one week and one month.
+            async_framework: The framework to use to perform asynchronous waiting.
 
         Note:
             If a bundle upload fails after rotating a signed pre key, the method stalls further rotations and
             instead periodically attempts to upload the bundle. Once the bundle upload succeeds, the method
             returns to normal operation.
         """
+
+        async def async_sleep(seconds: int) -> None:
+            """
+            Wait asynchronously using the framework referenced by ``async_framework``.
+
+            Args:
+                seconds: The number of seconds to wait.
+            """
+
+            if async_framework is AsyncFramework.ASYNCIO:
+                await asyncio.sleep(seconds)
+            elif async_framework is AsyncFramework.TWISTED:
+                await task.deferLater(cast(interfaces.IReactorTime, reactor), seconds, lambda: None)
+            else:
+                assert_never(async_framework)
 
         while True:
             # Keep track of when the next signed pre key rotation is due
@@ -640,7 +681,7 @@ class SessionManager(ABC):
                                 "Bundle upload failed after rotating signed pre key.",
                                 exc_info=True
                             )
-                            await asyncio.sleep(retry_delay)
+                            await async_sleep(retry_delay)
                             retry_delay += 2  # Double the retry delay
                             retry_delay = min(retry_delay, 60 * 60)  # Cap the retry delay at one hour
                         else:
@@ -657,7 +698,7 @@ class SessionManager(ABC):
             next_check += 60
 
             # Wait for the given delay and check again
-            await asyncio.sleep(next_check)
+            await async_sleep(next_check)
 
     async def ensure_data_consistency(self) -> None:
         """
