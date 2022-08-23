@@ -951,7 +951,7 @@ class SessionManager(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _send_message(message: Message) -> Any:
+    async def _send_message(message: Message, bare_jid: str) -> Any:
         """
         Send an OMEMO-encrypted message. This is required for various automated behaviours to improve the
         overall stability of the protocol, for example:
@@ -969,6 +969,7 @@ class SessionManager(ABC):
 
         Args:
             message: The message to send.
+            bare_jid: The bare JID to send the message to.
 
         Returns:
             Anything, the return value is ignored.
@@ -1237,7 +1238,7 @@ class SessionManager(ABC):
                         self.__own_device_id,
                         content,
                         frozenset({ (encrypted_key_material, session.key_exchange) })
-                    ))
+                    ), device.bare_jid)
 
                     # Store the replacement
                     await backend.store_session(session)
@@ -1616,7 +1617,7 @@ class SessionManager(ABC):
                 if session.initiation is Initiation.ACTIVE and not session.confirmed
                 else None
             )) })
-        ))
+        ), session.bare_jid)
         await backend.store_session(session)
 
     async def encrypt(
