@@ -877,12 +877,20 @@ class SessionManager(ABC):
         """
 
     @abstractmethod
-    async def _make_trust_decision(self, undecided: FrozenSet[DeviceInformation]) -> Any:
+    async def _make_trust_decision(
+        self,
+        undecided: FrozenSet[DeviceInformation],
+        identifier: Optional[str]
+    ) -> Any:
         """
         Make a trust decision on a set of undecided identity keys.
 
         Args:
             undecided: A set of devices that require trust decisions.
+            identifier: A piece of application-specific information that callers can pass to :meth:`encrypt`,
+                which is then forwarded here unaltered. This can be used, for example, by instant messaging
+                clients, to identify the chat tab which triggered the call to :meth:`encrypt` and subsequently
+                this call to :meth:`_make_trust_decision`.
 
         Returns:
             Anything, the return value is ignored. The trust decisions are expected to be persisted by calling
@@ -1574,7 +1582,8 @@ class SessionManager(ABC):
         self,
         bare_jids: FrozenSet[str],
         plaintext: Dict[str, bytes],
-        backend_priority_order: Optional[List[str]] = None
+        backend_priority_order: Optional[List[str]] = None,
+        identifier: Optional[str] = None
     ) -> Tuple[FrozenSet[Message], FrozenSet[EncryptionError]]:
         """
         Encrypt some plaintext for a set of recipients.
@@ -1590,6 +1599,9 @@ class SessionManager(ABC):
                 decides which version to prioritize. If ``None`` is supplied, the order of backends as passed
                 to :meth:`create` is assumed as the order of priority. If a list of namespaces is supplied,
                 the first namespace supported by the recipient is chosen. Lower index means higher priority.
+            identifier: A value that is passed on to :meth:`_make_trust_decision` in case a trust decision is
+                required for any of the recipient devices. This value is not processed or altered, it is
+                simply passed through. Refer to the documentation of :meth:`_make_trust_decision` for details.
 
         Returns:
             One message per backend, encrypted for each device of each recipient and for other devices of this
@@ -1759,7 +1771,7 @@ class SessionManager(ABC):
         undecided_devices = frozenset(filter(is_undecided, devices))
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Undecided devices: {undecided_devices}")
         if len(undecided_devices) > 0:
-            await self._make_trust_decision(undecided_devices)
+            await self._make_trust_decision(undecided_devices, identifier)
 
             # Update to the new trust levels
             devices = { device._replace(trust_level_name=(await self.__storage.load_primitive(
