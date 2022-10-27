@@ -889,9 +889,8 @@ class SessionManager(ABC):
             This method must be able to handle at least the namespaces of all loaded backends.
         """
 
-    @staticmethod
     @abstractmethod
-    def _evaluate_custom_trust_level(trust_level_name: str) -> TrustLevel:
+    async def _evaluate_custom_trust_level(self, device: DeviceInformation) -> TrustLevel:
         """
         Evaluate a custom trust level to one of the three core trust levels:
 
@@ -903,7 +902,7 @@ class SessionManager(ABC):
           whether it is okay to encrypt messages to it, however decrypting messages from it is allowed.
 
         Args:
-            trust_level_name: The name of the custom trust level to translate.
+            device: Information about the device, including the custom trust level name to translate.
 
         Returns:
             The core trust level corresponding to the custom trust level.
@@ -911,10 +910,6 @@ class SessionManager(ABC):
         Raises:
             UnknownTrustLevel: if a custom trust level with this name is not known. Feel free to raise a
                 subclass instead.
-
-        Note:
-            This method should be "stupid", i.e. only implementing a simple mapping from custom trust levels
-            to core trust levels, without any side effects.
         """
 
     @abstractmethod
@@ -1780,37 +1775,11 @@ class SessionManager(ABC):
 
         # Ask for trust decisions on the remaining devices (or rather, on the identity keys corresponding to
         # the remaining devices)
-        def is_undecided(device: DeviceInformation) -> bool:
-            """
-            Helper for trust level evaluation and checks.
+        undecided_devices = frozenset({
+            device for device in devices
+            if (await self._evaluate_custom_trust_level(device)) is TrustLevel.UNDECIDED
+        })
 
-            Args:
-                device: A device.
-
-            Returns:
-                Whether the trust status of this device is undecided, i.e. whether the custom trust level
-                assigned to the identity key used by this device evaluates to
-                :attr:`~omemo.types.TrustLevel.UNDECIDED`.
-            """
-
-            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.UNDECIDED
-
-        def is_trusted(device: DeviceInformation) -> bool:
-            """
-            Helper for trust level evaluation and checks.
-
-            Args:
-                device: A device.
-
-            Returns:
-                Whether the trust status of this device is trusted, i.e. whether the custom trust level
-                assigned to the identity key used by this device evaluates to
-                :attr:`~omemo.types.TrustLevel.TRUSTED`.
-            """
-
-            return self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.TRUSTED
-
-        undecided_devices = frozenset(filter(is_undecided, devices))
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Undecided devices: {undecided_devices}")
         if len(undecided_devices) > 0:
             await self._make_trust_decision(undecided_devices, identifier)
@@ -1824,14 +1793,21 @@ class SessionManager(ABC):
             logging.getLogger(SessionManager.LOG_TAG).debug(f"Updated trust: {devices}")
 
         # Make sure the trust status of all previously undecided devices has been decided on
-        undecided_devices = frozenset(filter(is_undecided, devices))
+        undecided_devices = frozenset({
+            device for device in devices
+            if (await self._evaluate_custom_trust_level(device)) is TrustLevel.UNDECIDED
+        })
+
         if len(undecided_devices) > 0:
             raise StillUndecided(
                 f"The trust status of one or more devices has not been decided on: {undecided_devices}"
             )
 
         # Keep only trusted devices
-        devices = set(filter(is_trusted, devices))
+        devices = {
+            device for device in devices
+            if (await self._evaluate_custom_trust_level(device)) is TrustLevel.TRUSTED
+        }
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Trusted devices: {devices}")
 
@@ -2054,7 +2030,7 @@ class SessionManager(ABC):
             )
 
         # Check the trust level of the sending device. Abort in case of explicit distrust.
-        if self._evaluate_custom_trust_level(device.trust_level_name) is TrustLevel.DISTRUSTED:
+        if (await self._evaluate_custom_trust_level(device)) is TrustLevel.DISTRUSTED:
             raise SenderDistrusted(
                 "The identity key corresponding to the sending device is explicitly distrusted."
             )
