@@ -1198,12 +1198,12 @@ class SessionManager(ABC):
 
         # Remove namespaces that correspond to backends which are not currently loaded or backends which have
         # no session for this device.
-        device = device._replace(namespaces=(device.namespaces & frozenset(
+        device = device._replace(namespaces=(device.namespaces & frozenset({
             backend.namespace
             for backend
             in self.__backends
             if await backend.load_session(device.bare_jid, device.device_id) is not None
-        )))
+        })))
 
         unsuccessful: Dict[str, OMEMOException] = {}
 
