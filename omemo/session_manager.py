@@ -1930,7 +1930,7 @@ class SessionManager(ABC):
 
         return messages, frozenset(encryption_errors)
 
-    async def decrypt(self, message: Message) -> Tuple[Optional[bytes], DeviceInformation]:
+    async def decrypt(self, message: Message) -> Tuple[Optional[bytes], DeviceInformation, PlainKeyMaterial]:
         """
         Decrypt a message.
 
@@ -1938,9 +1938,11 @@ class SessionManager(ABC):
             message: The message to decrypt.
 
         Returns:
-            A tuple, where the first entry is the decrypted plaintext and the second entry contains
+            A triple, where the first entry is the decrypted plaintext and the second entry contains
             information about the device that sent the message. The plaintext is optional and will be ``None``
-            in case the message was an empty OMEMO message purely used for protocol stability reasons.
+            in case the message was an empty OMEMO message purely used for protocol stability reasons. The
+            third entry is the plain key meterial transported by the message, which can be used to implement
+            functionality like legacy OMEMO's KeyTransportMessages.
 
         Raises:
             UnknownNamespace: if the backend to handle the message is not currently loaded.
@@ -2214,4 +2216,4 @@ class SessionManager(ABC):
         logging.getLogger(SessionManager.LOG_TAG).debug("Post-decryption tasks completed.")
 
         # Return the plaintext and information about the sending device
-        return (plaintext, device)
+        return (plaintext, device, plain_key_material)
