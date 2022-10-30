@@ -1621,7 +1621,7 @@ class SessionManager(ABC):
         plaintext: Dict[str, bytes],
         backend_priority_order: Optional[List[str]] = None,
         identifier: Optional[str] = None
-    ) -> Tuple[FrozenSet[Message], FrozenSet[EncryptionError]]:
+    ) -> Tuple[Dict[Message, PlainKeyMaterial], FrozenSet[EncryptionError]]:
         """
         Encrypt some plaintext for a set of recipients.
 
@@ -1641,8 +1641,11 @@ class SessionManager(ABC):
                 simply passed through. Refer to the documentation of :meth:`_make_trust_decision` for details.
 
         Returns:
-            One message per backend, encrypted for each device of each recipient and for other devices of this
-            account, and a set of non-critical errors encountered during encryption.
+            A mapping with one message per backend as the keys encrypted for each device of each recipient
+            and for other devices of this account, and the plain key material that was used to encrypt the
+            content of the respective message as values. This plain key material can be used to implement
+            things like legacy OMEMO's KeyTransportMessages. Next to the messages, a set of non-critical
+            errors encountered during encryption are returned.
 
         Raises:
             UnknownNamespace: if the backend priority order list contains a namespace of a backend that is not
@@ -1821,7 +1824,7 @@ class SessionManager(ABC):
         #   fetches/key agreements with new devices. Those failures must not prevent the encryption for the
         #   other devices to fail. Instead, those failures are collected and returned together with the
         #   successful encryption results, such that the library user can decide how to react in detail.
-        messages: Set[Message] = set()
+        messages: Dict[Message, PlainKeyMaterial] = {}
         encryption_errors: Set[EncryptionError] = set()
         sessions: Set[Tuple[Backend, Session]] = set()
         for backend in self.__backends:
@@ -1893,13 +1896,13 @@ class SessionManager(ABC):
                     sessions.add((backend, session))
 
             # Build the message from content, key material and key exchange information
-            messages.add(Message(
+            messages[Message(
                 backend.namespace,
                 self.__own_bare_jid,
                 self.__own_device_id,
                 content,
                 frozenset(keys)
-            ))
+            )] = plain_key_material
 
         logging.getLogger(SessionManager.LOG_TAG).debug(f"Devices with sessions: {devices}")
 
@@ -1925,7 +1928,7 @@ class SessionManager(ABC):
             f"Non-critical encryption errors: {encryption_errors}"
         )
 
-        return frozenset(messages), frozenset(encryption_errors)
+        return messages, frozenset(encryption_errors)
 
     async def decrypt(self, message: Message) -> Tuple[Optional[bytes], DeviceInformation]:
         """
