@@ -22,8 +22,11 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: "pip"
 
-    - name: Update pip
-      run: python -m pip install --upgrade pip
+    - name: Install libsodium, a dependency of python-xeddsa
+      run: sudo apt-get install -y libsodium23
+
+    - name: Install/update package management dependencies
+      run: python -m pip install --upgrade pip setuptools wheel
     - name: Install runtime dependencies
       run: pip install -r requirements.txt
     - name: Install test dependencies
