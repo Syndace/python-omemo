@@ -23,12 +23,14 @@ jobs:
         cache: "pip"
 
     - name: Install libsodium, a dependency of python-xeddsa
-      run: sudo apt-get install -y libsodium23
+      run: sudo apt-get install -y libsodium-dev
 
     - name: Install/update package management dependencies
       run: python -m pip install --upgrade pip setuptools wheel
     - name: Install runtime dependencies
-      run: pip install -r requirements.txt
+      run: |
+        pip install -r requirements.txt
+        pip install --upgrade twisted
     - name: Install test dependencies
       run: pip install --upgrade mypy pylint flake8
 
