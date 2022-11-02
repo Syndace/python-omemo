@@ -1,6 +1,6 @@
 [![PyPI](https://img.shields.io/pypi/v/OMEMO.svg)](https://pypi.org/project/OMEMO/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/OMEMO.svg)](https://pypi.org/project/OMEMO/)
-[![Build Status](https://travis-ci.org/Syndace/python-omemo.svg?branch=stable)](https://travis-ci.org/Syndace/python-omemo)
+[![Build Status](https://github.com/Syndace/python-omemo/actions/workflows/test-on-push.yml/badge.svg)](https://github.com/Syndace/python-omemo/actions/workflows/test-on-push.yml)
 TODO: Add doc badge
 
 # python-omemo #
@@ -15,16 +15,15 @@ python-omemo depends on two system libraries, [libxeddsa](https://github.com/Syn
 
 Install the latest release using pip (`pip install OMEMO`) or manually from source by running `pip install .` (recommended) or `python setup.py install` in the cloned repository. The installation requires libsodium and the Python development headers to be installed. If a locally installed version of libxeddsa is available, [python-xeddsa](https://github.com/Syndace/python-xeddsa) (a dependency of python-omemo) tries to use that. Otherwise it uses prebuilt binaries of the library, which are available for Linux, MacOS and Windows for the amd64 architecture, and potentially for MacOS arm64 too. Set the `LIBXEDDSA_FORCE_LOCAL` environment variable to forbid the usage of prebuilt binaries.
 
-## Testing, Type Checks and Linting ##
+## Type Checks and Linting ##
 
-python-omemo uses [pytest](https://docs.pytest.org/en/latest/) as its testing framework, [mypy](http://mypy-lang.org/) for static type checks and both [pylint](https://pylint.pycqa.org/en/latest/) and [Flake8](https://flake8.pycqa.org/en/latest/) for linting. All tests/checks can be run locally with the following commands:
+python-omemo uses [mypy](http://mypy-lang.org/) for static type checks and both [pylint](https://pylint.pycqa.org/en/latest/) and [Flake8](https://flake8.pycqa.org/en/latest/) for linting. All checks can be run locally with the following commands:
 
 ```sh
-$ pip install --upgrade pytest pytest-asyncio mypy pylint flake8
-$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py tests/
-$ pylint omemo/ setup.py tests/
-$ flake8 omemo/ setup.py tests/
-$ pytest
+$ pip install --upgrade mypy pylint flake8
+$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py
+$ pylint omemo/ setup.py
+$ flake8 omemo/ setup.py
 ```
 
 ## Getting Started ##

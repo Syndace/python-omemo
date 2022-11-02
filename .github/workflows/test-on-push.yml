@@ -1,0 +1,37 @@
+name: test-on-push
+
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "pypy-3.9"]
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: "pip"
+
+    - name: Update pip
+      run: python -m pip install --upgrade pip
+    - name: Install runtime dependencies
+      run: pip install -r requirements.txt
+    - name: Install test dependencies
+      run: pip install --upgrade mypy pylint flake8
+
+    - name: Type-check using mypy
+      run: mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py
+    - name: Lint using pylint
+      run: pylint omemo/ setup.py
+    - name: Format-check using Flake8
+      run: flake8 omemo/ setup.py
