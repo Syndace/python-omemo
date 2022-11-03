@@ -20,10 +20,12 @@ Install the latest release using pip (`pip install OMEMO`) or manually from sour
 python-omemo uses [mypy](http://mypy-lang.org/) for static type checks and both [pylint](https://pylint.pycqa.org/en/latest/) and [Flake8](https://flake8.pycqa.org/en/latest/) for linting. All checks can be run locally with the following commands:
 
 ```sh
-$ pip install --upgrade mypy pylint flake8
-$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py
-$ pylint omemo/ setup.py
-$ flake8 omemo/ setup.py
+$ pip install --upgrade pytest pytest-asyncio pytest-cov mypy pylint flake8
+$ pip install --upgrade twisted twomemo[xml] oldmemo[xml]
+$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py tests/
+$ pylint omemo/ setup.py tests/
+$ flake8 omemo/ setup.py tests/
+$ pytest --cov=omemo --cov-report term-missing:skip-covered
 ```
 
 ## Getting Started ##
