@@ -4,7 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - Unreleased
+## [1.0.1] - 3rd of November, 2022
+
+### Added
+- Python 3.11 to the list of supported versions
+
+## [1.0.0] - 1st of November, 2022
 
 ### Changed
 - Complete rewrite of the library (and dependencies) to use asynchronous and (strictly) typed Python 3.
@@ -112,7 +117,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future.
 
-[Unreleased]: https://github.com/Syndace/python-omemo/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Syndace/python-omemo/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/Syndace/python-omemo/compare/v0.14.0...v1.0.0
 [0.14.0]: https://github.com/Syndace/python-omemo/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Syndace/python-omemo/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Syndace/python-omemo/compare/v0.11.0...v0.12.0
