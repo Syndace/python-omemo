@@ -42,6 +42,7 @@ __all__ = [  # pylint: disable=unused-variable
     "XMPPInteractionFailed",
     "BundleUploadFailed",
     "BundleDownloadFailed",
+    "BundleNotFound",
     "BundleDeletionFailed",
     "DeviceListUploadFailed",
     "DeviceListDownloadFailed",
@@ -157,6 +158,13 @@ class BundleDownloadFailed(XMPPInteractionFailed):
     """
 
 
+class BundleNotFound(XMPPInteractionFailed):
+    """
+    Raised by :meth:`SessionManager._download_bundle`, and indirectly by various methods of
+    :class:`SessionManager`.
+    """
+
+
 class BundleDeletionFailed(XMPPInteractionFailed):
     """
     Raised by :meth:`SessionManager._delete_bundle`, and indirectly by :meth:`SessionManager.purge_backend`.
@@ -193,7 +201,7 @@ class EncryptionError(NamedTuple):
     namespace: str
     bare_jid: str
     device_id: int
-    exception: Union[BundleDownloadFailed, KeyExchangeFailed]
+    exception: Union[BundleDownloadFailed, BundleNotFound, KeyExchangeFailed]
 
 
 SessionManagerTypeT = TypeVar("SessionManagerTypeT", bound="SessionManager")
@@ -283,7 +291,6 @@ class SessionManager(ABC):
 
         Raises:
             BundleUploadFailed: if a bundle upload failed. Forwarded from :meth:`_upload_bundle`.
-            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
             BundleDeletionFailed: if a bundle deletion failed. Forwarded from :meth:`_delete_bundle`.
             DeviceListUploadFailed: if a device list upload failed. Forwarded from
                 :meth:`_upload_device_list`.
@@ -734,7 +741,7 @@ class SessionManager(ABC):
                     self.__own_bare_jid,
                     self.__own_device_id
                 )
-            except BundleDownloadFailed:
+            except (BundleDownloadFailed, BundleNotFound):
                 logging.getLogger(SessionManager.LOG_TAG).warning(
                     "Couldn't download own bundle.",
                     exc_info=True
@@ -798,7 +805,10 @@ class SessionManager(ABC):
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
-            BundleDownloadFailed: if the download failed. Feel free to raise a subclass instead.
+            BundleDownloadFailed: if the download failed. Feel free to raise a subclass instead. Only raise
+                this on a technical bundle download failure. If the bundle just doesn't exist, raise
+                :class:`BundleNotFound` instead.
+            BundleNotFound: if the bundle doesn't exist.
 
         Note:
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
@@ -824,7 +834,8 @@ class SessionManager(ABC):
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
-            BundleDeletionFailed: if the deletion failed. Feel free to raise a subclass instead.
+            BundleDeletionFailed: if the deletion failed. Feel free to raise a subclass instead. Only raise
+                this on a technical bundle deletion failure. If the bundle just doesn't exist, don't raise.
 
         Note:
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
@@ -878,7 +889,9 @@ class SessionManager(ABC):
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
-            DeviceListDownloadFailed: if the download failed. Feel free to raise a subclass instead.
+            DeviceListDownloadFailed: if the download failed. Feel free to raise a subclass instead. Only
+                raise this on a technical device list download failure. If the device list just doesn't exist,
+                return and empty list instead.
 
         Note:
             This method is called from :meth:`create`, before :meth:`create` has returned the instance. Thus,
@@ -1412,6 +1425,12 @@ class SessionManager(ABC):
                             f" namespace {namespace}.",
                             exc_info=True
                         )
+                    except BundleNotFound:
+                        logging.getLogger(SessionManager.LOG_TAG).warning(
+                            f"Bundle not available for device {device_id} of bare JID {bare_jid} for"
+                            f" namespace {namespace}.",
+                            exc_info=True
+                        )
                     else:
                         logging.getLogger(SessionManager.LOG_TAG).debug(
                             f"Identity key information extracted from bundle of namespace {namespace}."
@@ -1659,7 +1678,6 @@ class SessionManager(ABC):
             NoEligibleDevices: if at least one of the intended recipients does not have a single device which
                 qualifies for encryption. Either the recipient does not advertize any OMEMO-enabled devices or
                 all devices were disqualified due to missing trust or failure to download their bundles.
-            BundleDownloadFailed: if a bundle download failed. Forwarded from :meth:`_download_bundle`.
             KeyExchangeFailed: in case there is an error during the key exchange required for session
                 building. Forwarded from :meth:`~omemo.backend.Backend.build_session_active`.
 
@@ -1874,7 +1892,7 @@ class SessionManager(ABC):
                         session,
                         plain_key_material
                     ))
-                except (BundleDownloadFailed, KeyExchangeFailed) as e:
+                except (BundleDownloadFailed, BundleNotFound, KeyExchangeFailed) as e:
                     # Those failures are non-critical, i.e. encryption for other devices is still performed
                     # and the errors are simply collected and returned.
                     devices.remove(device)

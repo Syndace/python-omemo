@@ -6,8 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [1.0.2] - 4th of November, 2022
 
+### Added
+- A new exception `BundleNotFound`, raised by `_download_bundle`, to allow differentiation between technical bundle download failures and the simple absence of a bundle
+
 ### Changed
-- A small change in the package detection in setup.py lead to a broken PyPI package
+- A small change in the package detection in setup.py led to a broken PyPI package
+- Improved download failure exception semantics and removed incorrect raises annotations
 
 ## [1.0.1] - 3rd of November, 2022
 
