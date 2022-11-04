@@ -56,7 +56,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     license="MIT",
-    packages=find_packages("omemo"),
+    packages=find_packages(exclude=["tests"]),
     install_requires=[
         "XEdDSA>=1.0.0,<2",
         "typing-extensions>=4.3.0"
