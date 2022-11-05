@@ -1,189 +1,27 @@
-import enum
-from typing import Dict, FrozenSet, List, NamedTuple, Optional, Tuple, Type
+from typing import Optional
 import xml.etree.ElementTree as ET
 
 import oldmemo
 import oldmemo.etree
+from oldmemo.migrations import migrate
 import twomemo
 import twomemo.etree
 import pytest
-from typing_extensions import assert_never
 
-import omemo
+from .data import NS_TWOMEMO, NS_OLDMEMO, ALICE_BARE_JID, BOB_BARE_JID
+from .in_memory_storage import InMemoryStorage
+from .migration import POST_MIGRATION_TEST_MESSAGE, LegacyStorageImpl, download_bundle
+from .session_manager_impl import \
+    BundleStorage, DeviceListStorage, MessageQueue, TrustLevel, make_session_manager_impl
 
 
 __all__ = [  # pylint: disable=unused-variable
-    "test_regression0"
+    "test_regression0",
+    "test_oldmemo_migration"
 ]
 
 
 pytestmark = pytest.mark.asyncio  # pylint: disable=unused-variable
-
-
-@enum.unique
-class TrustLevel(enum.Enum):
-    """
-    Trust levels modeling simple manual trust.
-    """
-
-    TRUSTED: str = "TRUSTED"
-    UNDECIDED: str = "UNDECIDED"
-    DISTRUSTED: str = "DISTRUSTED"
-
-
-class InMemoryStorage(omemo.Storage):
-    """
-    Volatile storage implementation with the values held in memory.
-    """
-
-    def __init__(self) -> None:
-        super().__init__(True)
-
-        self.__storage: Dict[str, omemo.JSONType] = {}
-
-    async def _load(self, key: str) -> omemo.Maybe[omemo.JSONType]:
-        try:
-            return omemo.Just(self.__storage[key])
-        except KeyError:
-            return omemo.Nothing()
-
-    async def _store(self, key: str, value: omemo.JSONType) -> None:
-        self.__storage[key] = value
-
-    async def _delete(self, key: str) -> None:
-        self.__storage.pop(key, None)
-
-
-class BundleStorageKey(NamedTuple):
-    # pylint: disable=invalid-name
-    """
-    The key identifying a bundle in the tests.
-    """
-
-    namespace: str
-    bare_jid: str
-    device_id: int
-
-
-class DeviceListStorageKey(NamedTuple):
-    # pylint: disable=invalid-name
-    """
-    The key identifying a device list in the tests.
-    """
-
-    namespace: str
-    bare_jid: str
-
-
-BundleStorage = Dict[BundleStorageKey, omemo.Bundle]
-DeviceListStorage = Dict[DeviceListStorageKey, Dict[int, Optional[str]]]
-MessageQueue = List[Tuple[str, omemo.Message]]
-
-
-def make_session_manager_impl(
-    own_bare_jid: str,
-    bundle_storage: BundleStorage,
-    device_list_storage: DeviceListStorage,
-    message_queue: MessageQueue
-) -> Type[omemo.SessionManager]:
-    """
-    Args:
-        own_bare_jid: The bare JID of the account that will be used with the session manager instances created
-            from this implementation.
-        bundle_storage: The dictionary to "upload", "download" and delete bundles to/from.
-        device_list_storage: The dictionary to "upload" and "download" device lists to/from.
-        message_queue: The list to "send" automated messages to. The first entry of each tuple is the bare JID
-            of the recipient. The second entry is the message itself.
-
-    Returns:
-        A session manager implementation which sends/uploads/downloads/deletes data to/from the collections
-        given as parameters.
-    """
-
-    class SessionManagerImpl(omemo.SessionManager):
-        # pylint: disable=missing-class-docstring
-        @staticmethod
-        async def _upload_bundle(bundle: omemo.Bundle) -> None:
-            bundle_storage[BundleStorageKey(
-                namespace=bundle.namespace,
-                bare_jid=bundle.bare_jid,
-                device_id=bundle.device_id
-            )] = bundle
-
-        @staticmethod
-        async def _download_bundle(namespace: str, bare_jid: str, device_id: int) -> omemo.Bundle:
-            try:
-                return bundle_storage[BundleStorageKey(
-                    namespace=namespace,
-                    bare_jid=bare_jid,
-                    device_id=device_id
-                )]
-            except KeyError as e:
-                raise omemo.BundleDownloadFailed() from e
-
-        @staticmethod
-        async def _delete_bundle(namespace: str, device_id: int) -> None:
-            try:
-                bundle_storage.pop(BundleStorageKey(
-                    namespace=namespace,
-                    bare_jid=own_bare_jid,
-                    device_id=device_id
-                ))
-            except KeyError as e:
-                raise omemo.BundleDeletionFailed() from e
-
-        @staticmethod
-        async def _upload_device_list(namespace: str, device_list: Dict[int, Optional[str]]) -> None:
-            device_list_storage[DeviceListStorageKey(
-                namespace=namespace,
-                bare_jid=own_bare_jid
-            )] = device_list
-
-        @staticmethod
-        async def _download_device_list(namespace: str, bare_jid: str) -> Dict[int, Optional[str]]:
-            try:
-                return device_list_storage[DeviceListStorageKey(
-                    namespace=namespace,
-                    bare_jid=bare_jid
-                )]
-            except KeyError:
-                return {}
-
-        async def _evaluate_custom_trust_level(self, device: omemo.DeviceInformation) -> omemo.TrustLevel:
-            try:
-                trust_level = TrustLevel(device.trust_level_name)
-            except ValueError as e:
-                raise omemo.UnknownTrustLevel() from e
-
-            if trust_level is TrustLevel.TRUSTED:
-                return omemo.TrustLevel.TRUSTED
-            if trust_level is TrustLevel.UNDECIDED:
-                return omemo.TrustLevel.UNDECIDED
-            if trust_level is TrustLevel.DISTRUSTED:
-                return omemo.TrustLevel.DISTRUSTED
-
-            assert_never(trust_level)
-
-        async def _make_trust_decision(
-            self,
-            undecided: FrozenSet[omemo.DeviceInformation],
-            identifier: Optional[str]
-        ) -> None:
-            for device in undecided:
-                await self.set_trust(device.bare_jid, device.identity_key, TrustLevel.TRUSTED.name)
-
-        @staticmethod
-        async def _send_message(message: omemo.Message, bare_jid: str) -> None:
-            message_queue.append((bare_jid, message))
-
-    return SessionManagerImpl
-
-
-NS_TWOMEMO = twomemo.twomemo.NAMESPACE
-NS_OLDMEMO = oldmemo.oldmemo.NAMESPACE
-
-ALICE_BARE_JID = "alice@example.org"
-BOB_BARE_JID = "bob@example.org"
 
 
 async def test_regression0() -> None:
@@ -329,3 +167,53 @@ async def test_regression0() -> None:
         assert len(encryption_errors) == 0
         plaintext, _, _ = await alice_session_manager.decrypt(next(iter(messages.keys())))
         assert plaintext == b"Hello back, Alice!"
+
+
+async def test_oldmemo_migration() -> None:
+    """
+    Tests the migration of the legacy storage format, which is provided by python-oldmemo.
+    """
+
+    bundle_storage: BundleStorage = {}
+    device_list_storage: DeviceListStorage = {}
+    message_queue: MessageQueue = []
+
+    SessionManagerImpl = make_session_manager_impl(
+        ALICE_BARE_JID,
+        bundle_storage,
+        device_list_storage,
+        message_queue
+    )
+
+    legacy_storage = LegacyStorageImpl()
+    storage = InMemoryStorage()
+
+    await migrate(
+        legacy_storage=legacy_storage,
+        storage=storage,
+        trusted_trust_level_name=TrustLevel.TRUSTED.name,
+        undecided_trust_level_name=TrustLevel.UNDECIDED.name,
+        untrusted_trust_level_name=TrustLevel.DISTRUSTED.name,
+        download_bundle=download_bundle
+    )
+
+    session_manager = await SessionManagerImpl.create(
+        backends=[ oldmemo.Oldmemo(storage) ],
+        storage=storage,
+        own_bare_jid=ALICE_BARE_JID,
+        initial_own_label=None,
+        undecided_trust_level_name=TrustLevel.UNDECIDED.name
+    )
+
+    await session_manager.after_history_sync()
+
+    message = await oldmemo.etree.parse_message(
+        ET.fromstring(POST_MIGRATION_TEST_MESSAGE),
+        BOB_BARE_JID,
+        ALICE_BARE_JID,
+        session_manager
+    )
+
+    plaintext, _, _ = await session_manager.decrypt(message)
+
+    assert plaintext == b"This is a test message"
