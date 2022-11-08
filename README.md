@@ -1,6 +1,6 @@
 [![PyPI](https://img.shields.io/pypi/v/OMEMO.svg)](https://pypi.org/project/OMEMO/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/OMEMO.svg)](https://pypi.org/project/OMEMO/)
-[![Build Status](https://github.com/Syndace/python-omemo/actions/workflows/test-on-push.yml/badge.svg)](https://github.com/Syndace/python-omemo/actions/workflows/test-on-push.yml)
+[![Build Status](https://github.com/Syndace/python-omemo/actions/workflows/test-and-publish.yml/badge.svg)](https://github.com/Syndace/python-omemo/actions/workflows/test-and-publish.yml)
 TODO: Add doc badge
 
 # python-omemo #

@@ -1,0 +1,72 @@
+name: Test & Publish
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "pypy-3.9"]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install/update package management dependencies
+        run: python -m pip install --upgrade pip setuptools wheel
+      - name: Build and install python-omemo
+        run: pip install .
+      - name: Install test dependencies
+        run: |
+          pip install --upgrade pytest pytest-asyncio pytest-cov mypy pylint flake8
+          pip install --upgrade twisted twomemo[xml] oldmemo[xml]
+
+      - name: Type-check using mypy
+        run: mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py tests/
+      - name: Lint using pylint
+        run: pylint omemo/ setup.py tests/
+      - name: Format-check using Flake8
+        run: flake8 omemo/ setup.py tests/
+      - name: Test using pytest
+        run: pytest --cov=omemo --cov-report term-missing:skip-covered
+
+  build:
+    name: Build source distribution and wheel
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build source distribution and wheel
+        run: python3 setup.py sdist bdist_wheel
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: |
+            dist/*.tar.gz
+            dist/*.whl
+
+  publish:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: artifact
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@v1.5.1
+        with:
+          user: __token__
+          password: ${{ secrets.pypi_token }}
