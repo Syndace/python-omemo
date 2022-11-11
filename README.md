@@ -20,9 +20,9 @@ python-omemo uses [pytest](https://docs.pytest.org/en/latest/) as its testing fr
 ```sh
 $ pip install --upgrade pytest pytest-asyncio pytest-cov mypy pylint flake8
 $ pip install --upgrade twisted twomemo[xml] oldmemo[xml]
-$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py tests/
-$ pylint omemo/ setup.py tests/
-$ flake8 omemo/ setup.py tests/
+$ mypy --strict --disable-error-code str-bytes-safe omemo/ setup.py examples/ tests/
+$ pylint omemo/ setup.py examples/ tests/
+$ flake8 omemo/ setup.py examples/ tests/
 $ pytest --cov=omemo --cov-report term-missing:skip-covered
 ```
 
