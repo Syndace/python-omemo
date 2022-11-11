@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 - Removed unnecessary complexity/flexibility by returning `None` instead of `Any` from abstract methods whose return values are not used
+- The bundle publishing logic in the signed pre key rotation did not correctly double the retry delay
+- Log message improvements
 
 ## [1.0.2] - 4th of November, 2022
 

@@ -668,12 +668,12 @@ class SessionManager(ABC):
                 signed_pre_key_age = await backend.signed_pre_key_age()
                 next_rotation = signed_pre_key_rotation_period - signed_pre_key_age
 
-                logging.getLogger(SessionManager.LOG_TAG).debug(
-                    f"Signed pre key age for backend {backend.namespace}: {signed_pre_key_age}. Rotating in"
-                    f" {next_rotation} seconds."
-                )
-
                 if next_rotation < 0:
+                    logging.getLogger(SessionManager.LOG_TAG).debug(
+                        f"Signed pre key age for backend {backend.namespace}: {signed_pre_key_age}. Rotating"
+                        " now."
+                    )
+
                     # Rotate the signed pre if necessary
                     await backend.rotate_signed_pre_key()
                     while True:
@@ -689,11 +689,16 @@ class SessionManager(ABC):
                                 exc_info=True
                             )
                             await async_sleep(retry_delay)
-                            retry_delay += 2  # Double the retry delay
+                            retry_delay *= 2  # Double the retry delay
                             retry_delay = min(retry_delay, 60 * 60)  # Cap the retry delay at one hour
                         else:
                             break
                 else:
+                    logging.getLogger(SessionManager.LOG_TAG).debug(
+                        f"Signed pre key age for backend {backend.namespace}: {signed_pre_key_age}. Rotating"
+                        f" in {next_rotation} seconds."
+                    )
+
                     # Otherwise, keep track of when the next signed pre key rotation is due
                     next_check = min(next_check, next_rotation)
 
