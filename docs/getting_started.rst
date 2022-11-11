@@ -35,32 +35,29 @@ The library works with two types of trust levels: custom trust levels and core t
 
 This trust concept allows for the implementation of trust systems like `BTBV <https://gultsch.de/trust.html>`_, `TOFU <https://en.wikipedia.org/wiki/Trust_on_first_use>`_, simple manual trust or more complex systems.
 
-Storage
--------
+An example of a BTBV trust system implementation can be found in ``examples/btbv_session_manager.py``. If you happen to aim for BTBV support in your client, feel free to use that code as a starting point.
+
+Setting it Up
+-------------
+
+With the backends selected and the trust system chosen, the library can be set up.
+
+This is done in three steps:
+
+1. Create a :class:`~omemo.storage.Storage` implementation
+2. Create a :class:`~omemo.session_manager.SessionManager` implementation
+3. Instantiate your :class:`~omemo.session_manager.SessionManager` implementation
+
+:class:`~omemo.storage.Storage` Implementation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 python-omemo uses a simple key-value storage to persist its state. This storage has to be provided to the library by implementing the :class:`~omemo.storage.Storage` interface. Refer to the API documentation of the :class:`~omemo.storage.Storage` interface for details.
 
 .. WARNING::
     It might be tempting to offer a backup/restore flow for the OMEMO data. However, due to the forward secrecy of OMEMO, restoring old data results in broken sessions. It is strongly recommended to not include OMEMO data in backups, and to at most include it in migration flows that make sure that old data can't be restored over newer data.
 
-Setting it Up
--------------
-
-With the backends selected, the trust system chosen and the storage implementation prepared, the library can be set up.
-
-This is done in three steps:
-
-1. Subclass abstract backend classes
-2. Subclass abstract core library classes
-3. Instantiate the :class:`~omemo.session_manager.SessionManager`
-
-Backend Subclassing
-^^^^^^^^^^^^^^^^^^^
-
-Create subclasses of the respective backend classes if necessary. Some backends may require you to implement abstract methods, others may not. Refer to the docs of the respective backends for setup instructions.
-
-Core Library Subclassing
-^^^^^^^^^^^^^^^^^^^^^^^^
+:class:`~omemo.session_manager.SessionManager` Implementation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Create a subclass of :class:`~omemo.session_manager.SessionManager`. There are various abstract methods for interaction with XMPP (device lists, bundles etc.) and trust management that you have to fill out to integrate the library with your client/framework. The API documentation of the :class:`~omemo.session_manager.SessionManager` class should contain the necessary information.
 
