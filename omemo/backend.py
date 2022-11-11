@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Tuple
+from typing import Optional, Tuple
 
 from .bundle import Bundle
 from .message import Content, EncryptedKeyMaterial, PlainKeyMaterial, KeyExchange
@@ -164,16 +164,13 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def store_session(self, session: Session) -> Any:
+    async def store_session(self, session: Session) -> None:
         """
         Store a session, overwriting any previously stored session for the bare JID and device id this session
         belongs to.
 
         Args:
             session: The session to store.
-
-        Returns:
-            Anything, the return value is ignored.
 
         Warning:
             Multiple sessions for the same device can exist in memory, however only one session per device can
@@ -348,13 +345,10 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def rotate_signed_pre_key(self) -> Any:
+    async def rotate_signed_pre_key(self) -> None:
         """
         Rotate the signed pre key. Keep the old signed pre key around for one additional rotation period, i.e.
         until this method is called again.
-
-        Returns:
-            Anything, the return value is ignored.
         """
 
     @abstractmethod
@@ -387,12 +381,9 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def delete_hidden_pre_keys(self) -> Any:
+    async def delete_hidden_pre_keys(self) -> None:
         """
         Delete all pre keys that were previously hidden using :meth:`hide_pre_key`.
-
-        Returns:
-            Anything, the return value is ignored.
         """
 
     @abstractmethod
@@ -404,15 +395,12 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def generate_pre_keys(self, num_pre_keys: int) -> Any:
+    async def generate_pre_keys(self, num_pre_keys: int) -> None:
         """
         Generate and store pre keys.
 
         Args:
             num_pre_keys: The number of pre keys to generate.
-
-        Returns:
-            Anything, the return value is ignored.
         """
 
     @abstractmethod
@@ -430,22 +418,16 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def purge(self) -> Any:
+    async def purge(self) -> None:
         """
         Remove all data related to this backend from the storage.
-
-        Returns:
-            Anything, the return value is ignored.
         """
 
     @abstractmethod
-    async def purge_bare_jid(self, bare_jid: str) -> Any:
+    async def purge_bare_jid(self, bare_jid: str) -> None:
         """
         Delete all data corresponding to an XMPP account.
 
         Args:
             bare_jid: Delete all data corresponding to this bare JID.
-
-        Returns:
-            Anything, the return value is ignored.
         """

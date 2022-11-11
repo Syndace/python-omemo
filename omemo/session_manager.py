@@ -4,7 +4,7 @@ import base64
 import itertools
 import logging
 import secrets
-from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from typing import Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
 from typing_extensions import assert_never
 
 try:
@@ -766,15 +766,12 @@ class SessionManager(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _upload_bundle(bundle: Bundle) -> Any:
+    async def _upload_bundle(bundle: Bundle) -> None:
         """
         Upload the bundle corresponding to this device, overwriting any previously published bundle data.
 
         Args:
             bundle: The bundle to publish.
-
-        Returns:
-            Anything, the return value is ignored.
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
@@ -821,16 +818,13 @@ class SessionManager(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _delete_bundle(namespace: str, device_id: int) -> Any:
+    async def _delete_bundle(namespace: str, device_id: int) -> None:
         """
         Delete the bundle corresponding to this device.
 
         Args:
             namespace: The XML namespace to execute this operation under.
             device_id: The id of this device.
-
-        Returns:
-            Anything, the return value is ignored.
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
@@ -850,16 +844,13 @@ class SessionManager(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _upload_device_list(namespace: str, device_list: Dict[int, Optional[str]]) -> Any:
+    async def _upload_device_list(namespace: str, device_list: Dict[int, Optional[str]]) -> None:
         """
         Upload the device list for this XMPP account.
 
         Args:
             namespace: The XML namespace to execute this operation under.
             device_list: The device list to upload. Mapping from device id to optional label.
-
-        Returns:
-            Anything, the return value is ignored.
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
@@ -930,9 +921,10 @@ class SessionManager(ABC):
         self,
         undecided: FrozenSet[DeviceInformation],
         identifier: Optional[str]
-    ) -> Any:
+    ) -> None:
         """
-        Make a trust decision on a set of undecided identity keys.
+        Make a trust decision on a set of undecided identity keys. The trust decisions are expected to be
+        persisted by calling :meth:`set_trust`.
 
         Args:
             undecided: A set of devices that require trust decisions.
@@ -940,10 +932,6 @@ class SessionManager(ABC):
                 which is then forwarded here unaltered. This can be used, for example, by instant messaging
                 clients, to identify the chat tab which triggered the call to :meth:`encrypt` and subsequently
                 this call to :meth:`_make_trust_decision`.
-
-        Returns:
-            Anything, the return value is ignored. The trust decisions are expected to be persisted by calling
-            :meth:`set_trust`.
 
         Raises:
             TrustDecisionFailed: if for any reason the trust decision failed/could not be completed. Feel free
@@ -959,7 +947,7 @@ class SessionManager(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _send_message(message: Message, bare_jid: str) -> Any:
+    async def _send_message(message: Message, bare_jid: str) -> None:
         """
         Send an OMEMO-encrypted message. This is required for various automated behaviours to improve the
         overall stability of the protocol, for example:
@@ -978,9 +966,6 @@ class SessionManager(ABC):
         Args:
             message: The message to send.
             bare_jid: The bare JID to send the message to.
-
-        Returns:
-            Anything, the return value is ignored.
 
         Raises:
             UnknownNamespace: if the namespace is unknown.

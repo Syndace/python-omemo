@@ -4,7 +4,7 @@ from __future__ import annotations  # pylint: disable=unused-variable
 from abc import ABC, abstractmethod
 import base64
 import copy
-from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union, cast
+from typing import Callable, Dict, Generic, List, Optional, Type, TypeVar, Union, cast
 
 from .types import JSONType, OMEMOException
 
@@ -205,7 +205,7 @@ class Storage(ABC):
         """
 
     @abstractmethod
-    async def _store(self, key: str, value: JSONType) -> Any:
+    async def _store(self, key: str, value: JSONType) -> None:
         """
         Store a value.
 
@@ -213,23 +213,17 @@ class Storage(ABC):
             key: The key identifying the value.
             value: The value to store under the given key.
 
-        Returns:
-            Anything, the return value is ignored.
-
         Raises:
             StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
         """
 
     @abstractmethod
-    async def _delete(self, key: str) -> Any:
+    async def _delete(self, key: str) -> None:
         """
         Delete a value, if it exists.
 
         Args:
             key: The key identifying the value to delete.
-
-        Returns:
-            Anything, the return value is ignored.
 
         Raises:
             StorageException: if any kind of storage operation failed. Feel free to raise a subclass instead.
