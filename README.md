@@ -28,6 +28,6 @@ $ pytest --cov=omemo --cov-report term-missing:skip-covered
 
 ## Getting Started ##
 
-Refer to the documentation on [readthedocs.io](https://python-omemo.readthedocs.io/en/latest/), or build/view it locally in the `docs/` directory. To build the docs locally, install the requirements listed in `docs/requirements.txt`, e.g. using `pip install -r docs/requirements.txt`, and then run `make html` from within the `docs/` directory. The documentation can then be found in `docs/_build/html/`.
+Refer to the documentation on [readthedocs.io](https://py-omemo.readthedocs.io/), or build/view it locally in the `docs/` directory. To build the docs locally, install the requirements listed in `docs/requirements.txt`, e.g. using `pip install -r docs/requirements.txt`, and then run `make html` from within the `docs/` directory. The documentation can then be found in `docs/_build/html/`.
 
 The `functionality.md` file contains an overview of supported functionality/use cases, mostly targeted at developers.
