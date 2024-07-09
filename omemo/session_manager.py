@@ -505,8 +505,8 @@ class SessionManager(ABC):
 
         Raises:
             BundleDeletionFailed: if a bundle deletion failed. Forwarded from :meth:`_delete_bundle`.
-            DeviceListUploadFailed: if a device list upload failed. Forwarded from
-                :meth:`_upload_device_list`.
+            DeviceListUploadFailed:
+                if a device list upload failed. Forwarded from :meth:`_upload_device_list`.
             DeviceListDownloadFailed: if a device list download failed. Forwarded from
                 :meth:`_download_device_list`.
 
@@ -1299,8 +1299,8 @@ class SessionManager(ABC):
         Raises:
             DeviceListUploadFailed: if a device list upload failed. Forwarded from
                 :meth:`_upload_device_list`.
-            DeviceListDownloadFailed: if a device list download failed. Forwarded from
-                :meth:`_download_device_list`.
+            DeviceListDownloadFailed:
+                if a device list download failed. Forwarded from :meth:`_download_device_list`.
 
         Note:
             It is recommended to keep the length of the label under 53 unicode code points.
