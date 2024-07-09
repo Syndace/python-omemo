@@ -6,4 +6,5 @@ __pycache__/
 .mypy_cache/
 .coverage
 
+build/
 docs/_build/

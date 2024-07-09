@@ -6,10 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.0.3] - 9th of July, 2024
+
 ### Changed
 - Removed unnecessary complexity/flexibility by returning `None` instead of `Any` from abstract methods whose return values are not used
 - The bundle publishing logic in the signed pre key rotation did not correctly double the retry delay
 - Log message improvements
+- 2024 maintenance (bumped Python versions, adjusted for updates to pydantic, mypy, pylint, pytest and GitHub actions)
+
+### Fixed
+- Fixed a bug where a modified bundle might not be uploaded correctly
 
 ## [1.0.2] - 4th of November, 2022
 
@@ -133,7 +139,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future.
 
-[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/Syndace/python-omemo/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Syndace/python-omemo/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Syndace/python-omemo/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Syndace/python-omemo/compare/v0.14.0...v1.0.0

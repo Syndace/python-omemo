@@ -153,9 +153,9 @@
 
 # Part of the respective backends
 
-- [ ] a state migration tool/function is provided for migration from legacy python-omemo to the new storage format
+- [x] a state migration tool/function is provided for migration from legacy python-omemo to the new storage format
 - [ ] a state migration tool/function is provided for migration from libsignal to python-omemo
 
-- [ ] convenience functions for XML (de)serialization is provided using the ElementTree API
-    - [ ] this part is fully optional, the application may take care of (de)serialization itself
-    - [ ] installed only when doing `pip install python-omemo-backend-foo[etree]`
+- [x] convenience functions for XML (de)serialization is provided using the ElementTree API
+    - [x] this part is fully optional, the application may take care of (de)serialization itself
+    - [x] installed only when doing `pip install *backend*[xml]`

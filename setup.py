@@ -2,7 +2,7 @@
 import os
 from typing import Dict, Union, List
 
-from setuptools import setup, find_packages  # type: ignore[import]
+from setuptools import setup, find_packages  # type: ignore[import-untyped]
 
 source_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "omemo")
 
@@ -27,11 +27,11 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
 
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy"
@@ -61,7 +61,7 @@ setup(
         "XEdDSA>=1.0.0,<2",
         "typing-extensions>=4.3.0"
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     include_package_data=True,
     zip_safe=False,
     classifiers=classifiers,
