@@ -2189,8 +2189,8 @@ class SessionManager(ABC):
                 if num_visible_pre_keys <= self.__pre_key_refill_threshold:
                     logging.getLogger(SessionManager.LOG_TAG).debug("Refilling pre keys.")
                     await backend.generate_pre_keys(100 - num_visible_pre_keys)
-                    bundle = await backend.get_bundle(self.__own_bare_jid, self.__own_device_id)
 
+                bundle = await backend.get_bundle(self.__own_bare_jid, self.__own_device_id)
                 await self._upload_bundle(bundle)
 
         # Send an empty message if necessary to avoid staleness and to "complete" the handshake in case this
