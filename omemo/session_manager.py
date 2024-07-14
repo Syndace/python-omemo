@@ -438,16 +438,16 @@ class SessionManager(ABC):
                 f" {loaded_namespaces} vs. {active_namespaces} (now vs. previous run)"
             )
 
-            # Store the updated list of loaded namespaces
-            await storage.store(
-                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
-                list(loaded_namespaces)
-            )
-
             # Set the device active for all loaded namespaces
             await storage.store(
                 f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
                 { namespace: True for namespace in loaded_namespaces }
+            )
+
+            # Store the updated list of loaded namespaces
+            await storage.store(
+                f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
+                list(loaded_namespaces)
             )
 
             # Take care of the initialization of newly added backends
@@ -539,13 +539,13 @@ class SessionManager(ABC):
         device = device._replace(active=frozenset(active.items()))
 
         await self.__storage.store(
-            f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
-            list(device.namespaces)
+            f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
+            dict(device.active)
         )
 
         await self.__storage.store(
-            f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/active",
-            dict(device.active)
+            f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/namespaces",
+            list(device.namespaces)
         )
 
         # If the backend is currently loaded, remove it from the list of loaded backends
@@ -1046,9 +1046,9 @@ class SessionManager(ABC):
 
         # Add new device information entries for new devices
         for device_id in new_devices:
-            await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", [ namespace ])
             await storage.store(f"/devices/{bare_jid}/{device_id}/active", { namespace: True })
             await storage.store(f"/devices/{bare_jid}/{device_id}/label", device_list[device_id])
+            await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", [ namespace ])
 
         # Update namespaces, label and status for previously known devices
         for device_id in old_device_list:
@@ -1060,11 +1060,6 @@ class SessionManager(ABC):
             active = (await storage.load_dict(f"/devices/{bare_jid}/{device_id}/active", bool)).from_just()
 
             if device_id in device_list:
-                # Add the namespace if required
-                if namespace not in namespaces:
-                    namespaces.add(namespace)
-                    await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", list(namespaces))
-
                 # Update the status if required
                 if namespace not in active or active[namespace] is False:
                     active[namespace] = True
@@ -1081,6 +1076,11 @@ class SessionManager(ABC):
                 # doesn't support labels".
                 if device_list[device_id] is not None and device_list[device_id] != label:
                     await storage.store(f"/devices/{bare_jid}/{device_id}/label", device_list[device_id])
+
+                # Add the namespace if required
+                if namespace not in namespaces:
+                    namespaces.add(namespace)
+                    await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", list(namespaces))
             else:
                 # Update the status if required
                 if namespace in namespaces:
@@ -1386,7 +1386,7 @@ class SessionManager(ABC):
         bundle_cache: Set[Bundle] = set()
 
         for device_id in device_list:
-            namespaces = frozenset((await storage.load_list(
+            namespaces = set((await storage.load_list(
                 f"/devices/{bare_jid}/{device_id}/namespaces",
                 str
             )).from_just())
@@ -1451,8 +1451,17 @@ class SessionManager(ABC):
                 str
             )).maybe(self.__undecided_trust_level_name)
 
+            if any(namespace not in active for namespace in namespaces):
+                logging.getLogger(SessionManager.LOG_TAG).warning(
+                    f"Inconsistent device information loaded from storage: allegedly supported namespaces are"
+                    f" {namespaces}, but activity information is only available for {set(active.keys())}."
+                    f" Removing the namespaces with missing activity information from storage."
+                )
+                namespaces = namespaces & set(active.keys())
+                await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", list(namespaces))
+
             devices.add(DeviceInformation(
-                namespaces=namespaces,
+                namespaces=frozenset(namespaces),
                 active=frozenset(active.items()),
                 bare_jid=bare_jid,
                 device_id=device_id,

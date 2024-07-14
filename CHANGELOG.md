@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+- Attempt to fix a storage data inconsistency where namespace support is stored for a device but activity information is not
+
 ## [1.0.3] - 9th of July, 2024
 
 ### Changed
