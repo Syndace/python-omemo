@@ -462,6 +462,10 @@ valid-metaclass-classmethod-first-arg=cls
 # Maximum number of arguments for function / method.
 max-args=100
 
+# New, hoping for https://github.com/pylint-dev/pylint/issues/5462 to drop soon so this config can be updated
+# cleanly
+max-positional-arguments=100
+
 # Maximum number of attributes for a class (see R0902).
 max-attributes=100
 
