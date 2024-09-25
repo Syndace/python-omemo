@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.0.5] - 25th of September, 2024
+
+### Added
+- A new method `refresh_device_lists` that calls `refresh_device_list` for all loaded backends.
+
 ## [1.0.4] - 14th of July, 2024
 
 ### Fixed
@@ -144,7 +149,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future.
 
-[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/Syndace/python-omemo/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/Syndace/python-omemo/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/Syndace/python-omemo/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Syndace/python-omemo/compare/v1.0.1...v1.0.2

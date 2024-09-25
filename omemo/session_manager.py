@@ -1122,6 +1122,24 @@ class SessionManager(ABC):
             await self._download_device_list(namespace, bare_jid)
         )
 
+    async def refresh_device_lists(self, bare_jid: str) -> None:
+        """
+        Manually trigger the refresh of a device list accross all loaded backends.
+
+        Args:
+            bare_jid: The bare JID of the XMPP account.
+
+        Raises:
+            DeviceListDownloadFailed: if any device list download failed. Forwarded from
+                :meth:`_download_device_list`.
+            DeviceListUploadFailed: if a device list upload failed. An upload can happen if the device list
+                update is for the own bare JID and does not include the own device. Forwarded from
+                :meth:`update_device_list`.
+        """
+
+        for backend in self.__backends:
+            await self.refresh_device_list(backend.namespace, bare_jid)
+
     ####################
     # trust management #
     ####################
