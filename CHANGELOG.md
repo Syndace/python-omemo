@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 28th of September, 2024
+
+### Changed
+- No changes; the last release should have been a new minor version.
+
 ## [1.0.5] - 25th of September, 2024
 
 ### Added
