@@ -1034,7 +1034,7 @@ class SessionManager(ABC):
             and self.__own_device_id not in new_device_list
         ):
             logging.getLogger(SessionManager.LOG_TAG).warning(
-                "Own device id was not included in the online device list."
+                f"Own device id was not included in the online device list for namespace {namespace}."
             )
 
             # Add this device to the device list and publish it
@@ -1433,11 +1433,10 @@ class SessionManager(ABC):
                             f" namespace {namespace}.",
                             exc_info=True
                         )
-                    except BundleNotFound:
+                    except BundleNotFound as e:
                         logging.getLogger(SessionManager.LOG_TAG).warning(
                             f"Bundle not available for device {device_id} of bare JID {bare_jid} for"
-                            f" namespace {namespace}.",
-                            exc_info=True
+                            f" namespace {namespace}: {e}"
                         )
                     else:
                         logging.getLogger(SessionManager.LOG_TAG).debug(
