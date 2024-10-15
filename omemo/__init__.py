@@ -1,106 +1,61 @@
-from .version import __version__
-from .project import project
+from .version import __version__ as __version__
+from .project import project as project
 
-from .backend import Backend, BackendException, DecryptionFailed, KeyExchangeFailed, TooManySkippedMessageKeys
-from .bundle import Bundle
-from .message import Content, EncryptedKeyMaterial, KeyExchange, Message
-
-from .session_manager import (
-    SessionManagerException,
-
-    TrustDecisionFailed,
-    StillUndecided,
-    NoEligibleDevices,
-
-    MessageNotForUs,
-    SenderNotFound,
-    SenderDistrusted,
-    NoSession,
-    PublicDataInconsistency,
-
-    UnknownTrustLevel,
-    UnknownNamespace,
-
-    XMPPInteractionFailed,
-    BundleUploadFailed,
-    BundleDownloadFailed,
-    BundleNotFound,
-    BundleDeletionFailed,
-    DeviceListUploadFailed,
-    DeviceListDownloadFailed,
-    MessageSendingFailed,
-
-    SessionManager
+from .backend import (
+    Backend as Backend,
+    BackendException as BackendException,
+    DecryptionFailed as DecryptionFailed,
+    KeyExchangeFailed as KeyExchangeFailed,
+    TooManySkippedMessageKeys as TooManySkippedMessageKeys
+)
+from .bundle import Bundle as Bundle
+from .message import (
+    Content as Content,
+    EncryptedKeyMaterial as EncryptedKeyMaterial,
+    KeyExchange as KeyExchange,
+    Message as Message
 )
 
-from .storage import Just, Maybe, Nothing, NothingException, Storage, StorageException
-from .types import AsyncFramework, DeviceInformation, JSONType, OMEMOException, TrustLevel
+from .session_manager import (
+    SessionManagerException as SessionManagerException,
 
-# Fun:
-# https://github.com/PyCQA/pylint/issues/6006
-# https://github.com/python/mypy/issues/10198
-__all__ = [  # pylint: disable=unused-variable
-    # .version
-    "__version__",
+    TrustDecisionFailed as TrustDecisionFailed,
+    StillUndecided as StillUndecided,
+    NoEligibleDevices as NoEligibleDevices,
 
-    # .project
-    "project",
+    MessageNotForUs as MessageNotForUs,
+    SenderNotFound as SenderNotFound,
+    SenderDistrusted as SenderDistrusted,
+    NoSession as NoSession,
+    PublicDataInconsistency as PublicDataInconsistency,
 
-    # .backend
-    "Backend",
-    "BackendException",
-    "DecryptionFailed",
-    "KeyExchangeFailed",
-    "TooManySkippedMessageKeys",
+    UnknownTrustLevel as UnknownTrustLevel,
+    UnknownNamespace as UnknownNamespace,
 
-    # .bundle
-    "Bundle",
+    XMPPInteractionFailed as XMPPInteractionFailed,
+    BundleUploadFailed as BundleUploadFailed,
+    BundleDownloadFailed as BundleDownloadFailed,
+    BundleNotFound as BundleNotFound,
+    BundleDeletionFailed as BundleDeletionFailed,
+    DeviceListUploadFailed as DeviceListUploadFailed,
+    DeviceListDownloadFailed as DeviceListDownloadFailed,
+    MessageSendingFailed as MessageSendingFailed,
 
-    # .message
-    "Content",
-    "EncryptedKeyMaterial",
-    "KeyExchange",
-    "Message",
+    SessionManager as SessionManager
+)
 
-    # .session_manager
-    "SessionManagerException",
-
-    "TrustDecisionFailed",
-    "StillUndecided",
-    "NoEligibleDevices",
-
-    "MessageNotForUs",
-    "SenderNotFound",
-    "SenderDistrusted",
-    "NoSession",
-    "PublicDataInconsistency",
-
-    "UnknownTrustLevel",
-    "UnknownNamespace",
-
-    "XMPPInteractionFailed",
-    "BundleUploadFailed",
-    "BundleDownloadFailed",
-    "BundleNotFound",
-    "BundleDeletionFailed",
-    "DeviceListUploadFailed",
-    "DeviceListDownloadFailed",
-    "MessageSendingFailed",
-
-    "SessionManager",
-
-    # .storage
-    "Just",
-    "Maybe",
-    "Nothing",
-    "NothingException",
-    "Storage",
-    "StorageException",
-
-    # .types
-    "AsyncFramework",
-    "DeviceInformation",
-    "JSONType",
-    "OMEMOException",
-    "TrustLevel"
-]
+from .storage import (
+    Just as Just,
+    Maybe as Maybe,
+    Nothing as Nothing,
+    NothingException as NothingException,
+    Storage as Storage,
+    StorageException as StorageException
+)
+from .types import (
+    AsyncFramework as AsyncFramework,
+    DeviceInformation as DeviceInformation,
+    JSONType as JSONType,
+    OMEMOException as OMEMOException,
+    TrustLevel as TrustLevel
+)

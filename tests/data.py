@@ -3,7 +3,7 @@ import oldmemo
 from typing_extensions import Final
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "NS_TWOMEMO",
     "NS_OLDMEMO",
     "ALICE_BARE_JID",

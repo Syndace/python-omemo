@@ -7,7 +7,7 @@ from .session import Session
 from .types import OMEMOException
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "Backend",
     "BackendException",
     "DecryptionFailed",

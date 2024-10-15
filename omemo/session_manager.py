@@ -23,7 +23,7 @@ from .storage import NothingException, Storage
 from .types import AsyncFramework, DeviceInformation, OMEMOException, TrustLevel
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "SessionManagerException",
 
     "TrustDecisionFailed",

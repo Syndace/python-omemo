@@ -1,11 +1,11 @@
 # This import from future (theoretically) enables sphinx_autodoc_typehints to handle type aliases better
-from __future__ import annotations  # pylint: disable=unused-variable
+from __future__ import annotations
 
 import enum
 from typing import FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, Union
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "AsyncFramework",
     "DeviceInformation",
     "JSONType",

@@ -7,7 +7,7 @@ from typing_extensions import assert_never
 import omemo
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "BTBVSessionManager",
     "BTBVTrustLevel"
 ]

@@ -1,5 +1,5 @@
 # This import from future (theoretically) enables sphinx_autodoc_typehints to handle type aliases better
-from __future__ import annotations  # pylint: disable=unused-variable
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import logging
@@ -11,7 +11,7 @@ from xeddsa.bindings import Ed25519Pub, Priv, Seed
 from .storage import NothingException, Storage
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "IdentityKeyPair",
     "IdentityKeyPairPriv",
     "IdentityKeyPairSeed"

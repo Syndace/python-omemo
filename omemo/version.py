@@ -1,4 +1,4 @@
-__all__ = [ "__version__" ]  # pylint: disable=unused-variable
+__all__ = [ "__version__" ]
 
 __version__ = {}
 __version__["short"] = "1.1.0"

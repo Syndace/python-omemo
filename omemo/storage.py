@@ -1,5 +1,5 @@
 # This import from future (theoretically) enables sphinx_autodoc_typehints to handle type aliases better
-from __future__ import annotations  # pylint: disable=unused-variable
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import base64
@@ -9,7 +9,7 @@ from typing import Callable, Dict, Generic, List, Optional, Type, TypeVar, Union
 from .types import JSONType, OMEMOException
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "Just",
     "Maybe",
     "Nothing",

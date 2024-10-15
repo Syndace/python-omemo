@@ -11,7 +11,7 @@ import omemo
 from .data import ALICE_BARE_JID, BOB_BARE_JID
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "POST_MIGRATION_TEST_MESSAGE",
     "download_bundle",
     "LegacyStorageImpl"

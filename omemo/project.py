@@ -1,4 +1,4 @@
-__all__ = [ "project" ]  # pylint: disable=unused-variable
+__all__ = [ "project" ]
 
 project = {
     "name"         : "OMEMO",

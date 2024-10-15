@@ -6,7 +6,7 @@ from typing_extensions import NamedTuple, assert_never
 import omemo
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "TrustLevel",
     "BundleStorageKey",
     "DeviceListStorageKey",
@@ -75,7 +75,6 @@ def make_session_manager_impl(
     """
 
     class SessionManagerImpl(omemo.SessionManager):
-        # pylint: disable=missing-class-docstring
         @staticmethod
         async def _upload_bundle(bundle: omemo.Bundle) -> None:
             bundle_storage[BundleStorageKey(

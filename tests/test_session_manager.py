@@ -15,13 +15,13 @@ from .session_manager_impl import \
     BundleStorage, DeviceListStorage, MessageQueue, TrustLevel, make_session_manager_impl
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "test_regression0",
     "test_oldmemo_migration"
 ]
 
 
-pytestmark = pytest.mark.asyncio  # pylint: disable=unused-variable
+pytestmark = pytest.mark.asyncio
 
 
 async def test_regression0() -> None:

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import FrozenSet, NamedTuple, Optional, Tuple
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "Content",
     "EncryptedKeyMaterial",
     "KeyExchange",
@@ -43,13 +43,11 @@ class EncryptedKeyMaterial(ABC):
     @property
     @abstractmethod
     def bare_jid(self) -> str:
-        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def device_id(self) -> int:
-        # pylint: disable=missing-function-docstring
         pass
 
 
@@ -62,7 +60,6 @@ class KeyExchange(ABC):
     @property
     @abstractmethod
     def identity_key(self) -> bytes:
-        # pylint: disable=missing-function-docstring
         pass
 
     @abstractmethod

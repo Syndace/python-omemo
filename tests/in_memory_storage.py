@@ -3,7 +3,7 @@ from typing import Dict
 import omemo
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "InMemoryStorage"
 ]
 

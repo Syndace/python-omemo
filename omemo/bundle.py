@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "Bundle"
 ]
 
@@ -18,25 +18,21 @@ class Bundle(ABC):
     @property
     @abstractmethod
     def namespace(self) -> str:
-        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def bare_jid(self) -> str:
-        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def device_id(self) -> int:
-        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def identity_key(self) -> bytes:
-        # pylint: disable=missing-function-docstring
         pass
 
     @abstractmethod

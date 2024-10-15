@@ -5,7 +5,7 @@ from typing import Optional
 from .message import KeyExchange
 
 
-__all__ = [  # pylint: disable=unused-variable
+__all__ = [
     "Initiation",
     "Session"
 ]
@@ -48,19 +48,16 @@ class Session(ABC):
     @property
     @abstractmethod
     def namespace(self) -> str:
-        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def bare_jid(self) -> str:
-        # pylint: disable=missing-function-docstring
         pass
 
     @property
     @abstractmethod
     def device_id(self) -> int:
-        # pylint: disable=missing-function-docstring
         pass
 
     @property
