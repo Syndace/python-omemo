@@ -139,17 +139,17 @@
 - [x] backends can be provided for different versions of the OMEMO protocol
     - [x] the protocol version a backend implements is identified by its namespace
 
-- [ ] data storage has to be provided by the application
+- [x] data storage has to be provided by the application
     - [x] an asyncio-based storage interface has to be implemented
         - [x] this interface transparently handles caching
         - [x] the interface represents generic key-value storage with opaque keys and values
-    - [ ] automatic migrations between storage format versions are provided
+    - [x] automatic migrations between storage format versions are provided
     - [x] storage consistency is guaranteed
         - [x] write operations MUST NOT cache or defer but perform the writing operation right away
         - [x] when encrypting or decrypting, changes to the state are only persisted when success is guaranteed
 
-- [ ] a convenience method to verify consistency (and fix) of the server-side data with the local data is provided
-    - [ ] these checks are not ran automatically, but the documentation includes a hint and examples run the checks after startup
+- [x] a convenience method to verify consistency (and fix) of the server-side data with the local data is provided
+    - [x] these checks are not ran automatically, but the documentation includes a hint and examples run the checks after startup
 
 # Part of the respective backends
 
