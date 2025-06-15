@@ -169,6 +169,10 @@ async def test_regression0() -> None:
         assert plaintext == b"Hello back, Alice!"
 
 
+    await alice_session_manager.shutdown()
+    await bob_session_manager.shutdown()
+
+
 async def test_oldmemo_migration() -> None:
     """
     Tests the migration of the legacy storage format, which is provided by python-oldmemo.
@@ -217,3 +221,5 @@ async def test_oldmemo_migration() -> None:
     plaintext, _, _ = await session_manager.decrypt(message)
 
     assert plaintext == b"This is a test message"
+
+    await session_manager.shutdown()

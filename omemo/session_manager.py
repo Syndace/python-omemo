@@ -4,7 +4,8 @@ import base64
 import itertools
 import logging
 import secrets
-from typing import Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from typing import Awaitable, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, \
+    cast
 from typing_extensions import assert_never
 
 try:
@@ -247,6 +248,8 @@ class SessionManager(ABC):
         self.__pre_key_refill_threshold: int
         self.__identity_key_pair: IdentityKeyPair
         self.__synchronizing: bool
+        self.__async_framework: AsyncFramework
+        self.__signed_pre_key_management_task: Awaitable[None]
 
     @classmethod
     async def create(
@@ -349,6 +352,7 @@ class SessionManager(ABC):
         self.__pre_key_refill_threshold = pre_key_refill_threshold
         self.__identity_key_pair = await IdentityKeyPair.get(storage)
         self.__synchronizing = True
+        self.__async_framework = async_framework
 
         try:
             self.__own_device_id = (await self.__storage.load_primitive("/own_device_id", int)).from_just()
@@ -473,16 +477,15 @@ class SessionManager(ABC):
                 await self.purge_backend(namespace)
 
         # Start signed pre key rotation management "in the background"
+        signed_pre_key_management_coro = self.__manage_signed_pre_key_rotation(
+            signed_pre_key_rotation_period,
+            async_framework
+        )
+
         if async_framework is AsyncFramework.ASYNCIO:
-            asyncio.ensure_future(self.__manage_signed_pre_key_rotation(
-                signed_pre_key_rotation_period,
-                async_framework
-            ))
+            self.__signed_pre_key_management_task = asyncio.ensure_future(signed_pre_key_management_coro)
         elif async_framework is AsyncFramework.TWISTED:
-            defer.ensureDeferred(self.__manage_signed_pre_key_rotation(
-                signed_pre_key_rotation_period,
-                async_framework
-            ))
+            self.__signed_pre_key_management_task = defer.ensureDeferred(signed_pre_key_management_coro)
         else:
             assert_never(async_framework)
 
@@ -491,6 +494,30 @@ class SessionManager(ABC):
         )
 
         return self
+
+    async def shutdown(self) -> None:
+        """
+        Gracefully quit internal tasks.
+        """
+
+        if self.__async_framework is AsyncFramework.ASYNCIO:
+            asyncio_task = cast(asyncio.Future[None], self.__signed_pre_key_management_task)
+            try:
+                asyncio_task.cancel()
+                await asyncio_task
+            except asyncio.CancelledError:
+                pass
+
+        elif self.__async_framework is AsyncFramework.TWISTED:
+            twisted_task = cast(defer.Deferred[None], self.__signed_pre_key_management_task)
+            try:
+                twisted_task.cancel()
+                await twisted_task
+            except defer.CancelledError:
+                pass
+
+        else:
+            assert_never(self.__async_framework)
 
     async def purge_backend(self, namespace: str) -> None:
         """

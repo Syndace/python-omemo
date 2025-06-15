@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+- A new method `shutdown` to gracefully quit internal tasks
+
 ## [1.2.0] - 15th of October, 2024
 
 ### Changed
