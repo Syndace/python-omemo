@@ -20,8 +20,8 @@ class AsyncFramework(enum.Enum):
     Frameworks for asynchronous code supported by python-omemo.
     """
 
-    ASYNCIO: str = "ASYNCIO"
-    TWISTED: str = "TWISTED"
+    ASYNCIO = "ASYNCIO"
+    TWISTED = "TWISTED"
 
 
 class OMEMOException(Exception):
@@ -51,9 +51,9 @@ class TrustLevel(enum.Enum):
     The three core trust levels.
     """
 
-    TRUSTED: str = "TRUSTED"
-    DISTRUSTED: str = "DISTRUSTED"
-    UNDECIDED: str = "UNDECIDED"
+    TRUSTED = "TRUSTED"
+    DISTRUSTED = "DISTRUSTED"
+    UNDECIDED = "UNDECIDED"
 
 
 # # Thanks @vanburgerberg - https://github.com/python/typing/issues/182

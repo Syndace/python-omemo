@@ -19,10 +19,10 @@ class BTBVTrustLevel(enum.Enum):
     Trust levels modeling Blind Trust Before Verification (BTBV).
     """
 
-    TRUSTED: str = "TRUSTED"
-    BLINDLY_TRUSTED: str = "BLINDLY_TRUSTED"
-    UNDECIDED: str = "UNDECIDED"
-    DISTRUSTED: str = "DISTRUSTED"
+    TRUSTED = "TRUSTED"
+    BLINDLY_TRUSTED = "BLINDLY_TRUSTED"
+    UNDECIDED = "UNDECIDED"
+    DISTRUSTED = "DISTRUSTED"
 
 
 # Note that while this is an "example", it is fully functional and can be used as-is.

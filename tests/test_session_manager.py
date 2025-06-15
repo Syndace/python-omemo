@@ -168,7 +168,6 @@ async def test_regression0() -> None:
         plaintext, _, _ = await alice_session_manager.decrypt(next(iter(messages.keys())))
         assert plaintext == b"Hello back, Alice!"
 
-
     await alice_session_manager.shutdown()
     await bob_session_manager.shutdown()
 

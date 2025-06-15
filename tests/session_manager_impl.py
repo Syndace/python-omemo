@@ -23,9 +23,9 @@ class TrustLevel(enum.Enum):
     Trust levels modeling simple manual trust.
     """
 
-    TRUSTED: str = "TRUSTED"
-    UNDECIDED: str = "UNDECIDED"
-    DISTRUSTED: str = "DISTRUSTED"
+    TRUSTED = "TRUSTED"
+    UNDECIDED = "UNDECIDED"
+    DISTRUSTED = "DISTRUSTED"
 
 
 class BundleStorageKey(NamedTuple):

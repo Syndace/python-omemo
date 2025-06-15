@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 - A new method `shutdown` to gracefully quit internal tasks
 
+### Changed
+- Removed type annotations from enum members in accordance with a new mypy rule
+
 ## [1.2.0] - 15th of October, 2024
 
 ### Changed
