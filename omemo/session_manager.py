@@ -1183,7 +1183,7 @@ class SessionManager(ABC):
         """
 
         logging.getLogger(SessionManager.LOG_TAG).debug(
-            f"Setting trust level for identity key {identity_key} to {trust_level_name}."
+            f"Setting trust level for identity key 0x{identity_key.hex()} to {trust_level_name}."
         )
 
         await self.__storage.store(
@@ -2220,7 +2220,7 @@ class SessionManager(ABC):
             plain_key_material
         )
 
-        logging.getLogger(SessionManager.LOG_TAG).debug(f"Message decrypted: {plaintext}")
+        logging.getLogger(SessionManager.LOG_TAG).debug(f"Message decrypted: {plaintext!r}")
 
         # Persist the session following successful decryption
         await backend.store_session(session)

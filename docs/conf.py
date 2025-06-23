@@ -12,22 +12,37 @@
 import os
 import sys
 
-this_file_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(this_file_path, "..", "omemo"))
-
-from version import __version__ as __version
-from project import project     as __project
+root_dir_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.append(os.path.join(root_dir_path, "omemo"))
 
 # -- Project information -----------------------------------------------------------------
 
-project   = __project["name"]
-author    = __project["author"]
-copyright = f"{__project['year']}, {__project['author']}"
+from version import __version__ as __version
+
+import tomllib
+from typing import List
+
+with open(os.path.join(root_dir_path, "pyproject.toml"), "rb") as f:
+    __pyproject = tomllib.load(f)
+
+project: str   = __pyproject["project"]["name"]
+author: str    = __pyproject["project"]["authors"][0]["name"]
+copyright: str = f"2025, {author}"
+
+__classifiers: List[str] = __pyproject["project"]["classifiers"]
+
+__tag: str = "unknown"
+if "Development Status :: 3 - Alpha" in __classifiers:
+    __tag = "alpha"
+if "Development Status :: 4 - Beta" in __classifiers:
+    __tag = "beta"
+if "Development Status :: 5 - Production/Stable" in __classifiers:
+    __tag = "stable"
 
 # The short X.Y version
-version = __version["short"]
+version = __version
 # The full version, including alpha/beta/rc tags
-release = __version["full"]
+release = f"{__version}-{__tag}"
 
 # -- General configuration ---------------------------------------------------------------
 
