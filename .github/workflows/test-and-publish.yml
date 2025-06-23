@@ -28,7 +28,6 @@ jobs:
       - name: Install test dependencies
         run: |
           pip install --upgrade .[test,lint]
-          pip install --upgrade twisted twomemo[xml] oldmemo[xml]
 
       - name: Type-check using mypy
         run: mypy omemo/ examples/ tests/
