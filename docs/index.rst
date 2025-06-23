@@ -9,4 +9,5 @@ A complete implementation of `XEP-0384 <https://xmpp.org/extensions/xep-0384.htm
     installation
     getting_started
     migration_from_legacy
+    exceptions
     API Documentation <omemo/package>
