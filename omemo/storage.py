@@ -1,4 +1,3 @@
-# This import from future (theoretically) enables sphinx_autodoc_typehints to handle type aliases better
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -41,6 +41,7 @@ from .session_manager import (
     DeviceListDownloadFailed as DeviceListDownloadFailed,
     MessageSendingFailed as MessageSendingFailed,
 
+    EncryptionError as EncryptionError,
     SessionManager as SessionManager
 )
 

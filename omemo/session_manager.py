@@ -49,6 +49,7 @@ __all__ = [
     "DeviceListDownloadFailed",
     "MessageSendingFailed",
 
+    "EncryptionError",
     "SessionManager"
 ]
 

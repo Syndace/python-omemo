@@ -1,12 +1,11 @@
-# This import from future (theoretically) enables sphinx_autodoc_typehints to handle type aliases better
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import logging
 import secrets
 
-import xeddsa.bindings as xeddsa
-from xeddsa.bindings import Ed25519Pub, Priv, Seed
+import xeddsa
+from xeddsa import Ed25519Pub, Priv, Seed
 
 from .storage import NothingException, Storage
 
@@ -14,7 +13,10 @@ from .storage import NothingException, Storage
 __all__ = [
     "IdentityKeyPair",
     "IdentityKeyPairPriv",
-    "IdentityKeyPairSeed"
+    "IdentityKeyPairSeed",
+    "Ed25519Pub",
+    "Priv",
+    "Seed"
 ]
 
 

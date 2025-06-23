@@ -8,3 +8,5 @@ Module: storage
     :undoc-members:
     :member-order: bysource
     :show-inheritance:
+
+.. autoclass:: omemo.storage.ValueTypeT
