@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 - Removed type annotations from enum members in accordance with a new mypy rule
+- Simplified the `JSONObject` type now that recursive aliases are properly supported
 
 ## [1.2.0] - 15th of October, 2024
 

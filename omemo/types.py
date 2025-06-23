@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 from typing import FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, Union
+from typing_extensions import TypeAlias
 
 
 __all__ = [
@@ -55,19 +56,4 @@ class TrustLevel(enum.Enum):
     UNDECIDED = "UNDECIDED"
 
 
-# # Thanks @vanburgerberg - https://github.com/python/typing/issues/182
-# if TYPE_CHECKING:
-#     class JSONArray(list[JSONType], Protocol):  # type: ignore
-#         __class__: Type[list[JSONType]]  # type: ignore
-#
-#     class JSONObject(dict[str, JSONType], Protocol):  # type: ignore
-#         __class__: Type[dict[str, JSONType]]  # type: ignore
-#
-#     JSONType = Union[None, float, int, str, bool, JSONArray, JSONObject]
-
-# Sadly @vanburgerberg's solution doesn't seem to like Dict[str, bool], thus for now an incomplete JSON
-# type with finite levels of depth.
-Primitives = Union[None, float, int, str, bool]
-JSONType2 = Union[Primitives, List[Primitives], Mapping[str, Primitives]]
-JSONType1 = Union[Primitives, List[JSONType2], Mapping[str, JSONType2]]
-JSONType = Union[Primitives, List[JSONType1], Mapping[str, JSONType1]]
+JSONType: TypeAlias = Union[Mapping[str, "JSONType"], List["JSONType"], str, int, float, bool, None]
