@@ -6,12 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 24th of June, 2025
+
 ### Added
 - A new method `shutdown` to gracefully quit internal tasks
 
 ### Changed
 - Removed type annotations from enum members in accordance with a new mypy rule
-- Simplified the `JSONObject` type now that recursive aliases are properly supported
+- Simplified the `JSONType` type now that recursive aliases are properly supported
 
 ### Removed
 - Removed project.py and simplified version.py as part of the migration towards pyproject.toml
@@ -171,7 +173,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future.
 
-[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Syndace/python-omemo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Syndace/python-omemo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Syndace/python-omemo/compare/v1.0.5...v1.1.0
 [1.0.5]: https://github.com/Syndace/python-omemo/compare/v1.0.4...v1.0.5
