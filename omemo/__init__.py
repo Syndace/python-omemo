@@ -55,7 +55,9 @@ from .storage import (
 from .types import (
     AsyncFramework as AsyncFramework,
     DeviceInformation as DeviceInformation,
+    DeviceList as DeviceList,
     JSONType as JSONType,
     OMEMOException as OMEMOException,
+    SignedLabel as SignedLabel,
     TrustLevel as TrustLevel
 )

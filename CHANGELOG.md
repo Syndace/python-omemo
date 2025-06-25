@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+- Added three new abstract methods related to device label handling to `Backend`.
+- Added device label signing and signature verification capabilities as per XEP-0384 version 0.9.0.
+
+### Changed
+- Modified the public device list API to include a signature for device labels.
+
 ## [1.3.0] - 24th of June, 2025
 
 ### Added

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import enum
-from typing import FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, Union
+from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, Union
 from typing_extensions import TypeAlias
 
 
 __all__ = [
     "AsyncFramework",
     "DeviceInformation",
+    "DeviceList",
     "JSONType",
     "OMEMOException",
+    "SignedLabel",
     "TrustLevel"
 ]
 
@@ -28,6 +30,16 @@ class OMEMOException(Exception):
     """
     Parent type for all custom exceptions in this library.
     """
+
+
+class SignedLabel(NamedTuple):
+    # pylint: disable=invalid-name
+    """
+    Structure containing a device label and the corresponding signature.
+    """
+
+    label: str
+    signature: bytes
 
 
 class DeviceInformation(NamedTuple):
@@ -56,4 +68,5 @@ class TrustLevel(enum.Enum):
     UNDECIDED = "UNDECIDED"
 
 
+DeviceList: TypeAlias = Dict[int, Optional[SignedLabel]]
 JSONType: TypeAlias = Union[Mapping[str, "JSONType"], List["JSONType"], str, int, float, bool, None]

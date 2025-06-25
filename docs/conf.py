@@ -85,6 +85,7 @@ nitpicky = True
 
 autodoc_typehints = "description"
 autodoc_type_aliases = { k: k for k in {
+    "DeviceList",
     "JSONType",
     "Ed25519Pub",
     "Priv",

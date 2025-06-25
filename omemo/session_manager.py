@@ -21,7 +21,7 @@ from .identity_key_pair import IdentityKeyPair
 from .message import EncryptedKeyMaterial, KeyExchange, Message, PlainKeyMaterial
 from .session import Initiation, Session
 from .storage import NothingException, Storage
-from .types import AsyncFramework, DeviceInformation, OMEMOException, TrustLevel
+from .types import AsyncFramework, DeviceInformation, DeviceList, OMEMOException, SignedLabel, TrustLevel
 
 
 __all__ = [
@@ -877,13 +877,13 @@ class SessionManager(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _upload_device_list(namespace: str, device_list: Dict[int, Optional[str]]) -> None:
+    async def _upload_device_list(namespace: str, device_list: DeviceList) -> None:
         """
         Upload the device list for this XMPP account.
 
         Args:
             namespace: The XML namespace to execute this operation under.
-            device_list: The device list to upload. Mapping from device id to optional label.
+            device_list: The device list to upload. Mapping from device id to optional signed label.
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
@@ -900,7 +900,7 @@ class SessionManager(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _download_device_list(namespace: str, bare_jid: str) -> Dict[int, Optional[str]]:
+    async def _download_device_list(namespace: str, bare_jid: str) -> DeviceList:
         """
         Download the device list of a specific XMPP account.
 
@@ -909,7 +909,7 @@ class SessionManager(ABC):
             bare_jid: The bare JID of the XMPP account.
 
         Returns:
-            The device list as a dictionary, mapping the device ids to their optional label.
+            The device list as a dictionary, mapping the device ids to their optional signed label.
 
         Raises:
             UnknownNamespace: if the namespace is unknown.
@@ -1010,12 +1010,7 @@ class SessionManager(ABC):
     # device list management #
     ##########################
 
-    async def update_device_list(
-        self,
-        namespace: str,
-        bare_jid: str,
-        device_list: Dict[int, Optional[str]]
-    ) -> None:
+    async def update_device_list(self, namespace: str, bare_jid: str, device_list: DeviceList) -> None:
         """
         Update the device list of a specific bare JID, e.g. after receiving an update for the XMPP account
         from `PEP <https://xmpp.org/extensions/xep-0163.html>`__.
@@ -1023,7 +1018,7 @@ class SessionManager(ABC):
         Args:
             namespace: The XML namespace to execute this operation under.
             bare_jid: The bare JID of the XMPP account.
-            device_list: The updated device list. Mapping from device id to optional label.
+            device_list: The updated device list. Mapping from device id to optional signed label.
 
         Raises:
             UnknownNamespace: if the backend to handle the message is not currently loaded.
@@ -1041,8 +1036,9 @@ class SessionManager(ABC):
 
         storage = self.__storage
 
-        # This isn't strictly necessary, but good for consistency
-        if namespace not in frozenset(backend.namespace for backend in self.__backends):
+        # Find the backend to handle this device list update
+        backend = next(filter(lambda backend: backend.namespace == namespace, self.__backends), None)
+        if backend is None:
             raise UnknownNamespace(f"The backend handling the namespace {namespace} is not currently loaded.")
 
         # Copy to make sure the original is not modified
@@ -1066,16 +1062,25 @@ class SessionManager(ABC):
             )
 
             # Add this device to the device list and publish it
-            device_list[self.__own_device_id] = (await storage.load_optional(
+            own_label = (await storage.load_optional(
                 f"/devices/{self.__own_bare_jid}/{self.__own_device_id}/label",
                 str
             )).from_just()
+
+            device_list[self.__own_device_id] = None if own_label is None else SignedLabel(
+                label=own_label,
+                signature=await backend.sign_own_label(own_label)
+            )
+
             await self._upload_device_list(namespace, device_list)
 
         # Add new device information entries for new devices
         for device_id in new_devices:
             await storage.store(f"/devices/{bare_jid}/{device_id}/active", { namespace: True })
-            await storage.store(f"/devices/{bare_jid}/{device_id}/label", device_list[device_id])
+            # Device label processing is deferred until after all basic information has been processed, since
+            # the identity keys and thus bundle data is required to verify label signatures. This extended
+            # information is better fetched in bulk as the final step.
+            await storage.store(f"/devices/{bare_jid}/{device_id}/label", None)
             await storage.store(f"/devices/{bare_jid}/{device_id}/namespaces", [ namespace ])
 
         # Update namespaces, label and status for previously known devices
@@ -1087,23 +1092,11 @@ class SessionManager(ABC):
 
             active = (await storage.load_dict(f"/devices/{bare_jid}/{device_id}/active", bool)).from_just()
 
-            if device_id in device_list:
+            if device_id in new_device_list:
                 # Update the status if required
                 if namespace not in active or active[namespace] is False:
                     active[namespace] = True
                     await storage.store(f"/devices/{bare_jid}/{device_id}/active", active)
-
-                # Update the label if required. Even though loading the value first isn't strictly required,
-                # it is done under the assumption that loading values is cheaper than writing.
-                label = (await storage.load_optional(
-                    f"/devices/{bare_jid}/{device_id}/label",
-                    str
-                )).from_just()
-
-                # Don't interpret ``None`` as "no label set" here. Instead, interpret ``None`` as "the backend
-                # doesn't support labels".
-                if device_list[device_id] is not None and device_list[device_id] != label:
-                    await storage.store(f"/devices/{bare_jid}/{device_id}/label", device_list[device_id])
 
                 # Add the namespace if required
                 if namespace not in namespaces:
@@ -1116,10 +1109,33 @@ class SessionManager(ABC):
                         active[namespace] = False
                         await storage.store(f"/devices/{bare_jid}/{device_id}/active", active)
 
-        # If there are unknown devices in the new device list, update the list of known devices. Do this as
-        # the last step to ensure data consistency.
+        # If there are unknown devices in the new device list, update the list of known devices. Do this after
+        # processing all data except for device labels to ensure data consistency.
         if len(new_devices) > 0:
             await storage.store(f"/devices/{bare_jid}/list", list(new_device_list | old_device_list))
+
+        # If the backend supports labels, process new and updated labels now that all basic information has
+        # been processed.
+        if backend.supports_labels:
+            for device_information in await self.get_device_information(bare_jid):
+                device_id = device_information.device_id
+                if device_id in new_device_list:
+                    signed_label = device_list[device_id]
+                    new_label = None if signed_label is None else signed_label.label
+                    if new_label != device_information.label:
+                        signature_valid = signed_label is None or await backend.verify_label_signature(
+                            signed_label.label,
+                            signed_label.signature,
+                            device_information.identity_key
+                        )
+
+                        if signature_valid:
+                            await storage.store(f"/devices/{bare_jid}/{device_id}/label", new_label)
+                        else:
+                            logging.getLogger(SessionManager.LOG_TAG).warning(
+                                f"In device list update for {bare_jid} under namespace {namespace}: ignored"
+                                f" device label for device {device_id} without valid signature: {new_label}"
+                            )
 
         logging.getLogger(SessionManager.LOG_TAG).debug("Device list update processed.")
 
@@ -1363,7 +1379,10 @@ class SessionManager(ABC):
             # However, one PEP node fetch per backend isn't super expensive and it's nice to avoid the code to
             # load the cached device list.
             device_list = await self._download_device_list(backend.namespace, self.__own_bare_jid)
-            device_list[self.__own_device_id] = own_label
+            device_list[self.__own_device_id] = None if own_label is None else SignedLabel(
+                label=own_label,
+                signature=await backend.sign_own_label(own_label)
+            )
             await self._upload_device_list(backend.namespace, device_list)
 
     async def get_device_information(self, bare_jid: str) -> FrozenSet[DeviceInformation]:

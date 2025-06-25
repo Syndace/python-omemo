@@ -50,7 +50,7 @@ class DeviceListStorageKey(NamedTuple):
 
 
 BundleStorage = Dict[BundleStorageKey, omemo.Bundle]
-DeviceListStorage = Dict[DeviceListStorageKey, Dict[int, Optional[str]]]
+DeviceListStorage = Dict[DeviceListStorageKey, omemo.DeviceList]
 MessageQueue = List[Tuple[str, omemo.Message]]
 
 
@@ -106,14 +106,14 @@ def make_session_manager_impl(
                 raise omemo.BundleDeletionFailed() from e
 
         @staticmethod
-        async def _upload_device_list(namespace: str, device_list: Dict[int, Optional[str]]) -> None:
+        async def _upload_device_list(namespace: str, device_list: omemo.DeviceList) -> None:
             device_list_storage[DeviceListStorageKey(
                 namespace=namespace,
                 bare_jid=own_bare_jid
             )] = device_list
 
         @staticmethod
-        async def _download_device_list(namespace: str, bare_jid: str) -> Dict[int, Optional[str]]:
+        async def _download_device_list(namespace: str, bare_jid: str) -> omemo.DeviceList:
             try:
                 return device_list_storage[DeviceListStorageKey(
                     namespace=namespace,

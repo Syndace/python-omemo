@@ -418,6 +418,40 @@ class Backend(ABC):
             Do not include pre keys hidden by :meth:`hide_pre_key` in the bundle!
         """
 
+    @property
+    @abstractmethod
+    def supports_labels(self) -> bool:
+        """
+        Returns:
+            Whether this backend supports labels for devices.
+        """
+
+    @abstractmethod
+    async def sign_own_label(self, label: str) -> bytes:
+        """
+        Sign a device label using the identity key.
+
+        Args:
+            label: The label to sign.
+
+        Returns:
+            A signature of the label created using the identity key.
+        """
+
+    @abstractmethod
+    async def verify_label_signature(self, label: str, signature: bytes, identity_key: bytes) -> bool:
+        """
+        Verify a device label's signature against the device owner's identity key.
+
+        Args:
+            label: The label or signed data.
+            signature: The signature.
+            identity_key: The device owner's identity public key in Ed25519 format.
+
+        Returns:
+            Whether the signature is valid.
+        """
+
     @abstractmethod
     async def purge(self) -> None:
         """

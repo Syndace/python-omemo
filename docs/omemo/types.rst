@@ -10,4 +10,5 @@ Module: types
 Type Aliases
 ============
 
+.. autoclass:: omemo.types.DeviceList
 .. autoclass:: omemo.types.JSONType
