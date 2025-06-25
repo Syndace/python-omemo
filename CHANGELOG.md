@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 25th of June, 2025
+
 ### Added
 - Added three new abstract methods related to device label handling to `Backend`.
 - Added device label signing and signature verification capabilities as per XEP-0384 version 0.9.0.
@@ -180,7 +182,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Upon serialization the current library version is added to the serialized structures, to allow for seamless updates in the future.
 
-[Unreleased]: https://github.com/Syndace/python-omemo/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Syndace/python-omemo/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/Syndace/python-omemo/compare/v1.3.0...v2.0.0
 [1.3.0]: https://github.com/Syndace/python-omemo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Syndace/python-omemo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Syndace/python-omemo/compare/v1.0.5...v1.1.0
