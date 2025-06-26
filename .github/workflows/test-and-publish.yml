@@ -27,7 +27,6 @@ jobs:
         run: pip install .
       - name: Install test dependencies
         run: |
-          pip install git+https://github.com/Syndace/python-twomemo git+https://github.com/Syndace/python-oldmemo
           pip install --upgrade .[test,lint]
 
       - name: Type-check using mypy
