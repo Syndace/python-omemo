@@ -42,7 +42,8 @@ classifiers = [
 version = { attr = "omemo.version.__version__" }
 
 [tool.setuptools.packages.find]
-exclude = [ "tests" ]
+include = [ "omemo", "omemo.*" ]
+namespaces = false
 
 [project.optional-dependencies]
 docs = [
