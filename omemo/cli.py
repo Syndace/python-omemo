@@ -2,11 +2,11 @@ from typing import Dict, List, Optional
 
 try:
     import prettytable
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     raise ModuleNotFoundError(
         "CLI dependency \"prettytable\" not found. Install python-omemo with CLI dependencies using"
         " \"pip install OMEMO[cli]\""
-    )
+    ) from e
 
 from .backend import Backend
 from .session_manager import SessionManager, UnknownNamespace
