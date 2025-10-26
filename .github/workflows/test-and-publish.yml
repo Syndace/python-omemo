@@ -27,7 +27,7 @@ jobs:
         run: pip install .
       - name: Install test dependencies
         run: |
-          pip install --upgrade .[test,lint]
+          pip install --upgrade .[dev]
 
       - name: Type-check using mypy
         run: mypy omemo/ examples/ tests/
