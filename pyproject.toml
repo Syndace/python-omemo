@@ -46,6 +46,9 @@ include = [ "omemo", "omemo.*" ]
 namespaces = false
 
 [project.optional-dependencies]
+cli = [
+    "prettytable>=3.16.0,<4"
+]
 docs = [
     "sphinx",
     "sphinx-rtd-theme",
@@ -66,7 +69,7 @@ lint = [
     "flake8-pyproject"
 ]
 dev = [
-    "omemo[docs,test,lint]"
+    "omemo[cli,docs,test,lint]"
 ]
 
 [project.urls]
