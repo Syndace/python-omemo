@@ -1184,6 +1184,21 @@ class SessionManager(ABC):
         for backend in self.__backends:
             await self.refresh_device_list(backend.namespace, bare_jid)
 
+    async def clear_device_lists(self) -> None:
+        """
+        Clear the device lists stored on the server for all loaded backends. This can be used to clear the
+        device lists of old entries that are no longer used, for example from testing clients or OMEMO
+        integration. Devices that are still actively used will add themselves back to the list the next time
+        they go online, which means that there will be a period of time where the device lists are potentially
+        incomplete.
+
+        Raises:
+            DeviceListUploadFailed: if a device list upload failed. Forwarded from :meth:`update_device_list`.
+        """
+
+        for backend in self.__backends:
+            await self._upload_device_list(backend.namespace, {})
+
     ####################
     # trust management #
     ####################

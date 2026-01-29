@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [2.1.0] - 29th of January 2026
 
 ### Added
+- Added a method to clear the remote device lists for all loaded backends.
 - Added a new module "cli" to hold debug CLI functionality. The CLI module has additional dependencies that will only be installed when explicitly requested using "pip install omemo[cli]".
 - Added the first CLI function "debug_encryption" to gather helpful information to debug encryption issues.
 
