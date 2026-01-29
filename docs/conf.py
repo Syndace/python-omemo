@@ -27,7 +27,7 @@ with open(os.path.join(root_dir_path, "pyproject.toml"), "rb") as f:
 
 project: str   = __pyproject["project"]["name"]
 author: str    = __pyproject["project"]["authors"][0]["name"]
-copyright: str = f"2025, {author}"
+copyright: str = f"2026, {author}"
 
 __classifiers: List[str] = __pyproject["project"]["classifiers"]
 

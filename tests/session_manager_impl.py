@@ -29,7 +29,6 @@ class TrustLevel(enum.Enum):
 
 
 class BundleStorageKey(NamedTuple):
-    # pylint: disable=invalid-name
     """
     The key identifying a bundle in the tests.
     """
@@ -40,7 +39,6 @@ class BundleStorageKey(NamedTuple):
 
 
 class DeviceListStorageKey(NamedTuple):
-    # pylint: disable=invalid-name
     """
     The key identifying a device list in the tests.
     """

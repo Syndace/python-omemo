@@ -18,7 +18,7 @@ Install the latest release using pip (`pip install OMEMO`) or manually from sour
 python-omemo uses [pytest](https://docs.pytest.org/en/latest/) as its testing framework, [mypy](http://mypy-lang.org/) for static type checks and both [pylint](https://pylint.pycqa.org/en/latest/) and [Flake8](https://flake8.pycqa.org/en/latest/) for linting. All tests/checks can be run locally with the following commands:
 
 ```sh
-$ pip install --upgrade .[test,lint]
+$ pip install --upgrade .[dev]
 $ mypy omemo/ examples/ tests/
 $ pylint omemo/ examples/ tests/
 $ flake8 omemo/ examples/ tests/

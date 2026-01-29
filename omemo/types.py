@@ -33,7 +33,6 @@ class OMEMOException(Exception):
 
 
 class SignedLabel(NamedTuple):
-    # pylint: disable=invalid-name
     """
     Structure containing a device label and the corresponding signature.
     """
@@ -43,7 +42,6 @@ class SignedLabel(NamedTuple):
 
 
 class DeviceInformation(NamedTuple):
-    # pylint: disable=invalid-name
     """
     Structure containing information about a single OMEMO device.
     """

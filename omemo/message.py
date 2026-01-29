@@ -75,7 +75,6 @@ class KeyExchange(ABC):
 
 
 class Message(NamedTuple):
-    # pylint: disable=invalid-name
     """
     Simple structure representing an OMEMO-encrypted message.
     """

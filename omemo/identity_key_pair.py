@@ -43,6 +43,7 @@ class IdentityKeyPair(ABC):
         backend-specific.
     """
 
+    # pylint: disable=invalid-name
     LOG_TAG = "omemo.core.identity_key_pair"
 
     @staticmethod

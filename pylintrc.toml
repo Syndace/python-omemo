@@ -15,7 +15,7 @@ analyse-fallback-blocks = true
 # A comma-separated list of package or module names from where C extensions may
 # be loaded. Extensions are loading into the active Python interpreter and may
 # run arbitrary code.
-extension-pkg-allow-list = []
+# extension-pkg-allow-list =
 
 # A comma-separated list of package or module names from where C extensions may
 # be loaded. Extensions are loading into the active Python interpreter and may
@@ -94,10 +94,6 @@ py-version = "3.9"
 # source root.
 # source-roots =
 
-# When enabled, pylint would attempt to guess common misconfiguration and emit
-# user-friendly hints instead of false-positive error messages.
-suggestion-mode = true
-
 # Allow loading of arbitrary C extensions. Extensions are imported into the
 # active Python interpreter and may run arbitrary code.
 # unsafe-load-any-extension =
@@ -126,7 +122,7 @@ bad-names = ["foo", "bar", "baz", "toto", "tutu", "tata"]
 # bad-names-rgxs =
 
 # Naming style matching correct class attribute names.
-class-attribute-naming-style = "UPPER_CASE"
+class-attribute-naming-style = "snake_case"
 
 # Regular expression matching correct class attribute names. Overrides class-
 # attribute-naming-style. If left empty, class attribute names will be checked
@@ -206,6 +202,11 @@ module-naming-style = "snake_case"
 # require a docstring.
 no-docstring-rgx = ""
 
+# Regular expression matching correct parameter specification variable names. If
+# left empty, parameter specification variable names will be checked with the set
+# naming style.
+# paramspec-rgx =
+
 # List of decorators that produce properties, such as abc.abstractproperty. Add
 # to this list to register other decorators that produce valid properties. These
 # decorators are taken in consideration only for invalid-name.
@@ -218,6 +219,10 @@ property-classes = ["abc.abstractproperty"]
 # Regular expression matching correct type variable names. If left empty, type
 # variable names will be checked with the set naming style.
 # typevar-rgx =
+
+# Regular expression matching correct type variable tuple names. If left empty,
+# type variable tuple names will be checked with the set naming style.
+# typevartuple-rgx =
 
 # Naming style matching correct variable names.
 variable-naming-style = "snake_case"
@@ -302,7 +307,8 @@ indent-after-paren = 4
 # tab).
 indent-string = "    "
 
-# Maximum number of characters on a single line.
+# Maximum number of characters on a single line. Pylint's default of 100 is based
+# on PEP 8's guidance that teams may choose line lengths up to 99 characters.
 max-line-length = 110
 
 # Maximum number of lines in a module.
@@ -373,13 +379,17 @@ confidence = ["HIGH", "CONTROL_FLOW", "INFERENCE", "INFERENCE_FAILURE", "UNDEFIN
 # --enable=similarities". If you want to run only the classes checker, but have
 # no Warning level messages displayed, use "--disable=all --enable=classes
 # --disable=W".
-disable = ["missing-module-docstring", "duplicate-code", "logging-fstring-interpolation"]
+disable = [
+    "locally-disabled", "file-ignored", "suppressed-message",  # Messages about explicitly disabled checks
+    "use-implicit-booleaness-not-comparison-to-string", "use-implicit-booleaness-not-comparison-to-zero",  # Messages that promote type-unsafety (??)
+    "missing-module-docstring", "duplicate-code", "logging-fstring-interpolation"
+]
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
 # multiple time (only on the command line, not in the configuration file where it
 # should appear only once). See also the "--disable" option for examples.
-enable = ["useless-suppression"]
+enable = ["useless-suppression", "raw-checker-failed", "bad-inline-option", "deprecated-pragma", "use-symbolic-message-instead"]
 
 [tool.pylint.method_args]
 # List of qualified names (i.e., library.method) which require a timeout
@@ -387,6 +397,9 @@ enable = ["useless-suppression"]
 timeout-methods = ["requests.api.delete", "requests.api.get", "requests.api.head", "requests.api.options", "requests.api.patch", "requests.api.post", "requests.api.put", "requests.api.request"]
 
 [tool.pylint.miscellaneous]
+# Whether or not to search for fixme's in docstrings.
+# check-fixme-in-docstring =
+
 # List of note tags to take in consideration, separated by a comma.
 notes = ["FIXME", "XXX", "TODO"]
 

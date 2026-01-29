@@ -195,7 +195,6 @@ class MessageSendingFailed(XMPPInteractionFailed):
 
 
 class EncryptionError(NamedTuple):
-    # pylint: disable=invalid-name
     """
     Structure containing information about an encryption error, returned by :meth:`SessionManager.encrypt`.
     """
@@ -234,6 +233,7 @@ class SessionManager(ABC):
         library can be used with any economy that provides similar functionality.
     """
 
+    # pylint: disable=invalid-name
     DEVICE_ID_MIN = 1
     DEVICE_ID_MAX = 2 ** 31 - 1
     STALENESS_MAGIC_NUMBER = 53
