@@ -5,8 +5,7 @@ import itertools
 import logging
 import secrets
 from typing import Awaitable, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, \
-    cast
-from typing_extensions import assert_never
+    assert_never, cast
 
 try:
     # One of the asynchronous frameworks supported other than asyncio.

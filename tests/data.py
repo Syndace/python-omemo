@@ -1,6 +1,6 @@
 import twomemo
 import oldmemo
-from typing_extensions import Final
+from typing import Final
 
 
 __all__ = [

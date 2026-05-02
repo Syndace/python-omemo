@@ -1,8 +1,6 @@
 import abc
 import enum
-from typing import FrozenSet, Optional, Set
-
-from typing_extensions import assert_never
+from typing import FrozenSet, Optional, Set, assert_never
 
 import omemo
 

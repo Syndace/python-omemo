@@ -4,7 +4,7 @@ from xml.etree import ElementTree as ET
 import oldmemo
 import oldmemo.etree
 from oldmemo.migrations import LegacyStorage, OwnData, State, Session, Trust
-from typing_extensions import Final
+from typing import Final
 
 import omemo
 

@@ -1,7 +1,5 @@
 import enum
-from typing import Dict, FrozenSet, List, Optional, Tuple, Type
-
-from typing_extensions import NamedTuple, assert_never
+from typing import Dict, FrozenSet, List, NamedTuple, Optional, Tuple, Type, assert_never
 
 import omemo
 
