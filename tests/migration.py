@@ -1,10 +1,9 @@
-from typing import Dict, List, Optional, cast
+from typing import Dict, Final, List, Optional, cast
 from xml.etree import ElementTree as ET
 
 import oldmemo
 import oldmemo.etree
 from oldmemo.migrations import LegacyStorage, OwnData, State, Session, Trust
-from typing import Final
 
 import omemo
 

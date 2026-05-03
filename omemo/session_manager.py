@@ -4,14 +4,9 @@ import base64
 import itertools
 import logging
 import secrets
+import sys
 from typing import Awaitable, Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, \
-    assert_never, cast
-
-try:
-    # One of the asynchronous frameworks supported other than asyncio.
-    from twisted.internet import defer, reactor, task, interfaces
-except ImportError:
-    pass
+    cast
 import xeddsa
 
 from .backend import Backend, KeyExchangeFailed
@@ -21,6 +16,17 @@ from .message import EncryptedKeyMaterial, KeyExchange, Message, PlainKeyMateria
 from .session import Initiation, Session
 from .storage import NothingException, Storage
 from .types import AsyncFramework, DeviceInformation, DeviceList, OMEMOException, SignedLabel, TrustLevel
+
+if sys.version_info >= (3, 11):
+    from typing import assert_never
+else:
+    from typing_extensions import assert_never
+
+try:
+    # One of the asynchronous frameworks supported other than asyncio.
+    from twisted.internet import defer, reactor, task, interfaces
+except ImportError:
+    pass
 
 
 __all__ = [

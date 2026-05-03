@@ -1,7 +1,13 @@
 import enum
-from typing import Dict, FrozenSet, List, NamedTuple, Optional, Tuple, Type, assert_never
+import sys
+from typing import Dict, FrozenSet, List, NamedTuple, Optional, Tuple, Type
 
 import omemo
+
+if sys.version_info >= (3, 11):
+    from typing import assert_never
+else:
+    from typing_extensions import assert_never
 
 
 __all__ = [

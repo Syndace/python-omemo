@@ -1,6 +1,7 @@
+from typing import Final
+
 import twomemo
 import oldmemo
-from typing import Final
 
 
 __all__ = [
