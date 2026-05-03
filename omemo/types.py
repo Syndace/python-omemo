@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import enum
-from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, Union
-from typing_extensions import TypeAlias
+from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Optional, Tuple, TypeAlias, Union
 
 
 __all__ = [
